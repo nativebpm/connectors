@@ -9,11 +9,13 @@ permissions:
   contents: read
 
 jobs:
-  mirror-and-release:
+  check-tag:
     runs-on: ubuntu-latest
-    env:
-      SET_GENERATE_CHANGELOG: "true"
-
+    outputs:
+      HAS_MESSAGE: ${{ steps.meta.outputs.HAS_MESSAGE }}
+      MODULE_NAME: ${{ steps.meta.outputs.MODULE_NAME }}
+      TAG_NAME: ${{ steps.meta.outputs.TAG_NAME }}
+      TAG_MESSAGE: ${{ steps.meta.outputs.TAG_MESSAGE }}
     steps:
       - name: Checkout repository with full history (tags)
         uses: actions/checkout@v4
@@ -46,7 +48,8 @@ jobs:
             exit 1
           fi
 
-          TAG_MSG="$(git for-each-ref "refs/tags/$FULL_TAG_REF" --format='%(contents)')"
+          # Read the tag annotation/body reliably.
+          TAG_MSG="$(git show -s --format=%B "refs/tags/$FULL_TAG_REF" 2>/dev/null || true)"
           TAG_MSG_STRIPPED="$(echo "$TAG_MSG" | sed '/^[[:space:]]*$/d')"
 
           if [[ -z "$TAG_MSG_STRIPPED" ]]; then
@@ -56,7 +59,7 @@ jobs:
           fi
 
           echo "MODULE_NAME=$MODULE_NAME" >> $GITHUB_OUTPUT
-            echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
           {
             echo "TAG_MESSAGE<<EOF_MSG" >> $GITHUB_OUTPUT
             echo "$TAG_MSG" >> $GITHUB_OUTPUT
@@ -64,25 +67,34 @@ jobs:
           } >> $GITHUB_OUTPUT
           echo "HAS_MESSAGE=true" >> $GITHUB_OUTPUT
 
-      - name: Stop if no message
-        if: steps.meta.outputs.HAS_MESSAGE != 'true'
-        run: echo "Nothing to do."
+  mirror-and-release:
+    needs: check-tag
+    if: needs.check-tag.outputs.HAS_MESSAGE == 'true'
+    runs-on: ubuntu-latest
+    env:
+      SET_GENERATE_CHANGELOG: "true"
+
+    steps:
+      - name: Checkout repository with full history (tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Clone mirror repository
-        if: steps.meta.outputs.HAS_MESSAGE == 'true'
+        if: needs.check-tag.outputs.HAS_MESSAGE == 'true'
         env:
           PAT_PUSH: ${{ secrets.PAT_PUSH }}
         run: |
-          git clone "https://x-access-token:${PAT_PUSH}@github.com/nativebpm/${{ steps.meta.outputs.MODULE_NAME }}.git" mirror-repo
+          git clone "https://x-access-token:${PAT_PUSH}@github.com/nativebpm/${{ needs.check-tag.outputs.MODULE_NAME }}.git" mirror-repo
           cd mirror-repo
           git config user.name "nativebpm-bot"
           git config user.email "bot@nativebpm.com"
           git fetch --tags --force
 
       - name: Sync module sources into mirror main (rm + cp)
-        if: steps.meta.outputs.HAS_MESSAGE == 'true'
+        if: needs.check-tag.outputs.HAS_MESSAGE == 'true'
         run: |
-          MODULE="${{ steps.meta.outputs.MODULE_NAME }}"
+          MODULE="${{ needs.check-tag.outputs.MODULE_NAME }}"
           if [[ ! -d "$MODULE" ]]; then
             echo "❌ Module directory '$MODULE' not found in monorepo."
             exit 1
@@ -120,11 +132,11 @@ jobs:
           fi
 
       - name: Generate changelog (optional)
-        if: steps.meta.outputs.HAS_MESSAGE == 'true' && env.SET_GENERATE_CHANGELOG == 'true'
+        if: needs.check-tag.outputs.HAS_MESSAGE == 'true' && env.SET_GENERATE_CHANGELOG == 'true'
         id: changelog
         run: |
           cd mirror-repo
-          PREV_TAG=$(git tag --sort=-creatordate | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$" | grep -v "^${{ steps.meta.outputs.TAG_NAME }}$" | head -n1 || true)
+          PREV_TAG=$(git tag --sort=-creatordate | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$" | grep -v "^${{ needs.check-tag.outputs.TAG_NAME }}$" | head -n1 || true)
           if [[ -z "$PREV_TAG" ]]; then
             LOG_RANGE="(initial)"
             CHANGELOG=$(git log --pretty=format:"- %s")
@@ -142,9 +154,9 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Create annotated tag in mirror (if not exists)
-        if: steps.meta.outputs.HAS_MESSAGE == 'true'
+        if: needs.check-tag.outputs.HAS_MESSAGE == 'true'
         env:
-          TAG_NAME: ${{ steps.meta.outputs.TAG_NAME }}
+          TAG_NAME: ${{ needs.check-tag.outputs.TAG_NAME }}
         run: |
           cd mirror-repo
           git config user.name "nativebpm-bot"
@@ -153,15 +165,15 @@ jobs:
             echo "Tag $TAG_NAME already exists in mirror. Skipping creation."
             exit 0
           fi
-          printf "%s\n" "${{ steps.meta.outputs.TAG_MESSAGE }}" > /tmp/tagmsg.txt
+          printf "%s\n" "${{ needs.check-tag.outputs.TAG_MESSAGE }}" > /tmp/tagmsg.txt
           git tag -a "$TAG_NAME" -F /tmp/tagmsg.txt
           git push origin "$TAG_NAME"
 
       - name: Create release in mirror repository
-        if: steps.meta.outputs.HAS_MESSAGE == 'true'
+        if: needs.check-tag.outputs.HAS_MESSAGE == 'true'
         env:
           PAT_PUSH: ${{ secrets.PAT_PUSH }}
-          TAG_NAME: ${{ steps.meta.outputs.TAG_NAME }}
+          TAG_NAME: ${{ needs.check-tag.outputs.TAG_NAME }}
         run: |
           cd mirror-repo
           git config user.name "nativebpm-bot"
@@ -169,10 +181,14 @@ jobs:
           gh --version || true
           export GH_TOKEN="${PAT_PUSH}"
 
-          printf "%s\n" "${{ steps.meta.outputs.TAG_MESSAGE }}" > /tmp/release_title.txt
+          # Use only the first non-empty line of the tag message as the release title (fallback to tag name if empty)
+          printf "%s\n" "${{ needs.check-tag.outputs.TAG_MESSAGE }}" | sed -n '/[^[:space:]]/ { p; q }' > /tmp/release_title.txt
+          if [[ ! -s /tmp/release_title.txt ]]; then
+            echo "${TAG_NAME}" > /tmp/release_title.txt
+          fi
 
           {
-            echo "Automated release for module ${{ steps.meta.outputs.MODULE_NAME }}."
+            echo "Automated release for module ${{ needs.check-tag.outputs.MODULE_NAME }}."
             echo
             echo "Tag: ${TAG_NAME}"
             echo
