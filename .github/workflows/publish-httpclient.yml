@@ -2,10 +2,8 @@ name: Publish httpclient module
 
 on:
   push:
-    paths:
-      - "httpclient/**"
-    branches:
-      - main
+    tags:
+      - "v*"
 
 jobs:
   publish:
@@ -27,6 +25,16 @@ jobs:
         run: |
           git clone https://x-access-token:${PAT_PUSH}@github.com/nativebpm/httpclient.git ../httpclient-tmp
 
+      - name: Skip pre-release tags
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          echo "Detected tag: $TAG_NAME"
+          # Only allow tags like v1.2.3 — skip alpha/beta/rc suffixes
+          if [[ "$TAG_NAME" =~ -(alpha|beta|rc) ]]; then
+            echo "🚫 Pre-release tag detected ($TAG_NAME). Skipping publish."
+            exit 0
+          fi
+
       - name: Sync module code
         run: |
           rm -rf ../httpclient-tmp/*
@@ -47,21 +55,25 @@ jobs:
             exit 0
           fi
           git commit -m "chore: sync from connectors @ $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          # Ensure remote uses token-based authentication
           git remote set-url origin https://x-access-token:${PAT_PUSH}@github.com/nativebpm/httpclient.git
           git push origin main
 
-      - name: Auto-increment tag
+      - name: Mirror tag to target repo
         env:
           PAT_PUSH: ${{ secrets.PAT_PUSH }}
         run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
           cd ../httpclient-tmp
           git remote set-url origin https://x-access-token:${PAT_PUSH}@github.com/nativebpm/httpclient.git
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          echo "Last tag: $LAST_TAG"
-          MAJOR=$(echo $LAST_TAG | cut -d. -f1 | tr -d 'v')
-          MINOR=$(echo $LAST_TAG | cut -d. -f2)
-          PATCH=$(echo $LAST_TAG | cut -d. -f3)
-          NEW_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
-          echo "New tag: $NEW_TAG"
-          git tag $NEW_TAG
-          git push origin $NEW_TAG
+
+          # Skip if tag already exists in target repo
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Tag $TAG_NAME already exists in target repo, skipping."
+            exit 0
+          fi
+
+          # Create and push the same stable tag
+          git tag "$TAG_NAME"
+          git push origin "$TAG_NAME"
+          echo "✅ Mirrored stable tag $TAG_NAME to httpclient"
