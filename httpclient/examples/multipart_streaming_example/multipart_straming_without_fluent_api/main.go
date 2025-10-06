@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"runtime"
 	"time"
-	// "github.com/nativebpm/http-client/examples/multipart_streaming_example/middleware"
+	// "github.com/nativebpm/connectors/httpclient/examples/multipart_streaming_example/middleware"
 )
 
 // countingReader wraps an io.Reader and tracks the number of bytes read
@@ -41,18 +41,16 @@ func main() {
 
 	httpClient := &http.Client{Timeout: 60 * time.Second}
 
-	// server1Client: standard client with progress middleware for GET
 	server1Client := *httpClient
-	// server1Client.Transport = middleware.ProgressMiddleware(logger.WithGroup("server1"))(http.DefaultTransport)
-
-	// server2Client: standard client with upload progress middleware for POST
 	server2Client := *httpClient
+
+	// server1Client.Transport = middleware.ProgressMiddleware(logger.WithGroup("server1"))(http.DefaultTransport)
 	// server2Client.Transport = middleware.UploadProgressMiddleware(logger.WithGroup("server2"))(http.DefaultTransport)
 
 	// GET /file from server1
 	ctx1, cancel1 := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel1()
-	req1, err := http.NewRequestWithContext(ctx1, "GET", "http://localhost:8080/file", nil)
+	req1, err := http.NewRequestWithContext(ctx1, http.MethodGet, "http://localhost:8080/file", nil)
 	if err != nil {
 		logger.Error("Failed to create GET request", "error", err)
 		return
@@ -98,7 +96,7 @@ func main() {
 		}
 	}()
 
-	req2, err := http.NewRequestWithContext(ctx, "POST", "http://localhost:8081/upload", pr)
+	req2, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://localhost:8081/upload", pr)
 	if err != nil {
 		logger.Error("Failed to create POST request", "error", err)
 		return
