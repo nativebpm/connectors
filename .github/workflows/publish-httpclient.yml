@@ -25,7 +25,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_PUSH }}
         run: |
-          git clone https://${GITHUB_TOKEN}@github.com/nativebpm/httpclient.git ../httpclient-tmp
+          git clone https://x-access-token:${GITHUB_TOKEN}@github.com/nativebpm/httpclient.git ../httpclient-tmp
 
       - name: Sync module code
         run: |
@@ -47,13 +47,15 @@ jobs:
             exit 0
           fi
           git commit -m "chore: sync from connectors @ $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/nativebpm/httpclient.git
           git push origin main
+
       - name: Auto-increment tag
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_PUSH }}
         run: |
           cd ../httpclient-tmp
-          # получаем последний тег
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/nativebpm/httpclient.git
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           echo "Last tag: $LAST_TAG"
           MAJOR=$(echo $LAST_TAG | cut -d. -f1 | tr -d 'v')
