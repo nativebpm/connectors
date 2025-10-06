@@ -29,8 +29,20 @@ jobs:
           MODULE_NAME="$(echo "$FULL_TAG_REF" | cut -d'/' -f1)"
           TAG_NAME="$(echo "$FULL_TAG_REF" | cut -d'/' -f2-)"
 
+          # Basic validation: ensure we have both parts and the tag looks like a semver vX.Y.Z
           if [[ -z "$MODULE_NAME" || -z "$TAG_NAME" ]]; then
             echo "❌ Invalid tag format. Expected <module>/vX.Y.Z"
+            exit 1
+          fi
+
+          if ! echo "$TAG_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "❌ Invalid tag name format. Expected vX.Y.Z (example: v1.2.3). Got: $TAG_NAME"
+            exit 1
+          fi
+
+          # Double-check that the module directory exists in the monorepo early
+          if [[ ! -d "$MODULE_NAME" ]]; then
+            echo "❌ Module directory '$MODULE_NAME' not found in monorepo."
             exit 1
           fi
 
@@ -118,7 +130,7 @@ jobs:
           fi
           [[ -z "$CHANGELOG" ]] && CHANGELOG="(no commits)"
           {
-            echo "CHANGELOG<<'EOF_CHG'"
+            echo "CHANGELOG<<EOF_CHG"
             echo "Range: $LOG_RANGE"
             echo
             echo "$CHANGELOG"
