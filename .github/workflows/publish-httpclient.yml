@@ -1,0 +1,65 @@
+name: Publish httpclient module
+
+on:
+  push:
+    paths:
+      - "httpclient/**"
+    branches:
+      - main
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout monorepo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git
+        run: |
+          git config --global user.email "bot@nativebpm.com"
+          git config --global user.name "nativebpm-bot"
+
+      - name: Clone target repository
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_PUSH }}
+        run: |
+          git clone https://${GITHUB_TOKEN}@github.com/nativebpm/httpclient.git ../httpclient-tmp
+
+      - name: Sync module code
+        run: |
+          rm -rf ../httpclient-tmp/*
+          cp -r httpclient/* ../httpclient-tmp/
+
+      - name: Rewrite go.mod module path
+        run: |
+          sed -i 's|module github.com/nativebpm/connectors/httpclient|module github.com/nativebpm/httpclient|' ../httpclient-tmp/go.mod
+
+      - name: Commit and push changes
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_PUSH }}
+        run: |
+          cd ../httpclient-tmp
+          git add .
+          if git diff-index --quiet HEAD; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "chore: sync from connectors @ $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          git push origin main
+      - name: Auto-increment tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_PUSH }}
+        run: |
+          cd ../httpclient-tmp
+          # получаем последний тег
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Last tag: $LAST_TAG"
+          MAJOR=$(echo $LAST_TAG | cut -d. -f1 | tr -d 'v')
+          MINOR=$(echo $LAST_TAG | cut -d. -f2)
+          PATCH=$(echo $LAST_TAG | cut -d. -f3)
+          NEW_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+          echo "New tag: $NEW_TAG"
+          git tag $NEW_TAG
+          git push origin $NEW_TAG
