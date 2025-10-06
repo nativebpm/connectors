@@ -8,7 +8,7 @@ go get github.com/nativebpm/connectors/httpclient
 
 ## Mirror
 ```bash
-go get https://github.com/nativebpm/httpclient
+go get github.com/nativebpm/httpclient
 ```
 
 ## Problem
