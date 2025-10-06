@@ -1,0 +1,173 @@
+name: Mirror module & release on annotated tag
+
+on:
+  push:
+    tags:
+      - "*/v*"
+
+permissions:
+  contents: read
+
+jobs:
+  check-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      has_annotation: ${{ steps.check.outputs.has_annotation }}
+      module_name: ${{ steps.check.outputs.module_name }}
+      tag_name: ${{ steps.check.outputs.tag_name }}
+      tag_annotation: ${{ steps.check.outputs.tag_annotation }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check tag and extract annotation
+        id: check
+        run: |
+          FULL_TAG="${GITHUB_REF#refs/tags/}"
+          echo "Processing tag: $FULL_TAG"
+          
+          MODULE_NAME="${FULL_TAG%%/*}"
+          TAG_NAME="${FULL_TAG#*/}"
+          
+          if [[ -z "$MODULE_NAME" || -z "$TAG_NAME" ]]; then
+            echo "❌ Invalid tag format. Expected: <module>/vX.Y.Z"
+            exit 1
+          fi
+          
+          if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Invalid version format. Expected: vX.Y.Z, got: $TAG_NAME"
+            exit 1
+          fi
+          
+          if [[ ! -d "$MODULE_NAME" ]]; then
+            echo "❌ Module directory '$MODULE_NAME' not found"
+            exit 1
+          fi
+          
+          TAG_OBJECT=$(git rev-parse "$FULL_TAG" 2>/dev/null || echo "")
+          if [[ -z "$TAG_OBJECT" ]]; then
+            echo "❌ Tag not found: $FULL_TAG"
+            exit 1
+          fi
+          
+          TAG_TYPE=$(git cat-file -t "$TAG_OBJECT" 2>/dev/null || echo "commit")
+          
+          if [[ "$TAG_TYPE" != "tag" ]]; then
+            echo "⚠️ Tag '$FULL_TAG' is lightweight. Skipping."
+            echo "has_annotation=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          ANNOTATION=$(git cat-file tag "$TAG_OBJECT" | sed '1,/^$/d')
+          
+          if [[ -z "$ANNOTATION" ]]; then
+            echo "⚠️ Tag has no annotation message. Skipping."
+            echo "has_annotation=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "✅ Found annotated tag"
+          echo "Module: $MODULE_NAME"
+          echo "Version: $TAG_NAME"
+          echo "Annotation: $ANNOTATION"
+          
+          echo "has_annotation=true" >> $GITHUB_OUTPUT
+          echo "module_name=$MODULE_NAME" >> $GITHUB_OUTPUT
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          {
+            echo "tag_annotation<<EOF_ANNOTATION"
+            echo "$ANNOTATION"
+            echo "EOF_ANNOTATION"
+          } >> $GITHUB_OUTPUT
+
+  mirror-and-release:
+    needs: check-tag
+    if: needs.check-tag.outputs.has_annotation == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout monorepo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Clone mirror repository
+        env:
+          PAT_PUSH: ${{ secrets.PAT_PUSH }}
+          MODULE: ${{ needs.check-tag.outputs.module_name }}
+        run: |
+          git clone "https://x-access-token:${PAT_PUSH}@github.com/nativebpm/${MODULE}.git" mirror
+          cd mirror
+          git config user.name "nativebpm-bot"
+          git config user.email "bot@nativebpm.com"
+
+      - name: Sync module content to mirror
+        env:
+          MODULE: ${{ needs.check-tag.outputs.module_name }}
+        run: |
+          cd mirror
+          git checkout main 2>/dev/null || git checkout -b main
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a ../${MODULE}/. ./
+          
+          if [[ -f go.mod ]]; then
+            sed -i "s|module github.com/nativebpm/connectors/${MODULE}|module github.com/nativebpm/${MODULE}|" go.mod
+          fi
+          
+          if grep -Ilr "github.com/nativebpm/connectors/${MODULE}" . 2>/dev/null; then
+            grep -Ilr "github.com/nativebpm/connectors/${MODULE}" . | while read -r file; do
+              sed -i "s|github.com/nativebpm/connectors/${MODULE}|github.com/nativebpm/${MODULE}|g" "$file"
+            done
+          fi
+          
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "sync: update from connectors monorepo"
+            git push origin main
+          fi
+
+      - name: Create annotated tag in mirror
+        env:
+          TAG_NAME: ${{ needs.check-tag.outputs.tag_name }}
+          TAG_ANNOTATION: ${{ needs.check-tag.outputs.tag_annotation }}
+        run: |
+          cd mirror
+          
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Tag $TAG_NAME already exists. Skipping."
+            exit 0
+          fi
+          
+          echo "$TAG_ANNOTATION" > /tmp/tag_message.txt
+          git tag -a "$TAG_NAME" -F /tmp/tag_message.txt
+          git push origin "$TAG_NAME"
+          echo "✅ Created tag: $TAG_NAME"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.PAT_PUSH }}
+          TAG_NAME: ${{ needs.check-tag.outputs.tag_name }}
+          TAG_ANNOTATION: ${{ needs.check-tag.outputs.tag_annotation }}
+        run: |
+          cd mirror
+          
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Release $TAG_NAME already exists. Skipping."
+            exit 0
+          fi
+          
+          TITLE=$(echo "$TAG_ANNOTATION" | head -n 1)
+          if [[ -z "$TITLE" ]]; then
+            TITLE="$TAG_NAME"
+          fi
+          
+          echo "$TAG_ANNOTATION" > /tmp/release_body.md
+          
+          gh release create "$TAG_NAME" \
+            --title "$TITLE" \
+            --notes-file /tmp/release_body.md
+          
+          echo "✅ Created release: $TAG_NAME"
