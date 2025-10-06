@@ -75,6 +75,8 @@ jobs:
         run: |
           git clone "https://x-access-token:${PAT_PUSH}@github.com/nativebpm/${{ steps.meta.outputs.MODULE_NAME }}.git" mirror-repo
           cd mirror-repo
+          git config user.name "nativebpm-bot"
+          git config user.email "bot@nativebpm.com"
           git fetch --tags --force
 
       - name: Sync module sources into mirror main (rm + cp)
@@ -87,6 +89,8 @@ jobs:
           fi
 
           cd mirror-repo
+          git config user.name "nativebpm-bot"
+          git config user.email "bot@nativebpm.com"
           git checkout main || git checkout -b main
 
           # Удаляем всё, кроме .git
@@ -143,6 +147,8 @@ jobs:
           TAG_NAME: ${{ steps.meta.outputs.TAG_NAME }}
         run: |
           cd mirror-repo
+          git config user.name "nativebpm-bot"
+          git config user.email "bot@nativebpm.com"
           if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
             echo "Tag $TAG_NAME already exists in mirror. Skipping creation."
             exit 0
@@ -158,6 +164,8 @@ jobs:
           TAG_NAME: ${{ steps.meta.outputs.TAG_NAME }}
         run: |
           cd mirror-repo
+          git config user.name "nativebpm-bot"
+          git config user.email "bot@nativebpm.com"
           gh --version || true
           export GH_TOKEN="${PAT_PUSH}"
 
