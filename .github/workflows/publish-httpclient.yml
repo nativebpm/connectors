@@ -116,6 +116,7 @@ jobs:
           else
             echo "CREATE_RELEASE=true" >> $GITHUB_OUTPUT
             echo "RELEASE_TITLE=$TAG_MSG" >> $GITHUB_OUTPUT
+          fi
 
       - name: Generate changelog
         if: steps.tagmsg.outputs.CREATE_RELEASE == 'true'
