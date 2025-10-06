@@ -1,0 +1,172 @@
+name: Mirror module & release on annotated tag
+
+on:
+  push:
+    tags:
+      - "*/v*"
+
+permissions:
+  contents: read
+
+jobs:
+  mirror-and-release:
+    runs-on: ubuntu-latest
+    env:
+      SET_GENERATE_CHANGELOG: "true"
+
+    steps:
+      - name: Checkout repository with full history (tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract tag, module and annotation
+        id: meta
+        run: |
+          FULL_TAG_REF="${GITHUB_REF#refs/tags/}"
+          echo "Full incoming tag: $FULL_TAG_REF"
+
+          MODULE_NAME="$(echo "$FULL_TAG_REF" | cut -d'/' -f1)"
+          TAG_NAME="$(echo "$FULL_TAG_REF" | cut -d'/' -f2-)"
+
+          if [[ -z "$MODULE_NAME" || -z "$TAG_NAME" ]]; then
+            echo "❌ Invalid tag format. Expected <module>/vX.Y.Z"
+            exit 1
+          fi
+
+          TAG_MSG="$(git for-each-ref "refs/tags/$FULL_TAG_REF" --format='%(contents)')"
+          TAG_MSG_STRIPPED="$(echo "$TAG_MSG" | sed '/^[[:space:]]*$/d')"
+
+          if [[ -z "$TAG_MSG_STRIPPED" ]]; then
+            echo "⚠️ Tag has no annotation message. Skipping job."
+            echo "HAS_MESSAGE=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "MODULE_NAME=$MODULE_NAME" >> $GITHUB_OUTPUT
+            echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
+          {
+            echo "TAG_MESSAGE<<'EOF_MSG'"
+            echo "$TAG_MSG"
+            echo "EOF_MSG"
+          } >> $GITHUB_OUTPUT
+          echo "HAS_MESSAGE=true" >> $GITHUB_OUTPUT
+
+      - name: Stop if no message
+        if: steps.meta.outputs.HAS_MESSAGE != 'true'
+        run: echo "Nothing to do."
+
+      - name: Clone mirror repository
+        if: steps.meta.outputs.HAS_MESSAGE == 'true'
+        env:
+          PAT_PUSH: ${{ secrets.PAT_PUSH }}
+        run: |
+          git clone "https://x-access-token:${PAT_PUSH}@github.com/nativebpm/${{ steps.meta.outputs.MODULE_NAME }}.git" mirror-repo
+          cd mirror-repo
+          git fetch --tags --force
+
+      - name: Sync module sources into mirror main (rm + cp)
+        if: steps.meta.outputs.HAS_MESSAGE == 'true'
+        run: |
+          MODULE="${{ steps.meta.outputs.MODULE_NAME }}"
+          if [[ ! -d "$MODULE" ]]; then
+            echo "❌ Module directory '$MODULE' not found in monorepo."
+            exit 1
+          fi
+
+          cd mirror-repo
+          git checkout main || git checkout -b main
+
+          # Удаляем всё, кроме .git
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+
+          # Копируем содержимое папки модуля (включая скрытые файлы) в корень зеркала
+          cp -a "../${MODULE}/." "./"
+
+          # Правим go.mod (если он от монорепо)
+          if [[ -f go.mod ]]; then
+            sed -i "s|module github.com/nativebpm/connectors/${MODULE}|module github.com/nativebpm/${MODULE}|" go.mod || true
+          fi
+
+          # Обновляем ссылки в файлах (Markdown и прочие текстовые, где встречается шаблон)
+          grep -Ilr "github.com/nativebpm/connectors/${MODULE}" . | while read -r f; do
+            sed -i "s|github.com/nativebpm/connectors/${MODULE}|github.com/nativebpm/${MODULE}|g" "$f"
+          done || true
+
+          git add .
+          if git diff --cached --quiet; then
+            echo "No content changes for module."
+          else
+            git config user.name "nativebpm-bot"
+            git config user.email "bot@nativebpm.com"
+            git commit -m "chore: sync module '${MODULE}' from connectors @ $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            git push origin main
+          fi
+
+      - name: Generate changelog (optional)
+        if: steps.meta.outputs.HAS_MESSAGE == 'true' && env.SET_GENERATE_CHANGELOG == 'true'
+        id: changelog
+        run: |
+          cd mirror-repo
+          PREV_TAG=$(git tag --sort=-creatordate | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$" | grep -v "^${{ steps.meta.outputs.TAG_NAME }}$" | head -n1 || true)
+          if [[ -z "$PREV_TAG" ]]; then
+            LOG_RANGE="(initial)"
+            CHANGELOG=$(git log --pretty=format:"- %s")
+          else
+            LOG_RANGE="$PREV_TAG..HEAD"
+            CHANGELOG=$(git log "$PREV_TAG"..HEAD --pretty=format:"- %s")
+          fi
+          [[ -z "$CHANGELOG" ]] && CHANGELOG="(no commits)"
+          {
+            echo "CHANGELOG<<'EOF_CHG'"
+            echo "Range: $LOG_RANGE"
+            echo
+            echo "$CHANGELOG"
+            echo "EOF_CHG"
+          } >> $GITHUB_OUTPUT
+
+      - name: Create annotated tag in mirror (if not exists)
+        if: steps.meta.outputs.HAS_MESSAGE == 'true'
+        env:
+          TAG_NAME: ${{ steps.meta.outputs.TAG_NAME }}
+        run: |
+          cd mirror-repo
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Tag $TAG_NAME already exists in mirror. Skipping creation."
+            exit 0
+          fi
+          printf "%s\n" "${{ steps.meta.outputs.TAG_MESSAGE }}" > /tmp/tagmsg.txt
+          git tag -a "$TAG_NAME" -F /tmp/tagmsg.txt
+          git push origin "$TAG_NAME"
+
+      - name: Create release in mirror repository
+        if: steps.meta.outputs.HAS_MESSAGE == 'true'
+        env:
+          PAT_PUSH: ${{ secrets.PAT_PUSH }}
+          TAG_NAME: ${{ steps.meta.outputs.TAG_NAME }}
+        run: |
+          cd mirror-repo
+          gh --version || true
+          export GH_TOKEN="${PAT_PUSH}"
+
+          printf "%s\n" "${{ steps.meta.outputs.TAG_MESSAGE }}" > /tmp/release_title.txt
+
+          {
+            echo "Automated release for module ${{ steps.meta.outputs.MODULE_NAME }}."
+            echo
+            echo "Tag: ${TAG_NAME}"
+            echo
+            if [[ "${{ env.SET_GENERATE_CHANGELOG }}" == "true" ]]; then
+              echo "## Changelog"
+              echo "${{ steps.changelog.outputs.CHANGELOG }}"
+            else
+              echo "_Changelog generation disabled._"
+            fi
+          } > /tmp/release_body.md
+
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Release for $TAG_NAME already exists. Skipping."
+            exit 0
+          fi
+
+          gh release create "$TAG_NAME" --title "$(cat /tmp/release_title.txt)" --notes-file /tmp/release_body.md
