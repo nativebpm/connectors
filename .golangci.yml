@@ -1,0 +1,41 @@
+run:
+  timeout: 3m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - gofmt
+    - goimports
+    - misspell
+    - gocyclo
+    - lll
+  disable:
+    - gochecknoglobals
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  exclude:
+    - 'Error return value of .*.Close.* is not checked'
+    - 'Error return value of `io.Copy` is not checked'
+
+issues-settings:
+  gocyclo:
+    min-complexity: 15
+
+exclude:
+  - "^tools/"
+  - "_test.go: generated"
+
+linters-settings:
+  lll:
+    line-length: 150
