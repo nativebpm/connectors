@@ -48,8 +48,8 @@ jobs:
             exit 1
           fi
 
-          # Read the tag annotation/body reliably.
-          TAG_MSG="$(git show -s --format=%B "refs/tags/$FULL_TAG_REF" 2>/dev/null || true)"
+          # Read the tag annotation/body reliably. Use git tag -l --format to get annotation message.
+          TAG_MSG="$(git tag -l --format='%(contents)' "$FULL_TAG_REF" 2>/dev/null || true)"
           TAG_MSG_STRIPPED="$(echo "$TAG_MSG" | sed '/^[[:space:]]*$/d')"
 
           if [[ -z "$TAG_MSG_STRIPPED" ]]; then
