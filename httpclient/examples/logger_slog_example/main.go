@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/nativebpm/connectors/httpclient"
-	"github.com/nativebpm/connectors/httpclient/examples/logger_slog_example/middleware"
 )
 
 func main() {
@@ -21,7 +20,7 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 
-	client.Use(middleware.LoggingMiddleware(logger))
+	client.WithLogger(logger)
 
 	resp, err := client.GET(context.Background(), "/get").Send()
 	if err != nil {

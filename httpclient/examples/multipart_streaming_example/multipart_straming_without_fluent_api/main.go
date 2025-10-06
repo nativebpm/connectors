@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"runtime"
 	"time"
+
 	// "github.com/nativebpm/connectors/httpclient/examples/multipart_streaming_example/middleware"
+	"github.com/nativebpm/connectors/httpclient/internal/httptransport"
 )
 
 // countingReader wraps an io.Reader and tracks the number of bytes read
@@ -44,8 +46,17 @@ func main() {
 	server1Client := *httpClient
 	server2Client := *httpClient
 
-	// server1Client.Transport = middleware.ProgressMiddleware(logger.WithGroup("server1"))(http.DefaultTransport)
-	// server2Client.Transport = middleware.UploadProgressMiddleware(logger.WithGroup("server2"))(http.DefaultTransport)
+	// Attach logging + progress middleware to server1 (for download progress).
+	transport1 := http.DefaultTransport
+	transport1 = httptransport.LoggingMiddleware(logger.WithGroup("server1"))(transport1)
+	// transport1 = middleware.ProgressMiddleware(logger.WithGroup("server1"))(transport1)
+	server1Client.Transport = transport1
+
+	// Attach logging + upload-progress middleware to server2 (for upload progress).
+	transport2 := http.DefaultTransport
+	transport2 = httptransport.LoggingMiddleware(logger.WithGroup("server2"))(transport2)
+	// transport2 = middleware.UploadProgressMiddleware(logger.WithGroup("server2"))(transport2)
+	server2Client.Transport = transport2
 
 	// GET /file from server1
 	ctx1, cancel1 := context.WithTimeout(context.Background(), 30*time.Second)
@@ -66,9 +77,6 @@ func main() {
 		logger.Error("Server1 returned status", "status", server1Resp.Status)
 		return
 	}
-
-	runtime.ReadMemStats(&m)
-	logger.Info("After GET (before upload)", "Alloc (KB)", m.Alloc/1024, "TotalAlloc (KB)", m.TotalAlloc/1024)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
