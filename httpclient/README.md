@@ -6,6 +6,11 @@ Stream large payloads (without buffering) via `io.Pipe`.
 go get github.com/nativebpm/connectors/httpclient
 ```
 
+## Mirror
+```bash
+go get https://github.com/nativebpm/httpclient
+```
+
 ## Problem
 
 Standard HTTP helpers buffer entire payloads in memory before sending. For large JSON, multipart uploads, generated archives, or database dumps this causes:
