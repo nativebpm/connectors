@@ -71,8 +71,6 @@ jobs:
     needs: check-tag
     if: needs.check-tag.outputs.HAS_MESSAGE == 'true'
     runs-on: ubuntu-latest
-    env:
-      SET_GENERATE_CHANGELOG: "true"
 
     steps:
       - name: Checkout repository with full history (tags)
@@ -131,28 +129,6 @@ jobs:
             git push origin main
           fi
 
-      - name: Generate changelog (optional)
-        if: needs.check-tag.outputs.HAS_MESSAGE == 'true' && env.SET_GENERATE_CHANGELOG == 'true'
-        id: changelog
-        run: |
-          cd mirror-repo
-          PREV_TAG=$(git tag --sort=-creatordate | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$" | grep -v "^${{ needs.check-tag.outputs.TAG_NAME }}$" | head -n1 || true)
-          if [[ -z "$PREV_TAG" ]]; then
-            LOG_RANGE="(initial)"
-            CHANGELOG=$(git log --pretty=format:"- %s")
-          else
-            LOG_RANGE="$PREV_TAG..HEAD"
-            CHANGELOG=$(git log "$PREV_TAG"..HEAD --pretty=format:"- %s")
-          fi
-          [[ -z "$CHANGELOG" ]] && CHANGELOG="(no commits)"
-          {
-            echo "CHANGELOG<<EOF_CHG"
-            echo "Range: $LOG_RANGE"
-            echo
-            echo "$CHANGELOG"
-            echo "EOF_CHG"
-          } >> $GITHUB_OUTPUT
-
       - name: Create annotated tag in mirror (if not exists)
         if: needs.check-tag.outputs.HAS_MESSAGE == 'true'
         env:
@@ -187,18 +163,8 @@ jobs:
             echo "${TAG_NAME}" > /tmp/release_title.txt
           fi
 
-          {
-            echo "Automated release for module ${{ needs.check-tag.outputs.MODULE_NAME }}."
-            echo
-            echo "Tag: ${TAG_NAME}"
-            echo
-            if [[ "${{ env.SET_GENERATE_CHANGELOG }}" == "true" ]]; then
-              echo "## Changelog"
-              echo "${{ steps.changelog.outputs.CHANGELOG }}"
-            else
-              echo "_Changelog generation disabled._"
-            fi
-          } > /tmp/release_body.md
+          # Use the full tag annotation as the release body
+          printf "%s\n" "${{ needs.check-tag.outputs.TAG_MESSAGE }}" > /tmp/release_body.md
 
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             echo "Release for $TAG_NAME already exists. Skipping."
