@@ -46,9 +46,9 @@ jobs:
           echo "MODULE_NAME=$MODULE_NAME" >> $GITHUB_OUTPUT
             echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
           {
-            echo "TAG_MESSAGE<<'EOF_MSG'"
-            echo "$TAG_MSG"
-            echo "EOF_MSG"
+            echo "TAG_MESSAGE<<EOF_MSG" >> $GITHUB_OUTPUT
+            echo "$TAG_MSG" >> $GITHUB_OUTPUT
+            echo "EOF_MSG" >> $GITHUB_OUTPUT
           } >> $GITHUB_OUTPUT
           echo "HAS_MESSAGE=true" >> $GITHUB_OUTPUT
 
