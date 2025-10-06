@@ -23,9 +23,9 @@ jobs:
 
       - name: Clone target repository
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT_PUSH }}
+          PAT_PUSH: ${{ secrets.PAT_PUSH }}
         run: |
-          git clone https://x-access-token:${GITHUB_TOKEN}@github.com/nativebpm/httpclient.git ../httpclient-tmp
+          git clone https://x-access-token:${PAT_PUSH}@github.com/nativebpm/httpclient.git ../httpclient-tmp
 
       - name: Sync module code
         run: |
@@ -38,7 +38,7 @@ jobs:
 
       - name: Commit and push changes
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT_PUSH }}
+          PAT_PUSH: ${{ secrets.PAT_PUSH }}
         run: |
           cd ../httpclient-tmp
           git add .
@@ -47,15 +47,15 @@ jobs:
             exit 0
           fi
           git commit -m "chore: sync from connectors @ $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/nativebpm/httpclient.git
+          git remote set-url origin https://x-access-token:${PAT_PUSH}@github.com/nativebpm/httpclient.git
           git push origin main
 
       - name: Auto-increment tag
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT_PUSH }}
+          PAT_PUSH: ${{ secrets.PAT_PUSH }}
         run: |
           cd ../httpclient-tmp
-          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/nativebpm/httpclient.git
+          git remote set-url origin https://x-access-token:${PAT_PUSH}@github.com/nativebpm/httpclient.git
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           echo "Last tag: $LAST_TAG"
           MAJOR=$(echo $LAST_TAG | cut -d. -f1 | tr -d 'v')
