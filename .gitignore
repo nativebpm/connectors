@@ -1,0 +1,11 @@
+.vscode
+.code
+.idea
+*.pdf
+__debug_bin*
+*.test
+*.txt
+*.log
+*.out
+*.exe
+go.work.sum
