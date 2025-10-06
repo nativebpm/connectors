@@ -48,13 +48,11 @@ jobs:
           PAT_PUSH: ${{ secrets.PAT_PUSH }}
         run: |
           MODULE=${{ steps.taginfo.outputs.MODULE_NAME }}
-          echo "Cloning target repo for module: $MODULE"
           git clone https://x-access-token:${PAT_PUSH}@github.com/nativebpm/${MODULE}.git ../${MODULE}-tmp
 
       - name: Sync module code
         run: |
           MODULE=${{ steps.taginfo.outputs.MODULE_NAME }}
-          echo "Syncing code for module: $MODULE"
           rm -rf ../${MODULE}-tmp/*
           cp -r ${MODULE}/* ../${MODULE}-tmp/
 
@@ -63,7 +61,6 @@ jobs:
           MODULE=${{ steps.taginfo.outputs.MODULE_NAME }}
           FILES=$(find ../${MODULE}-tmp -type f -name "*.md")
           for f in $FILES; do
-            echo "Processing $f"
             sed -i "s|github.com/nativebpm/connectors/${MODULE}|github.com/nativebpm/${MODULE}|g" "$f"
           done
 
@@ -93,17 +90,61 @@ jobs:
         run: |
           MODULE=${{ steps.taginfo.outputs.MODULE_NAME }}
           TAG_NAME=${{ steps.taginfo.outputs.TAG_NAME }}
-          echo "Mirroring tag ${TAG_NAME} to ${MODULE}"
-
           cd ../${MODULE}-tmp
           git remote set-url origin https://x-access-token:${PAT_PUSH}@github.com/nativebpm/${MODULE}.git
 
           # Skip if tag already exists
           if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
-            echo "Tag $TAG_NAME already exists in ${MODULE}, skipping."
+            echo "Tag $TAG_NAME already exists, skipping."
             exit 0
           fi
 
           git tag "$TAG_NAME"
           git push origin "$TAG_NAME"
-          echo "✅ Mirrored stable tag $TAG_NAME to ${MODULE}"
+
+      - name: Check if tag has message
+        id: tagmsg
+        run: |
+          MODULE=${{ steps.taginfo.outputs.MODULE_NAME }}
+          TAG_NAME=${{ steps.taginfo.outputs.TAG_NAME }}
+          cd ../${MODULE}-tmp
+
+          TAG_MSG=$(git for-each-ref refs/tags/$TAG_NAME --format='%(contents)')
+
+          if [ -z "$TAG_MSG" ]; then
+            echo "CREATE_RELEASE=false" >> $GITHUB_OUTPUT
+          else
+            echo "CREATE_RELEASE=true" >> $GITHUB_OUTPUT
+            echo "RELEASE_TITLE=$TAG_MSG" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        if: steps.tagmsg.outputs.CREATE_RELEASE == 'true'
+        run: |
+          MODULE=${{ steps.taginfo.outputs.MODULE_NAME }}
+          TAG_NAME=${{ steps.taginfo.outputs.TAG_NAME }}
+          cd ../${MODULE}-tmp
+
+          LAST_TAG=$(git tag --sort=-creatordate | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+$" | head -n 1)
+          if [ -z "$LAST_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s")
+          else
+            CHANGELOG=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s")
+          fi
+
+          echo "CHANGELOG<<EOF" >> $GITHUB_ENV
+          echo "$CHANGELOG" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Create GitHub Release in mirror repo
+        if: steps.tagmsg.outputs.CREATE_RELEASE == 'true'
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_PUSH }}
+        with:
+          tag_name: ${{ steps.taginfo.outputs.TAG_NAME }}
+          name: ${{ steps.tagmsg.outputs.RELEASE_TITLE }}
+          body: |
+            Automated release of module ${{ steps.taginfo.outputs.MODULE_NAME }}.
+
+            ## Changelog
+            ${{ env.CHANGELOG }}
