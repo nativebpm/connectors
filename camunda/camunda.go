@@ -363,6 +363,7 @@ func (c *Client) StartProcessInstance(ctx context.Context, processDefinitionKey 
 func (c *Client) DeployProcess(ctx context.Context, deploymentName string, bpmnReader io.Reader, filename string) (string, error) {
 	resp, err := c.httpClient.Multipart(ctx, "/deployment/create").
 		Param("deployment-name", deploymentName).
+		Param("enable-duplicate-filtering", "true").
 		File("data", filename, bpmnReader).
 		Send()
 	if err != nil {
