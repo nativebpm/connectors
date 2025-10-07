@@ -12,6 +12,21 @@ tidy:
 	find . -name go.mod -execdir go mod tidy \;
 	go work sync
 
+lint-install:
+	@if ! command -v golangci-lint >/dev/null 2>&1; then \
+		echo "Installing golangci-lint..."; \
+		go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8; \
+	else \
+		echo "golangci-lint is already installed"; \
+	fi
+
+lint: tidy lint-install
+	golangci-lint version
+	golangci-lint cache clean
+	find . -name go.mod -execdir golangci-lint run \;
+
+test: lint
+
 tag:
 	@read -p "Enter module name: " MODULE; \
 	echo ""; \
@@ -39,11 +54,3 @@ tag-del:
 	git tag -d "$$TAG_NAME" || echo "Tag $$TAG_NAME not found locally"; \
 	git push --delete origin "$$TAG_NAME" || echo "Tag $$TAG_NAME not found on remote"; \
 	echo "Tag $$TAG_NAME deleted if it existed"
-
-lint-install:
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
-
-lint:
-	golangci-lint version
-	golangci-lint cache clean
-	find . -name go.mod -exec dirname {} \; | xargs -I {} golangci-lint run {}
