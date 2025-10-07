@@ -316,3 +316,104 @@ func (c *Client) Unlock(ctx context.Context, taskID string) error {
 
 	return nil
 }
+
+// StartProcessInstance starts a new process instance by process definition key
+func (c *Client) StartProcessInstance(ctx context.Context, processDefinitionKey string, variables map[string]interface{}) (string, error) {
+	// Prepare the request payload
+	payload := map[string]interface{}{
+		"variables": make(map[string]map[string]interface{}),
+	}
+
+	for key, value := range variables {
+		payload["variables"].(map[string]map[string]interface{})[key] = map[string]interface{}{
+			"value": value,
+		}
+	}
+
+	resp, err := c.httpClient.POST(ctx, "/process-definition/key/{processDefinitionKey}/start").
+		PathParam("processDefinitionKey", processDefinitionKey).
+		JSON(payload).
+		Send()
+	if err != nil {
+		return "", fmt.Errorf("failed to send start process request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("start process request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("failed to unmarshal process instance: %w", err)
+	}
+
+	return result.ID, nil
+}
+
+// DeployProcess deploys a BPMN process definition to Camunda
+func (c *Client) DeployProcess(ctx context.Context, deploymentName string, bpmnReader io.Reader, filename string) (string, error) {
+	resp, err := c.httpClient.Multipart(ctx, "/deployment/create").
+		Param("deployment-name", deploymentName).
+		File("data", filename, bpmnReader).
+		Send()
+	if err != nil {
+		return "", fmt.Errorf("failed to send deploy request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("deploy request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("failed to unmarshal deployment: %w", err)
+	}
+
+	return result.ID, nil
+}
+
+// PollTasks polls for external tasks in a loop and processes them using the provided handler
+func (c *Client) PollTasks(ctx context.Context, topics []TopicRequest, maxTasks int, handler func(*Client, ExternalTask)) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		tasks, err := c.FetchAndLock(ctx, topics, maxTasks, nil)
+		if err != nil {
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		if len(tasks) == 0 {
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		// Process each task
+		for _, task := range tasks {
+			go handler(c, task)
+		}
+
+		// Wait a bit before next poll
+		time.Sleep(1 * time.Second)
+	}
+}
