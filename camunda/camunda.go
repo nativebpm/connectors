@@ -9,35 +9,19 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/nativebpm/connectors/camunda/internal/builder"
+	"github.com/nativebpm/connectors/camunda/internal/worker"
 	"github.com/nativebpm/connectors/httpclient"
 )
 
 // ExternalTask represents a Camunda external task
-type ExternalTask struct {
-	ID                  string              `json:"id"`
-	TopicName           string              `json:"topicName"`
-	WorkerID            string              `json:"workerId"`
-	LockExpirationTime  *time.Time          `json:"lockExpirationTime,omitempty"`
-	Retries             *int                `json:"retries,omitempty"`
-	ErrorMessage        string              `json:"errorMessage,omitempty"`
-	ErrorDetails        string              `json:"errorDetails,omitempty"`
-	Variables           map[string]Variable `json:"variables,omitempty"`
-	BusinessKey         string              `json:"businessKey,omitempty"`
-	TenantID            string              `json:"tenantId,omitempty"`
-	Priority            int                 `json:"priority,omitempty"`
-	ActivityID          string              `json:"activityId,omitempty"`
-	ActivityInstanceID  string              `json:"activityInstanceId,omitempty"`
-	ExecutionID         string              `json:"executionId,omitempty"`
-	ProcessInstanceID   string              `json:"processInstanceId,omitempty"`
-	ProcessDefinitionID string              `json:"processDefinitionId,omitempty"`
-}
+type ExternalTask = worker.ExternalTask
 
 // Variable represents a Camunda variable with type safety
-type Variable struct {
-	Value     any    `json:"value"`
-	Type      string `json:"type"`
-	ValueInfo any    `json:"valueInfo,omitempty"`
-}
+type Variable = builder.Variable
+
+// TopicRequest represents a topic request for fetching tasks
+type TopicRequest = worker.TopicRequest
 
 // StringVariable creates a string variable
 func StringVariable(value string) Variable {
@@ -135,339 +119,36 @@ func (c *Client) WithLogger(logger *slog.Logger) *Client {
 	return c
 }
 
-// FetchAndLock fetches and locks external tasks for the given topics
-func (c *Client) FetchAndLock(ctx context.Context, topics []TopicRequest, maxTasks int, asyncResponseTimeout *int) ([]ExternalTask, error) {
-	req := struct {
-		WorkerID             string         `json:"workerId"`
-		MaxTasks             int            `json:"maxTasks"`
-		UsePriority          bool           `json:"usePriority"`
-		Topics               []TopicRequest `json:"topics"`
-		AsyncResponseTimeout *int           `json:"asyncResponseTimeout,omitempty"`
-	}{
-		WorkerID:             c.workerID,
-		MaxTasks:             maxTasks,
-		UsePriority:          true,
-		Topics:               topics,
-		AsyncResponseTimeout: asyncResponseTimeout,
-	}
-
-	resp, err := c.httpClient.POST(ctx, "/external-task/fetchAndLock").
-		JSON(req).
-		Send()
-	if err != nil {
-		return nil, fmt.Errorf("failed to send fetchAndLock request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetchAndLock request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var tasks []ExternalTask
-	if err := json.Unmarshal(body, &tasks); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal tasks: %w", err)
-	}
-
-	return tasks, nil
-}
-
-// TopicRequest represents a topic request for fetching tasks
-type TopicRequest struct {
-	TopicName            string   `json:"topicName"`
-	LockDuration         int      `json:"lockDuration"`
-	Variables            []string `json:"variables,omitempty"`
-	LocalVariables       bool     `json:"localVariables,omitempty"`
-	BusinessKey          string   `json:"businessKey,omitempty"`
-	ProcessDefinitionID  string   `json:"processDefinitionId,omitempty"`
-	ProcessDefinitionKey string   `json:"processDefinitionKey,omitempty"`
-	TenantIDs            []string `json:"tenantIds,omitempty"`
-}
-
 // TaskCompletion provides a fluent API for completing external tasks
-type TaskCompletion struct {
-	client         *Client
-	ctx            context.Context
-	taskID         string
-	variables      map[string]Variable
-	localVariables map[string]Variable
-}
+type TaskCompletion = builder.TaskCompletion
 
 // Complete creates a new TaskCompletion builder
 func (c *Client) Complete(taskID string) *TaskCompletion {
-	return &TaskCompletion{
-		client:         c,
-		ctx:            context.Background(),
-		taskID:         taskID,
-		variables:      make(map[string]Variable),
-		localVariables: make(map[string]Variable),
-	}
-}
-
-// Context sets the context for the completion request
-func (tc *TaskCompletion) Context(ctx context.Context) *TaskCompletion {
-	tc.ctx = ctx
-	return tc
-}
-
-// Variable adds a process variable
-func (tc *TaskCompletion) Variable(name string, value Variable) *TaskCompletion {
-	tc.variables[name] = value
-	return tc
-}
-
-// Variables adds multiple process variables
-func (tc *TaskCompletion) Variables(vars map[string]Variable) *TaskCompletion {
-	for k, v := range vars {
-		tc.variables[k] = v
-	}
-	return tc
-}
-
-// LocalVariable adds a local variable
-func (tc *TaskCompletion) LocalVariable(name string, value Variable) *TaskCompletion {
-	tc.localVariables[name] = value
-	return tc
-}
-
-// LocalVariables adds multiple local variables
-func (tc *TaskCompletion) LocalVariables(vars map[string]Variable) *TaskCompletion {
-	for k, v := range vars {
-		tc.localVariables[k] = v
-	}
-	return tc
-}
-
-// Execute sends the completion request
-func (tc *TaskCompletion) Execute() error {
-	req := struct {
-		WorkerID       string              `json:"workerId"`
-		Variables      map[string]Variable `json:"variables,omitempty"`
-		LocalVariables map[string]Variable `json:"localVariables,omitempty"`
-	}{
-		WorkerID:       tc.client.workerID,
-		Variables:      tc.variables,
-		LocalVariables: tc.localVariables,
-	}
-
-	resp, err := tc.client.httpClient.POST(tc.ctx, "/external-task/{taskID}/complete").
-		PathParam("taskID", tc.taskID).
-		JSON(req).
-		Send()
-	if err != nil {
-		return fmt.Errorf("failed to send complete request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("complete request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return nil
+	return builder.NewTaskCompletion(c.httpClient, c.workerID, taskID)
 }
 
 // TaskFailure provides a fluent API for reporting task failures
-type TaskFailure struct {
-	client       *Client
-	ctx          context.Context
-	taskID       string
-	errorMessage string
-	errorDetails string
-	retries      int
-	retryTimeout int
-}
+type TaskFailure = builder.TaskFailure
 
 // Failure creates a new TaskFailure builder
 func (c *Client) Failure(taskID string) *TaskFailure {
-	return &TaskFailure{
-		client:       c,
-		ctx:          context.Background(),
-		taskID:       taskID,
-		retries:      0,
-		retryTimeout: 0,
-	}
-}
-
-// Context sets the context for the failure request
-func (tf *TaskFailure) Context(ctx context.Context) *TaskFailure {
-	tf.ctx = ctx
-	return tf
-}
-
-// ErrorMessage sets the error message
-func (tf *TaskFailure) ErrorMessage(msg string) *TaskFailure {
-	tf.errorMessage = msg
-	return tf
-}
-
-// ErrorDetails sets the error details
-func (tf *TaskFailure) ErrorDetails(details string) *TaskFailure {
-	tf.errorDetails = details
-	return tf
-}
-
-// Retries sets the number of retries
-func (tf *TaskFailure) Retries(count int) *TaskFailure {
-	tf.retries = count
-	return tf
-}
-
-// RetryTimeout sets the retry timeout in milliseconds
-func (tf *TaskFailure) RetryTimeout(timeout int) *TaskFailure {
-	tf.retryTimeout = timeout
-	return tf
-}
-
-// Execute sends the failure request
-func (tf *TaskFailure) Execute() error {
-	req := struct {
-		WorkerID     string `json:"workerId"`
-		ErrorMessage string `json:"errorMessage,omitempty"`
-		ErrorDetails string `json:"errorDetails,omitempty"`
-		Retries      int    `json:"retries,omitempty"`
-		RetryTimeout int    `json:"retryTimeout,omitempty"`
-	}{
-		WorkerID:     tf.client.workerID,
-		ErrorMessage: tf.errorMessage,
-		ErrorDetails: tf.errorDetails,
-		Retries:      tf.retries,
-		RetryTimeout: tf.retryTimeout,
-	}
-
-	resp, err := tf.client.httpClient.POST(tf.ctx, "/external-task/{taskID}/failure").
-		PathParam("taskID", tf.taskID).
-		JSON(req).
-		Send()
-	if err != nil {
-		return fmt.Errorf("failed to send failure request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("failure request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return nil
+	return builder.NewTaskFailure(c.httpClient, c.workerID, taskID)
 }
 
 // LockExtension provides a fluent API for extending task locks
-type LockExtension struct {
-	client      *Client
-	ctx         context.Context
-	taskID      string
-	newDuration int
-}
+type LockExtension = builder.LockExtension
 
 // ExtendLock creates a new LockExtension builder
 func (c *Client) ExtendLock(taskID string, newDuration int) *LockExtension {
-	return &LockExtension{
-		client:      c,
-		ctx:         context.Background(),
-		taskID:      taskID,
-		newDuration: newDuration,
-	}
-}
-
-// Context sets the context for the lock extension request
-func (le *LockExtension) Context(ctx context.Context) *LockExtension {
-	le.ctx = ctx
-	return le
-}
-
-// Execute sends the lock extension request
-func (le *LockExtension) Execute() error {
-	req := struct {
-		WorkerID    string `json:"workerId"`
-		NewDuration int    `json:"newDuration"`
-	}{
-		WorkerID:    le.client.workerID,
-		NewDuration: le.newDuration,
-	}
-
-	resp, err := le.client.httpClient.POST(le.ctx, "/external-task/{taskID}/extendLock").
-		PathParam("taskID", le.taskID).
-		JSON(req).
-		Send()
-	if err != nil {
-		return fmt.Errorf("failed to send extendLock request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("extendLock request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return nil
+	return builder.NewLockExtension(c.httpClient, c.workerID, taskID, newDuration)
 }
 
 // TaskUnlock provides a fluent API for unlocking tasks
-type TaskUnlock struct {
-	client *Client
-	ctx    context.Context
-	taskID string
-}
+type TaskUnlock = builder.TaskUnlock
 
 // Unlock creates a new TaskUnlock builder
 func (c *Client) Unlock(taskID string) *TaskUnlock {
-	return &TaskUnlock{
-		client: c,
-		ctx:    context.Background(),
-		taskID: taskID,
-	}
-}
-
-// Context sets the context for the unlock request
-func (tu *TaskUnlock) Context(ctx context.Context) *TaskUnlock {
-	tu.ctx = ctx
-	return tu
-}
-
-// Execute sends the unlock request
-func (tu *TaskUnlock) Execute() error {
-	req := struct {
-		WorkerID string `json:"workerId"`
-	}{
-		WorkerID: tu.client.workerID,
-	}
-
-	resp, err := tu.client.httpClient.POST(tu.ctx, "/external-task/{taskID}/unlock").
-		PathParam("taskID", tu.taskID).
-		JSON(req).
-		Send()
-	if err != nil {
-		return fmt.Errorf("failed to send unlock request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("unlock request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return nil
+	return builder.NewTaskUnlock(c.httpClient, c.workerID, taskID)
 }
 
 // StartProcessInstance starts a new process instance by process definition key
@@ -550,119 +231,74 @@ type TaskHandler interface {
 
 // Worker manages external task polling and processing with a clean handler-based architecture
 type Worker struct {
-	client       *Client
-	logger       *slog.Logger
-	handlers     map[string]TaskHandler
-	topics       []TopicRequest
-	maxTasks     int
-	pollInterval time.Duration
+	internalWorker *worker.Worker
+	client         *Client
+	logger         *slog.Logger
 }
 
 // NewWorker creates a new external task worker
 func NewWorker(client *Client, logger *slog.Logger) *Worker {
-	if logger == nil {
-		logger = slog.Default()
-	}
 	return &Worker{
-		client:       client,
-		logger:       logger,
-		handlers:     make(map[string]TaskHandler),
-		maxTasks:     10,
-		pollInterval: 5 * time.Second,
+		internalWorker: worker.New(client.httpClient, client.workerID, logger),
+		client:         client,
+		logger:         logger,
 	}
 }
 
 // RegisterHandler registers a handler for a specific topic
 // Returns the worker for method chaining
 func (w *Worker) RegisterHandler(topicName string, handler TaskHandler, lockDuration int, variables []string) *Worker {
-	w.handlers[topicName] = handler
-	w.topics = append(w.topics, TopicRequest{
-		TopicName:    topicName,
-		LockDuration: lockDuration,
-		Variables:    variables,
-	})
-	w.logger.Info("Registered handler", "topic", topicName, "lockDuration", lockDuration)
+	// Wrap the public handler interface to match internal interface
+	internalHandler := &handlerAdapter{
+		handler: handler,
+		client:  w.client,
+		logger:  w.logger,
+	}
+	w.internalWorker.RegisterHandler(topicName, internalHandler, lockDuration, variables)
 	return w
 }
 
 // SetMaxTasks sets the maximum number of tasks to fetch per poll
 // Returns the worker for method chaining
 func (w *Worker) SetMaxTasks(maxTasks int) *Worker {
-	w.maxTasks = maxTasks
+	w.internalWorker.SetMaxTasks(maxTasks)
 	return w
 }
 
 // SetPollInterval sets the interval between polls when no tasks are available
 // Returns the worker for method chaining
 func (w *Worker) SetPollInterval(interval time.Duration) *Worker {
-	w.pollInterval = interval
+	w.internalWorker.SetPollInterval(interval)
 	return w
 }
 
 // Start begins polling for external tasks
 // This is a blocking call that will run until the context is cancelled
 func (w *Worker) Start(ctx context.Context) {
-	w.logger.Info("Starting external task worker", "topics", len(w.topics), "maxTasks", w.maxTasks)
-
-	for {
-		select {
-		case <-ctx.Done():
-			w.logger.Info("Worker stopped")
-			return
-		default:
-		}
-
-		tasks, err := w.client.FetchAndLock(ctx, w.topics, w.maxTasks, nil)
-		if err != nil {
-			w.logger.Error("Failed to fetch tasks", "error", err)
-			time.Sleep(w.pollInterval)
-			continue
-		}
-
-		if len(tasks) == 0 {
-			time.Sleep(w.pollInterval)
-			continue
-		}
-
-		w.logger.Info("Fetched tasks", "count", len(tasks))
-
-		// Process each task in a separate goroutine
-		for _, task := range tasks {
-			go w.processTask(ctx, task)
-		}
-
-		// Brief pause before next poll
-		time.Sleep(1 * time.Second)
-	}
+	w.internalWorker.Start(ctx)
 }
 
-// processTask processes a single task using the registered handler
-func (w *Worker) processTask(ctx context.Context, task ExternalTask) {
-	handler, ok := w.handlers[task.TopicName]
-	if !ok {
-		w.logger.Error("No handler registered for topic", "topic", task.TopicName, "taskID", task.ID)
-		return
-	}
+// handlerAdapter adapts the public TaskHandler interface to the internal interface
+type handlerAdapter struct {
+	handler TaskHandler
+	client  *Client
+	logger  *slog.Logger
+}
 
-	w.logger.Info("Processing task", "taskID", task.ID, "topic", task.TopicName)
+func (ha *handlerAdapter) Handle(ctx context.Context, task worker.ExternalTask, complete worker.CompleteFunc, fail worker.FailFunc) error {
+	ha.logger.Info("Processing task", "taskID", task.ID, "topic", task.TopicName)
 
-	err := handler.Handle(ctx, w.client, task)
+	err := ha.handler.Handle(ctx, ha.client, task)
 	if err != nil {
-		w.logger.Error("Task processing failed", "taskID", task.ID, "topic", task.TopicName, "error", err)
-
+		ha.logger.Error("Task processing failed", "taskID", task.ID, "topic", task.TopicName, "error", err)
 		// Report failure to Camunda
-		failErr := w.client.Failure(task.ID).
-			Context(ctx).
-			ErrorMessage("Task processing failed").
-			ErrorDetails(err.Error()).
-			Retries(3).
-			RetryTimeout(30000).
-			Execute()
+		failErr := fail("Task processing failed", err.Error(), 3, 30000)
 		if failErr != nil {
-			w.logger.Error("Failed to report task failure", "taskID", task.ID, "error", failErr)
+			ha.logger.Error("Failed to report task failure", "taskID", task.ID, "error", failErr)
 		}
-		return
+		return err
 	}
 
-	w.logger.Info("Task processed successfully", "taskID", task.ID, "topic", task.TopicName)
+	ha.logger.Info("Task processed successfully", "taskID", task.ID, "topic", task.TopicName)
+	return nil
 }
