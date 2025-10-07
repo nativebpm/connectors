@@ -37,6 +37,14 @@ func main() {
 	}
 	logger.Info("Deployed BPMN process", "deploymentID", deploymentID)
 
+	// Start a process instance manually for testing
+	processInstanceID, err := client.StartProcessInstance(context.Background(), "loan_process", map[string]interface{}{})
+	if err != nil {
+		logger.Error("Failed to start process instance", "error", err)
+		return
+	}
+	logger.Info("Started process instance", "id", processInstanceID)
+
 	// Define topics to subscribe to based on loan-granting.bpmn process
 	topics := []camunda.TopicRequest{
 		{
