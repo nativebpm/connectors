@@ -17,7 +17,7 @@ tag:
 	read -p "Enter version: " VERSION; \
 	read -p "Enter message: " MESSAGE; \
 	TAG_NAME="$$MODULE/$$VERSION"; \
-	git tag -a "$$TAG_NAME" -m "$$MESSAGE"; \
+	git tag -a "$$TAG_NAME" -m "$$VERSION ($$MESSAGE)"; \
 	git push --tags; \
 	echo "Tag $$TAG_NAME created and pushed"
 
