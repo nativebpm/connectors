@@ -14,7 +14,7 @@ tag:
 	echo "Last 3 tags for $$MODULE:"; \
 	git for-each-ref --sort=-creatordate --format='%(refname:short) - %(contents:subject)' refs/tags | grep "^$$MODULE/" | head -n 3 || echo "No tags found"; \
 	echo ""; \
-	read -p "Enter version: " VERSION; \
+	read -p "Enter version (vX.Y.Z): " VERSION; \
 	read -p "Enter message: " MESSAGE; \
 	TAG_NAME="$$MODULE/$$VERSION"; \
 	git tag -a "$$TAG_NAME" -m "$$VERSION ($$MESSAGE)"; \
