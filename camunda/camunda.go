@@ -543,6 +543,7 @@ func (c *Client) DeployProcess(ctx context.Context, deploymentName string, bpmnR
 }
 
 // PollTasks polls for external tasks in a loop and processes them using the provided handler
+// Deprecated: Use Worker.Start() instead for better architecture and error handling
 func (c *Client) PollTasks(ctx context.Context, topics []TopicRequest, maxTasks int, handler func(*Client, ExternalTask)) {
 	for {
 		select {
@@ -573,4 +574,129 @@ func (c *Client) PollTasks(ctx context.Context, topics []TopicRequest, maxTasks 
 		// Wait a bit before next poll
 		time.Sleep(1 * time.Second)
 	}
+}
+
+// TaskHandler defines the interface for external task handlers
+// Handlers implement business logic for specific topics
+type TaskHandler interface {
+	Handle(ctx context.Context, client *Client, task ExternalTask) error
+}
+
+// Worker manages external task polling and processing with a clean handler-based architecture
+type Worker struct {
+	client       *Client
+	logger       *slog.Logger
+	handlers     map[string]TaskHandler
+	topics       []TopicRequest
+	maxTasks     int
+	pollInterval time.Duration
+}
+
+// NewWorker creates a new external task worker
+func NewWorker(client *Client, logger *slog.Logger) *Worker {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &Worker{
+		client:       client,
+		logger:       logger,
+		handlers:     make(map[string]TaskHandler),
+		maxTasks:     10,
+		pollInterval: 5 * time.Second,
+	}
+}
+
+// RegisterHandler registers a handler for a specific topic
+// Returns the worker for method chaining
+func (w *Worker) RegisterHandler(topicName string, handler TaskHandler, lockDuration int, variables []string) *Worker {
+	w.handlers[topicName] = handler
+	w.topics = append(w.topics, TopicRequest{
+		TopicName:    topicName,
+		LockDuration: lockDuration,
+		Variables:    variables,
+	})
+	w.logger.Info("Registered handler", "topic", topicName, "lockDuration", lockDuration)
+	return w
+}
+
+// SetMaxTasks sets the maximum number of tasks to fetch per poll
+// Returns the worker for method chaining
+func (w *Worker) SetMaxTasks(maxTasks int) *Worker {
+	w.maxTasks = maxTasks
+	return w
+}
+
+// SetPollInterval sets the interval between polls when no tasks are available
+// Returns the worker for method chaining
+func (w *Worker) SetPollInterval(interval time.Duration) *Worker {
+	w.pollInterval = interval
+	return w
+}
+
+// Start begins polling for external tasks
+// This is a blocking call that will run until the context is cancelled
+func (w *Worker) Start(ctx context.Context) {
+	w.logger.Info("Starting external task worker", "topics", len(w.topics), "maxTasks", w.maxTasks)
+
+	for {
+		select {
+		case <-ctx.Done():
+			w.logger.Info("Worker stopped")
+			return
+		default:
+		}
+
+		tasks, err := w.client.FetchAndLock(ctx, w.topics, w.maxTasks, nil)
+		if err != nil {
+			w.logger.Error("Failed to fetch tasks", "error", err)
+			time.Sleep(w.pollInterval)
+			continue
+		}
+
+		if len(tasks) == 0 {
+			time.Sleep(w.pollInterval)
+			continue
+		}
+
+		w.logger.Info("Fetched tasks", "count", len(tasks))
+
+		// Process each task in a separate goroutine
+		for _, task := range tasks {
+			go w.processTask(ctx, task)
+		}
+
+		// Brief pause before next poll
+		time.Sleep(1 * time.Second)
+	}
+}
+
+// processTask processes a single task using the registered handler
+func (w *Worker) processTask(ctx context.Context, task ExternalTask) {
+	handler, ok := w.handlers[task.TopicName]
+	if !ok {
+		w.logger.Error("No handler registered for topic", "topic", task.TopicName, "taskID", task.ID)
+		return
+	}
+
+	w.logger.Info("Processing task", "taskID", task.ID, "topic", task.TopicName)
+
+	err := handler.Handle(ctx, w.client, task)
+	if err != nil {
+		w.logger.Error("Task processing failed", "taskID", task.ID, "topic", task.TopicName, "error", err)
+
+		// Report failure to Camunda
+		failErr := w.client.Failure(task.ID).
+			Context(ctx).
+			ErrorMessage("Task processing failed").
+			ErrorDetails(err.Error()).
+			Retries(3).
+			RetryTimeout(30000).
+			Execute()
+		if failErr != nil {
+			w.logger.Error("Failed to report task failure", "taskID", task.ID, "error", failErr)
+		}
+		return
+	}
+
+	w.logger.Info("Task processed successfully", "taskID", task.ID, "topic", task.TopicName)
 }
