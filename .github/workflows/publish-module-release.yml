@@ -46,21 +46,33 @@ jobs:
             exit 1
           fi
           
-          TAG_OBJECT=$(git rev-parse "$FULL_TAG" 2>/dev/null || echo "")
-          if [[ -z "$TAG_OBJECT" ]]; then
+          # Check if tag exists and get its type
+          if ! git rev-parse "$FULL_TAG" >/dev/null 2>&1; then
             echo "❌ Tag not found: $FULL_TAG"
             exit 1
           fi
           
-          TAG_TYPE=$(git cat-file -t "$TAG_OBJECT" 2>/dev/null || echo "commit")
+          # Check if it's an annotated tag by trying to dereference it
+          # For annotated tags, ^{} will show the commit, for lightweight it will fail
+          TAG_TYPE=$(git cat-file -t "$FULL_TAG^{}" 2>/dev/null || echo "")
+          DIRECT_TYPE=$(git cat-file -t "$FULL_TAG" 2>/dev/null || echo "")
           
-          if [[ "$TAG_TYPE" != "tag" ]]; then
+          # If DIRECT_TYPE is "commit", it's a lightweight tag
+          # If DIRECT_TYPE is "tag", it's an annotated tag
+          if [[ "$DIRECT_TYPE" == "commit" ]]; then
             echo "⚠️ Tag '$FULL_TAG' is lightweight. Skipping."
             echo "has_annotation=false" >> $GITHUB_OUTPUT
             exit 0
           fi
           
-          ANNOTATION=$(git cat-file tag "$TAG_OBJECT" | sed '1,/^$/d')
+          if [[ "$DIRECT_TYPE" != "tag" ]]; then
+            echo "⚠️ Could not determine tag type for '$FULL_TAG'. Skipping."
+            echo "has_annotation=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Extract annotation from the tag object
+          ANNOTATION=$(git cat-file tag "$FULL_TAG" | sed '1,/^$/d')
           
           if [[ -z "$ANNOTATION" ]]; then
             echo "⚠️ Tag has no annotation message. Skipping."
