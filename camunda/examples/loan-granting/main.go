@@ -13,7 +13,7 @@ func main() {
 	logger := slog.Default()
 
 	// Create a new Camunda client
-	client, err := camunda.NewClient("http://localhost:8080/engine-rest", "loan-worker")
+	client, err := camunda.NewClient("http://localhost:8080", "loan-worker")
 	if err != nil {
 		logger.Error("Failed to create client", "error", err)
 		return
