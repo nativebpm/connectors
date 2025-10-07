@@ -25,7 +25,14 @@ tag:
 	git push --tags; \
 	echo "Tag $$TAG_NAME created and pushed"
 
-tag-d:
+tag-list:
+	@read -p "Enter module name: " MODULE; \
+	echo ""; \
+	echo "Tags for $$MODULE:"; \
+	git for-each-ref --sort=-creatordate --format='%(refname:short) - %(contents:subject)' refs/tags | grep "^$$MODULE/" || echo "No tags found"; \
+	echo ""
+
+tag-del:
 	@read -p "Enter module name: " MODULE; \
 	read -p "Enter version to delete (vX.Y.Z): " VERSION; \
 	TAG_NAME="$$MODULE/$$VERSION"; \
