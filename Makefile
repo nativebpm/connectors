@@ -2,45 +2,24 @@ GO_VERSION ?= 1.21
 
 mod:
 	@read -p "Enter module name: " MODULE; \
-	if [ -z "$$MODULE" ]; then \
-		echo "Module name cannot be empty"; \
-		exit 1; \
-	fi; \
-	if [ -d "$$MODULE" ]; then \
-		echo "Module '$$MODULE' already exists"; \
-		exit 1; \
-	fi; \
-	echo "Creating module: $$MODULE"; \
 	mkdir -p $$MODULE; \
 	go -C $$MODULE mod init github.com/nativebpm/connectors/$$MODULE; \
 	go -C $$MODULE mod edit -go=$(GO_VERSION); \
 	echo "package $$MODULE" > $$MODULE/$$MODULE.go; \
-	go work use ./$$MODULE; \
-	echo "Module '$$MODULE' created and added to workspace"
+	go work use ./$$MODULE
 
-release:
+tag:
 	@read -p "Enter module name: " MODULE; \
-	read -p "Enter version (e.g., v0.0.1): " VERSION; \
-	read -p "Enter release message: " MESSAGE; \
-	if [ -z "$$MODULE" ] || [ -z "$$VERSION" ] || [ -z "$$MESSAGE" ]; then \
-		echo "Error: Module name, version, and message are required"; \
-		exit 1; \
-	fi; \
-	if [ ! -d "$$MODULE" ]; then \
-		echo "Error: Module '$$MODULE' does not exist"; \
-		exit 1; \
-	fi; \
-	if ! echo "$$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$$'; then \
-		echo "Error: Version must be in format vX.Y.Z (e.g., v0.0.1)"; \
-		exit 1; \
-	fi; \
+	echo ""; \
+	echo "Last 3 tags for $$MODULE:"; \
+	git for-each-ref --sort=-creatordate --format='%(refname:short) - %(contents:subject)' refs/tags | grep "^$$MODULE/" | head -n 3 || echo "No tags found"; \
+	echo ""; \
+	read -p "Enter version: " VERSION; \
+	read -p "Enter message: " MESSAGE; \
 	TAG_NAME="$$MODULE/$$VERSION"; \
-	echo "Creating annotated tag: $$TAG_NAME"; \
-	echo "Message: $$MESSAGE"; \
 	git tag -a "$$TAG_NAME" -m "$$MESSAGE"; \
-	echo "Pushing tag to origin..."; \
 	git push --tags; \
-	echo "Release $$TAG_NAME created and pushed successfully"
+	echo "Tag $$TAG_NAME created and pushed"
 
 lint-install:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
