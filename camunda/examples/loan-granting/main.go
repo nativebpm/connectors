@@ -107,12 +107,21 @@ func processLoanTask(client *camunda.Client, task camunda.ExternalTask) {
 		}
 	}
 
-	// Complete the task
-	err := client.Complete(ctx, task.ID, variables, nil)
+	// Complete the task using fluent API
+	err := client.Complete(task.ID).
+		Context(ctx).
+		Variables(variables).
+		Execute()
 	if err != nil {
 		logger.Error("Failed to complete task", "taskID", task.ID, "error", err)
-		// Handle failure
-		err := client.HandleFailure(ctx, task.ID, "Processing failed", "Detailed error message", 3, 30000)
+		// Handle failure using fluent API
+		err := client.Failure(task.ID).
+			Context(ctx).
+			ErrorMessage("Processing failed").
+			ErrorDetails("Detailed error message").
+			Retries(3).
+			RetryTimeout(30000).
+			Execute()
 		if err != nil {
 			logger.Error("Failed to handle failure for task", "taskID", task.ID, "error", err)
 		}

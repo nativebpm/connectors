@@ -116,8 +116,8 @@ func TestJSONVariable(t *testing.T) {
 		t.Error("expected value not nil")
 	}
 
-	if v.Type != "Json" {
-		t.Errorf("expected type Json, got %s", v.Type)
+	if v.Type != "json" {
+		t.Errorf("expected type json, got %s", v.Type)
 	}
 }
 
@@ -163,7 +163,11 @@ func TestFetchAndLock(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(tasks)
+		if err := json.NewEncoder(w).Encode(tasks); err != nil {
+			t.Errorf("failed to encode response: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
 	}))
 	defer server.Close()
 
@@ -228,7 +232,7 @@ func TestComplete(t *testing.T) {
 	}
 
 	// Test Complete
-	err := client.Complete(context.Background(), "task1", nil, nil)
+	err := client.Complete("task1").Context(context.Background()).Execute()
 	if err != nil {
 		t.Fatalf("Complete failed: %v", err)
 	}
@@ -271,7 +275,13 @@ func TestHandleFailure(t *testing.T) {
 	}
 
 	// Test HandleFailure
-	err := client.HandleFailure(context.Background(), "task1", "test error", "details", 3, 1000)
+	err := client.Failure("task1").
+		Context(context.Background()).
+		ErrorMessage("test error").
+		ErrorDetails("details").
+		Retries(3).
+		RetryTimeout(1000).
+		Execute()
 	if err != nil {
 		t.Fatalf("HandleFailure failed: %v", err)
 	}
@@ -314,7 +324,7 @@ func TestExtendLock(t *testing.T) {
 	}
 
 	// Test ExtendLock
-	err := client.ExtendLock(context.Background(), "task1", 60000)
+	err := client.ExtendLock("task1", 60000).Context(context.Background()).Execute()
 	if err != nil {
 		t.Fatalf("ExtendLock failed: %v", err)
 	}
@@ -353,7 +363,7 @@ func TestUnlock(t *testing.T) {
 	}
 
 	// Test Unlock
-	err := client.Unlock(context.Background(), "task1")
+	err := client.Unlock("task1").Context(context.Background()).Execute()
 	if err != nil {
 		t.Fatalf("Unlock failed: %v", err)
 	}

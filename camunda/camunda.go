@@ -91,7 +91,7 @@ func DateVariable(value time.Time) Variable {
 func JSONVariable(value any) Variable {
 	return Variable{
 		Value: value,
-		Type:  "Json",
+		Type:  "json",
 	}
 }
 
@@ -188,20 +188,74 @@ type TopicRequest struct {
 	TenantIDs            []string `json:"tenantIds,omitempty"`
 }
 
-// Complete completes an external task
-func (c *Client) Complete(ctx context.Context, taskID string, variables map[string]Variable, localVariables map[string]Variable) error {
+// TaskCompletion provides a fluent API for completing external tasks
+type TaskCompletion struct {
+	client         *Client
+	ctx            context.Context
+	taskID         string
+	variables      map[string]Variable
+	localVariables map[string]Variable
+}
+
+// Complete creates a new TaskCompletion builder
+func (c *Client) Complete(taskID string) *TaskCompletion {
+	return &TaskCompletion{
+		client:         c,
+		ctx:            context.Background(),
+		taskID:         taskID,
+		variables:      make(map[string]Variable),
+		localVariables: make(map[string]Variable),
+	}
+}
+
+// Context sets the context for the completion request
+func (tc *TaskCompletion) Context(ctx context.Context) *TaskCompletion {
+	tc.ctx = ctx
+	return tc
+}
+
+// Variable adds a process variable
+func (tc *TaskCompletion) Variable(name string, value Variable) *TaskCompletion {
+	tc.variables[name] = value
+	return tc
+}
+
+// Variables adds multiple process variables
+func (tc *TaskCompletion) Variables(vars map[string]Variable) *TaskCompletion {
+	for k, v := range vars {
+		tc.variables[k] = v
+	}
+	return tc
+}
+
+// LocalVariable adds a local variable
+func (tc *TaskCompletion) LocalVariable(name string, value Variable) *TaskCompletion {
+	tc.localVariables[name] = value
+	return tc
+}
+
+// LocalVariables adds multiple local variables
+func (tc *TaskCompletion) LocalVariables(vars map[string]Variable) *TaskCompletion {
+	for k, v := range vars {
+		tc.localVariables[k] = v
+	}
+	return tc
+}
+
+// Execute sends the completion request
+func (tc *TaskCompletion) Execute() error {
 	req := struct {
 		WorkerID       string              `json:"workerId"`
 		Variables      map[string]Variable `json:"variables,omitempty"`
 		LocalVariables map[string]Variable `json:"localVariables,omitempty"`
 	}{
-		WorkerID:       c.workerID,
-		Variables:      variables,
-		LocalVariables: localVariables,
+		WorkerID:       tc.client.workerID,
+		Variables:      tc.variables,
+		LocalVariables: tc.localVariables,
 	}
 
-	resp, err := c.httpClient.POST(ctx, "/external-task/{taskID}/complete").
-		PathParam("taskID", taskID).
+	resp, err := tc.client.httpClient.POST(tc.ctx, "/external-task/{taskID}/complete").
+		PathParam("taskID", tc.taskID).
 		JSON(req).
 		Send()
 	if err != nil {
@@ -221,8 +275,60 @@ func (c *Client) Complete(ctx context.Context, taskID string, variables map[stri
 	return nil
 }
 
-// HandleFailure handles failure of an external task
-func (c *Client) HandleFailure(ctx context.Context, taskID string, errorMessage string, errorDetails string, retries int, retryTimeout int) error {
+// TaskFailure provides a fluent API for reporting task failures
+type TaskFailure struct {
+	client       *Client
+	ctx          context.Context
+	taskID       string
+	errorMessage string
+	errorDetails string
+	retries      int
+	retryTimeout int
+}
+
+// Failure creates a new TaskFailure builder
+func (c *Client) Failure(taskID string) *TaskFailure {
+	return &TaskFailure{
+		client:       c,
+		ctx:          context.Background(),
+		taskID:       taskID,
+		retries:      0,
+		retryTimeout: 0,
+	}
+}
+
+// Context sets the context for the failure request
+func (tf *TaskFailure) Context(ctx context.Context) *TaskFailure {
+	tf.ctx = ctx
+	return tf
+}
+
+// ErrorMessage sets the error message
+func (tf *TaskFailure) ErrorMessage(msg string) *TaskFailure {
+	tf.errorMessage = msg
+	return tf
+}
+
+// ErrorDetails sets the error details
+func (tf *TaskFailure) ErrorDetails(details string) *TaskFailure {
+	tf.errorDetails = details
+	return tf
+}
+
+// Retries sets the number of retries
+func (tf *TaskFailure) Retries(count int) *TaskFailure {
+	tf.retries = count
+	return tf
+}
+
+// RetryTimeout sets the retry timeout in milliseconds
+func (tf *TaskFailure) RetryTimeout(timeout int) *TaskFailure {
+	tf.retryTimeout = timeout
+	return tf
+}
+
+// Execute sends the failure request
+func (tf *TaskFailure) Execute() error {
 	req := struct {
 		WorkerID     string `json:"workerId"`
 		ErrorMessage string `json:"errorMessage,omitempty"`
@@ -230,15 +336,15 @@ func (c *Client) HandleFailure(ctx context.Context, taskID string, errorMessage 
 		Retries      int    `json:"retries,omitempty"`
 		RetryTimeout int    `json:"retryTimeout,omitempty"`
 	}{
-		WorkerID:     c.workerID,
-		ErrorMessage: errorMessage,
-		ErrorDetails: errorDetails,
-		Retries:      retries,
-		RetryTimeout: retryTimeout,
+		WorkerID:     tf.client.workerID,
+		ErrorMessage: tf.errorMessage,
+		ErrorDetails: tf.errorDetails,
+		Retries:      tf.retries,
+		RetryTimeout: tf.retryTimeout,
 	}
 
-	resp, err := c.httpClient.POST(context.Background(), "/external-task/{taskID}/failure").
-		PathParam("taskID", taskID).
+	resp, err := tf.client.httpClient.POST(tf.ctx, "/external-task/{taskID}/failure").
+		PathParam("taskID", tf.taskID).
 		JSON(req).
 		Send()
 	if err != nil {
@@ -258,18 +364,42 @@ func (c *Client) HandleFailure(ctx context.Context, taskID string, errorMessage 
 	return nil
 }
 
-// ExtendLock extends the lock of an external task
-func (c *Client) ExtendLock(ctx context.Context, taskID string, newDuration int) error {
+// LockExtension provides a fluent API for extending task locks
+type LockExtension struct {
+	client      *Client
+	ctx         context.Context
+	taskID      string
+	newDuration int
+}
+
+// ExtendLock creates a new LockExtension builder
+func (c *Client) ExtendLock(taskID string, newDuration int) *LockExtension {
+	return &LockExtension{
+		client:      c,
+		ctx:         context.Background(),
+		taskID:      taskID,
+		newDuration: newDuration,
+	}
+}
+
+// Context sets the context for the lock extension request
+func (le *LockExtension) Context(ctx context.Context) *LockExtension {
+	le.ctx = ctx
+	return le
+}
+
+// Execute sends the lock extension request
+func (le *LockExtension) Execute() error {
 	req := struct {
 		WorkerID    string `json:"workerId"`
 		NewDuration int    `json:"newDuration"`
 	}{
-		WorkerID:    c.workerID,
-		NewDuration: newDuration,
+		WorkerID:    le.client.workerID,
+		NewDuration: le.newDuration,
 	}
 
-	resp, err := c.httpClient.POST(ctx, "/external-task/{taskID}/extendLock").
-		PathParam("taskID", taskID).
+	resp, err := le.client.httpClient.POST(le.ctx, "/external-task/{taskID}/extendLock").
+		PathParam("taskID", le.taskID).
 		JSON(req).
 		Send()
 	if err != nil {
@@ -289,16 +419,38 @@ func (c *Client) ExtendLock(ctx context.Context, taskID string, newDuration int)
 	return nil
 }
 
-// Unlock unlocks an external task
-func (c *Client) Unlock(ctx context.Context, taskID string) error {
+// TaskUnlock provides a fluent API for unlocking tasks
+type TaskUnlock struct {
+	client *Client
+	ctx    context.Context
+	taskID string
+}
+
+// Unlock creates a new TaskUnlock builder
+func (c *Client) Unlock(taskID string) *TaskUnlock {
+	return &TaskUnlock{
+		client: c,
+		ctx:    context.Background(),
+		taskID: taskID,
+	}
+}
+
+// Context sets the context for the unlock request
+func (tu *TaskUnlock) Context(ctx context.Context) *TaskUnlock {
+	tu.ctx = ctx
+	return tu
+}
+
+// Execute sends the unlock request
+func (tu *TaskUnlock) Execute() error {
 	req := struct {
 		WorkerID string `json:"workerId"`
 	}{
-		WorkerID: c.workerID,
+		WorkerID: tu.client.workerID,
 	}
 
-	resp, err := c.httpClient.POST(ctx, "/external-task/{taskID}/unlock").
-		PathParam("taskID", taskID).
+	resp, err := tu.client.httpClient.POST(tu.ctx, "/external-task/{taskID}/unlock").
+		PathParam("taskID", tu.taskID).
 		JSON(req).
 		Send()
 	if err != nil {
@@ -409,6 +561,9 @@ func (c *Client) PollTasks(ctx context.Context, topics []TopicRequest, maxTasks 
 			time.Sleep(5 * time.Second)
 			continue
 		}
+
+		// Log fetched tasks
+		slog.Default().Info("Fetched tasks", "count", len(tasks))
 
 		// Process each task
 		for _, task := range tasks {
