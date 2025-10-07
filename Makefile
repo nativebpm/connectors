@@ -8,6 +8,10 @@ mod:
 	echo "package $$MODULE" > $$MODULE/$$MODULE.go; \
 	go work use ./$$MODULE
 
+tidy:
+	find . -name go.mod -execdir go mod tidy \;
+	go work sync
+
 tag:
 	@read -p "Enter module name: " MODULE; \
 	echo ""; \
@@ -20,6 +24,14 @@ tag:
 	git tag -a "$$TAG_NAME" -m "$$VERSION ($$MESSAGE)"; \
 	git push --tags; \
 	echo "Tag $$TAG_NAME created and pushed"
+
+tag-d:
+	@read -p "Enter module name: " MODULE; \
+	read -p "Enter version to delete (vX.Y.Z): " VERSION; \
+	TAG_NAME="$$MODULE/$$VERSION"; \
+	git tag -d "$$TAG_NAME" || echo "Tag $$TAG_NAME not found locally"; \
+	git push --delete origin "$$TAG_NAME" || echo "Tag $$TAG_NAME not found on remote"; \
+	echo "Tag $$TAG_NAME deleted if it existed"
 
 lint-install:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
