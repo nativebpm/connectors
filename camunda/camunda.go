@@ -542,40 +542,6 @@ func (c *Client) DeployProcess(ctx context.Context, deploymentName string, bpmnR
 	return result.ID, nil
 }
 
-// PollTasks polls for external tasks in a loop and processes them using the provided handler
-// Deprecated: Use Worker.Start() instead for better architecture and error handling
-func (c *Client) PollTasks(ctx context.Context, topics []TopicRequest, maxTasks int, handler func(*Client, ExternalTask)) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		tasks, err := c.FetchAndLock(ctx, topics, maxTasks, nil)
-		if err != nil {
-			time.Sleep(5 * time.Second)
-			continue
-		}
-
-		if len(tasks) == 0 {
-			time.Sleep(5 * time.Second)
-			continue
-		}
-
-		// Log fetched tasks
-		slog.Default().Info("Fetched tasks", "count", len(tasks))
-
-		// Process each task
-		for _, task := range tasks {
-			go handler(c, task)
-		}
-
-		// Wait a bit before next poll
-		time.Sleep(1 * time.Second)
-	}
-}
-
 // TaskHandler defines the interface for external task handlers
 // Handlers implement business logic for specific topics
 type TaskHandler interface {
