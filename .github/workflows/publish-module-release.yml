@@ -52,27 +52,21 @@ jobs:
             exit 1
           fi
           
-          # Check if it's an annotated tag by trying to dereference it
-          # For annotated tags, ^{} will show the commit, for lightweight it will fail
-          TAG_TYPE=$(git cat-file -t "$FULL_TAG^{}" 2>/dev/null || echo "")
-          DIRECT_TYPE=$(git cat-file -t "$FULL_TAG" 2>/dev/null || echo "")
+          # Get the type of the tag directly
+          DIRECT_TYPE=$(git cat-file -t "$FULL_TAG" 2>/dev/null || echo "unknown")
+          echo "DEBUG: DIRECT_TYPE = '$DIRECT_TYPE'"
           
-          # If DIRECT_TYPE is "commit", it's a lightweight tag
-          # If DIRECT_TYPE is "tag", it's an annotated tag
-          if [[ "$DIRECT_TYPE" == "commit" ]]; then
-            echo "⚠️ Tag '$FULL_TAG' is lightweight. Skipping."
+          # Try to get tag annotation - if successful, it's annotated
+          ANNOTATION=$(git cat-file tag "$FULL_TAG" 2>/dev/null | sed '1,/^$/d' || echo "")
+          echo "DEBUG: ANNOTATION length = ${#ANNOTATION}"
+          
+          # If we can't read it as a tag object, it's lightweight
+          if ! git cat-file tag "$FULL_TAG" >/dev/null 2>&1; then
+            echo "⚠️ Tag '$FULL_TAG' is lightweight (no tag object). Skipping."
+            echo "DEBUG: git cat-file tag failed"
             echo "has_annotation=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
-          if [[ "$DIRECT_TYPE" != "tag" ]]; then
-            echo "⚠️ Could not determine tag type for '$FULL_TAG'. Skipping."
-            echo "has_annotation=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          # Extract annotation from the tag object
-          ANNOTATION=$(git cat-file tag "$FULL_TAG" | sed '1,/^$/d')
           
           if [[ -z "$ANNOTATION" ]]; then
             echo "⚠️ Tag has no annotation message. Skipping."
