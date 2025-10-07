@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/nativebpm/connectors/camunda"
 	"github.com/nativebpm/connectors/camunda/examples/loan-granting/handlers"
@@ -47,13 +48,16 @@ func main() {
 
 	go func() {
 		<-sigChan
-		logger.Info("Shutdown signal received")
+		logger.Info("Shutdown signal received, stopping worker...")
 		cancel()
 	}()
 
 	// Start the worker (blocking call)
-	logger.Info("Starting external task worker...")
+	logger.Info("Starting external task worker... Press Ctrl+C to stop")
 	w.Start(ctx)
+
+	// Worker stopped gracefully
+	logger.Info("Worker stopped gracefully")
 }
 
 // deployProcess deploys the BPMN process definition
@@ -97,6 +101,12 @@ func createWorker(client *camunda.Client, logger *slog.Logger) *camunda.Worker {
 	w.RegisterHandler("loanGranter", loanGranter, 60000, []string{"score"})
 	w.RegisterHandler("requestRejecter", requestRejecter, 60000, []string{"score"})
 	w.SetMaxTasks(10)
+	w.SetPollInterval(5 * time.Second)
+
+	logger.Info("Worker configured",
+		"topics", 3,
+		"maxTasks", 10,
+		"pollInterval", "5s")
 
 	return w
 }

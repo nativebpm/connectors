@@ -95,15 +95,32 @@ cd camunda/examples/loan-granting
 go run main.go
 ```
 
+### Expected Output
+
+```bash
+2025/10/08 00:00:00 INFO Deployed BPMN process deploymentID=abc123
+2025/10/08 00:00:00 INFO Started test process instance id=def456
+2025/10/08 00:00:00 INFO Worker configured topics=3 maxTasks=10 pollInterval=5s
+2025/10/08 00:00:00 INFO Starting external task worker... Press Ctrl+C to stop
+2025/10/08 00:00:00 INFO Starting external task worker topics=3 maxTasks=10
+2025/10/08 00:00:01 INFO Fetched tasks count=1
+2025/10/08 00:00:01 INFO Processing task taskID=task-1 topic=creditScoreChecker
+2025/10/08 00:00:02 INFO Task processed successfully taskID=task-1
+```
+
+**Note:** The program will appear to "hang" after `"Starting external task worker..."` - **this is normal behavior!** The worker runs in a blocking loop, continuously polling for tasks. Press `Ctrl+C` to stop gracefully.
+
 ### Expected Flow
 
 1. **Deployment**: BPMN process is deployed to Camunda
 2. **Process Start**: A test process instance is created
-3. **Worker Polling**: The worker starts polling for external tasks
+3. **Worker Polling**: The worker starts polling for external tasks (blocking operation)
 4. **Task Processing**:
    - `creditScoreChecker` calculates credit scores
    - Based on score, either `loanGranter` or `requestRejecter` is executed
 5. **Graceful Shutdown**: Press `Ctrl+C` to stop the worker
+
+The worker continues running until you stop it with `Ctrl+C` or send a termination signal. This is the expected behavior for a long-running service.
 
 ## Benefits of This Architecture
 
@@ -150,9 +167,15 @@ worker.RegisterHandler("myTopic", myHandler, 60000, []string{"var1"})
 // Configure
 worker.SetMaxTasks(10).SetPollInterval(5 * time.Second)
 
-// Start (blocking)
+// Start (blocking call - runs until context is cancelled)
 worker.Start(ctx)
 ```
+
+### ⚠️ Important: Worker Lifecycle
+
+`worker.Start(ctx)` is a **blocking call** - it runs an infinite polling loop until the context is cancelled. This is by design!
+
+For detailed information about worker lifecycle, graceful shutdown, and best practices, see: [../../WORKER_LIFECYCLE.md](../../WORKER_LIFECYCLE.md)
 
 ## Adding New Handlers
 
