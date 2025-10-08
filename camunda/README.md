@@ -147,7 +147,6 @@ If `Handle` returns an error, the worker automatically reports a failure to Camu
 - `Failure(taskID)` - Create a failure builder
 - `ExtendLock(taskID, newDuration)` - Create a lock extension builder
 - `Unlock(taskID)` - Create an unlock builder
-- ~~`PollTasks(ctx, topics, maxTasks, handler)`~~ - **Deprecated: Use Worker.Start() instead**
 
 #### Process Operations
 
