@@ -135,10 +135,16 @@ func createWorker(client *camunda.Client, logger *slog.Logger) *camunda.Worker {
 	w.SetMaxTasks(10)
 	w.SetPollInterval(5 * time.Second)
 
+	// Configure concurrency control
+	// For this example, process up to 5 tasks in parallel
+	// This prevents overwhelming the system when many applications arrive
+	w.SetMaxConcurrency(5)
+
 	logger.Info("Worker configured",
 		"topics", 3,
 		"maxTasks", 10,
-		"pollInterval", "5s")
+		"pollInterval", "5s",
+		"maxConcurrency", 5)
 
 	return w
 }

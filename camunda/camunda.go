@@ -312,6 +312,15 @@ func (w *Worker) SetPollInterval(interval time.Duration) *Worker {
 	return w
 }
 
+// SetMaxConcurrency sets the maximum number of tasks processed concurrently
+// This limits resource usage and prevents overwhelming the system with too many parallel tasks
+// Default is 20 (2x maxTasks)
+// Returns the worker for method chaining
+func (w *Worker) SetMaxConcurrency(maxConcurrency int) *Worker {
+	w.internalWorker.SetMaxConcurrency(maxConcurrency)
+	return w
+}
+
 // Start begins polling for external tasks
 // This is a blocking call that will run until the context is cancelled
 func (w *Worker) Start(ctx context.Context) {

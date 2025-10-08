@@ -7,6 +7,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"runtime/debug"
+	"sync"
 	"time"
 
 	"github.com/nativebpm/connectors/camunda/internal/builder"
@@ -105,13 +107,16 @@ type FailFunc func(errorMessage, errorDetails string, retries, retryTimeout int)
 
 // Worker manages external task polling and processing
 type Worker struct {
-	httpClient   *httpclient.HTTPClient
-	workerID     string
-	logger       *slog.Logger
-	handlers     map[string]TaskHandler
-	topics       []TopicRequest
-	maxTasks     int
-	pollInterval time.Duration
+	httpClient     *httpclient.HTTPClient
+	workerID       string
+	logger         *slog.Logger
+	handlers       map[string]TaskHandler
+	topics         []TopicRequest
+	maxTasks       int
+	pollInterval   time.Duration
+	maxConcurrency int            // Maximum number of concurrent task processors
+	taskSemaphore  chan struct{}  // Semaphore to limit concurrent tasks
+	activeTasksWg  sync.WaitGroup // Tracks active task goroutines
 }
 
 // New creates a new external task worker
@@ -119,14 +124,20 @@ func New(httpClient *httpclient.HTTPClient, workerID string, logger *slog.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
+
+	// Default concurrency: 2x maxTasks to allow for some buffering
+	maxConcurrency := 20
+
 	return &Worker{
-		httpClient:   httpClient,
-		workerID:     workerID,
-		logger:       logger,
-		handlers:     make(map[string]TaskHandler),
-		topics:       []TopicRequest{},
-		maxTasks:     10,
-		pollInterval: 5 * time.Second,
+		httpClient:     httpClient,
+		workerID:       workerID,
+		logger:         logger,
+		handlers:       make(map[string]TaskHandler),
+		topics:         []TopicRequest{},
+		maxTasks:       10,
+		pollInterval:   5 * time.Second,
+		maxConcurrency: maxConcurrency,
+		taskSemaphore:  make(chan struct{}, maxConcurrency),
 	}
 }
 
@@ -154,14 +165,30 @@ func (w *Worker) SetPollInterval(interval time.Duration) *Worker {
 	return w
 }
 
+// SetMaxConcurrency sets the maximum number of tasks processed concurrently
+func (w *Worker) SetMaxConcurrency(maxConcurrency int) *Worker {
+	if maxConcurrency < 1 {
+		maxConcurrency = 1
+	}
+	w.maxConcurrency = maxConcurrency
+	w.taskSemaphore = make(chan struct{}, maxConcurrency)
+	return w
+}
+
 // Start begins polling for external tasks
 func (w *Worker) Start(ctx context.Context) {
-	w.logger.Info("Starting external task worker", "topics", len(w.topics), "maxTasks", w.maxTasks)
+	w.logger.Info("Starting external task worker",
+		"topics", len(w.topics),
+		"maxTasks", w.maxTasks,
+		"maxConcurrency", w.maxConcurrency)
 
 	for {
 		select {
 		case <-ctx.Done():
-			w.logger.Info("Worker stopped")
+			w.logger.Info("Context cancelled, waiting for active tasks to complete...")
+			// Wait for all active tasks to complete before returning
+			w.activeTasksWg.Wait()
+			w.logger.Info("Worker stopped gracefully")
 			return
 		default:
 		}
@@ -180,9 +207,16 @@ func (w *Worker) Start(ctx context.Context) {
 
 		w.logger.Info("Fetched tasks", "count", len(tasks))
 
-		// Process each task in a separate goroutine
+		// Process each task in a separate goroutine with concurrency control
 		for _, task := range tasks {
-			go w.processTask(ctx, task)
+			// Acquire semaphore slot (blocks if max concurrency reached)
+			w.taskSemaphore <- struct{}{}
+
+			// Track this task in WaitGroup
+			w.activeTasksWg.Add(1)
+
+			// Launch task processor
+			go w.processTaskSafe(ctx, task)
 		}
 
 		// Brief pause before next poll
@@ -229,7 +263,53 @@ func (w *Worker) fetchAndLock(ctx context.Context) ([]ExternalTask, error) {
 	return tasks, nil
 }
 
-// processTask processes a single task using the registered handler
+// processTaskSafe wraps processTask with panic recovery and cleanup.
+// This method is called from goroutines and handles all concurrency concerns:
+// - Semaphore slot release
+// - WaitGroup tracking
+// - Panic recovery with Camunda failure reporting
+// Use this method for production goroutine execution.
+func (w *Worker) processTaskSafe(ctx context.Context, task ExternalTask) {
+	// Ensure cleanup happens regardless of panic or normal return
+	defer func() {
+		// Release semaphore slot
+		<-w.taskSemaphore
+
+		// Mark task as done in WaitGroup
+		w.activeTasksWg.Done()
+
+		// Recover from panic to prevent goroutine crash
+		if r := recover(); r != nil {
+			w.logger.Error("Panic in task processing",
+				"taskID", task.ID,
+				"topic", task.TopicName,
+				"panic", r,
+				"stack", string(debug.Stack()))
+
+			// Try to report failure to Camunda
+			failErr := builder.NewTaskFailure(w.httpClient, w.workerID, task.ID).
+				Context(ctx).
+				ErrorMessage("Task handler panicked").
+				ErrorDetails(fmt.Sprintf("Panic: %v\n\nStack:\n%s", r, debug.Stack())).
+				Retries(3).
+				RetryTimeout(60000).
+				Execute()
+
+			if failErr != nil {
+				w.logger.Error("Failed to report panic to Camunda",
+					"taskID", task.ID,
+					"error", failErr)
+			}
+		}
+	}()
+
+	// Process the task
+	w.processTask(ctx, task)
+}
+
+// processTask processes a single task using the registered handler.
+// This method contains the core business logic without concurrency management,
+// making it easier to test. For production use, call processTaskSafe instead.
 func (w *Worker) processTask(ctx context.Context, task ExternalTask) {
 	handler, ok := w.handlers[task.TopicName]
 	if !ok {
