@@ -43,7 +43,7 @@ func TestStringVariable(t *testing.T) {
 }
 
 func TestIntVariable(t *testing.T) {
-	value := int64(42)
+	value := int(42)
 	v := IntVariable(value)
 
 	if v.Value != value {
@@ -56,7 +56,7 @@ func TestIntVariable(t *testing.T) {
 }
 
 func TestLongVariable(t *testing.T) {
-	value := int64(123456789)
+	value := int(123456789)
 	v := LongVariable(value)
 
 	if v.Value != value {
@@ -355,7 +355,7 @@ func BenchmarkStringVariable(b *testing.B) {
 }
 
 func BenchmarkIntVariable(b *testing.B) {
-	value := int64(12345)
+	value := int(12345)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = IntVariable(value)

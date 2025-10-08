@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nativebpm/connectors/camunda/internal/builder"
+	"github.com/nativebpm/connectors/camunda/internal/tasks"
 	"github.com/nativebpm/connectors/httpclient"
 )
 
@@ -317,7 +317,7 @@ func TestWorker_ProcessTask(t *testing.T) {
 		ID:        "task-123",
 		TopicName: "testTopic",
 		WorkerID:  "test-worker",
-		Variables: make(map[string]builder.Variable),
+		Variables: make(map[string]tasks.Variable),
 	}
 
 	// Process task
@@ -351,7 +351,7 @@ func TestWorker_ProcessTask_NoHandler(t *testing.T) {
 		ID:        "task-123",
 		TopicName: "unknownTopic",
 		WorkerID:  "test-worker",
-		Variables: make(map[string]builder.Variable),
+		Variables: make(map[string]tasks.Variable),
 	}
 
 	// Process task - should not panic
@@ -385,17 +385,19 @@ func TestCompleteFunc(t *testing.T) {
 	task := ExternalTask{
 		ID:        "task-123",
 		TopicName: "testTopic",
-		Variables: make(map[string]builder.Variable),
+		Variables: make(map[string]tasks.Variable),
 	}
 
 	worker.processTask(context.Background(), task)
 
 	// Test the complete function that was provided to the handler
 	if handler.completeFn != nil {
-		vars := map[string]builder.Variable{
-			"result": {Value: "success", Type: "String"},
+		tc := handler.completeFn()
+		if tc == nil {
+			t.Fatal("complete factory returned nil TaskCompletion")
 		}
-		err := handler.completeFn(vars)
+		// Use typed helper to set a single string variable
+		err := tc.StringVariable("result", "success").Execute()
 		if err != nil {
 			t.Errorf("Expected complete to succeed, got error: %v", err)
 		}
@@ -422,7 +424,7 @@ func TestFailFunc(t *testing.T) {
 	task := ExternalTask{
 		ID:        "task-123",
 		TopicName: "testTopic",
-		Variables: make(map[string]builder.Variable),
+		Variables: make(map[string]tasks.Variable),
 	}
 
 	worker.processTask(context.Background(), task)

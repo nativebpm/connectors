@@ -1,10 +1,12 @@
-package builder
+package tasks
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/nativebpm/connectors/httpclient"
 )
@@ -14,6 +16,50 @@ type Variable struct {
 	Value     any    `json:"value"`
 	Type      string `json:"type"`
 	ValueInfo any    `json:"valueInfo,omitempty"`
+}
+
+func StringVariable(value string) Variable {
+	return Variable{Value: value, Type: "String"}
+}
+
+func IntVariable(value int) Variable {
+	return Variable{Value: value, Type: "Integer"}
+}
+
+func LongVariable(value int) Variable {
+	return Variable{Value: value, Type: "Long"}
+}
+
+func DoubleVariable(value float64) Variable {
+	return Variable{Value: value, Type: "Double"}
+}
+
+func BooleanVariable(value bool) Variable {
+	return Variable{Value: value, Type: "Boolean"}
+}
+
+func DateVariable(value time.Time) Variable {
+	return Variable{Value: value.Format(time.RFC3339), Type: "Date"}
+}
+
+func JSONVariable(value any) Variable {
+	jsonBytes, err := json.Marshal(value)
+	if err != nil {
+		return Variable{Value: fmt.Sprintf("ERROR: failed to marshal JSON: %v", err), Type: "String"}
+	}
+	return Variable{Value: string(jsonBytes), Type: "Object", ValueInfo: map[string]any{"objectTypeName": "java.util.LinkedHashMap", "serializationDataFormat": "application/json"}}
+}
+
+func ListVariable(value any) Variable {
+	jsonBytes, err := json.Marshal(value)
+	if err != nil {
+		return Variable{Value: fmt.Sprintf("ERROR: failed to marshal list: %v", err), Type: "String"}
+	}
+	return Variable{Value: string(jsonBytes), Type: "Object", ValueInfo: map[string]any{"objectTypeName": "java.util.ArrayList", "serializationDataFormat": "application/json"}}
+}
+
+func NullVariable() Variable {
+	return Variable{Value: nil, Type: "Null"}
 }
 
 // TaskCompletion provides a fluent API for completing external tasks
@@ -38,39 +84,111 @@ func NewTaskCompletion(httpClient *httpclient.HTTPClient, workerID, taskID strin
 	}
 }
 
-// Context sets the context for the completion request
 func (tc *TaskCompletion) Context(ctx context.Context) *TaskCompletion {
 	tc.ctx = ctx
 	return tc
 }
 
-// Variable adds a process variable
-func (tc *TaskCompletion) Variable(name string, value Variable) *TaskCompletion {
-	tc.variables[name] = value
+func (tc *TaskCompletion) StringVariable(name, value string) *TaskCompletion {
+	tc.variables[name] = StringVariable(value)
 	return tc
 }
 
-// Variables adds multiple process variables
-func (tc *TaskCompletion) Variables(vars map[string]Variable) *TaskCompletion {
-	for k, v := range vars {
-		tc.variables[k] = v
-	}
+func (tc *TaskCompletion) LocalStringVariable(name, value string) *TaskCompletion {
+	tc.localVariables[name] = StringVariable(value)
 	return tc
 }
 
-// LocalVariable adds a local variable
-func (tc *TaskCompletion) LocalVariable(name string, value Variable) *TaskCompletion {
-	tc.localVariables[name] = value
+func (tc *TaskCompletion) IntVariable(name string, value int) *TaskCompletion {
+	tc.variables[name] = IntVariable(value)
 	return tc
 }
 
-// LocalVariables adds multiple local variables
-func (tc *TaskCompletion) LocalVariables(vars map[string]Variable) *TaskCompletion {
-	for k, v := range vars {
-		tc.localVariables[k] = v
-	}
+func (tc *TaskCompletion) LocalIntVariable(name string, value int) *TaskCompletion {
+	tc.localVariables[name] = IntVariable(value)
 	return tc
 }
+
+func (tc *TaskCompletion) LongVariable(name string, value int) *TaskCompletion {
+	tc.variables[name] = LongVariable(value)
+	return tc
+}
+
+func (tc *TaskCompletion) LocalLongVariable(name string, value int) *TaskCompletion {
+	tc.localVariables[name] = LongVariable(value)
+	return tc
+}
+
+func (tc *TaskCompletion) DoubleVariable(name string, value float64) *TaskCompletion {
+	tc.variables[name] = DoubleVariable(value)
+	return tc
+}
+
+func (tc *TaskCompletion) LocalDoubleVariable(name string, value float64) *TaskCompletion {
+	tc.localVariables[name] = DoubleVariable(value)
+	return tc
+}
+
+func (tc *TaskCompletion) BooleanVariable(name string, value bool) *TaskCompletion {
+	tc.variables[name] = BooleanVariable(value)
+	return tc
+}
+
+func (tc *TaskCompletion) LocalBooleanVariable(name string, value bool) *TaskCompletion {
+	tc.localVariables[name] = BooleanVariable(value)
+	return tc
+}
+
+func (tc *TaskCompletion) DateVariable(name string, value time.Time) *TaskCompletion {
+	tc.variables[name] = DateVariable(value)
+	return tc
+}
+
+func (tc *TaskCompletion) LocalDateVariable(name string, value time.Time) *TaskCompletion {
+	tc.localVariables[name] = DateVariable(value)
+	return tc
+}
+
+func (tc *TaskCompletion) JSONVariable(name string, value any) *TaskCompletion {
+	tc.variables[name] = JSONVariable(value)
+	return tc
+}
+
+func (tc *TaskCompletion) LocalJSONVariable(name string, value any) *TaskCompletion {
+	tc.localVariables[name] = JSONVariable(value)
+	return tc
+}
+
+func (tc *TaskCompletion) ListVariable(name string, value any) *TaskCompletion {
+	tc.variables[name] = ListVariable(value)
+	return tc
+}
+
+func (tc *TaskCompletion) LocalListVariable(name string, value any) *TaskCompletion {
+	tc.localVariables[name] = ListVariable(value)
+	return tc
+}
+
+func (tc *TaskCompletion) NullVariable(name string) *TaskCompletion {
+	tc.variables[name] = NullVariable()
+	return tc
+}
+
+func (tc *TaskCompletion) LocalNullVariable(name string) *TaskCompletion {
+	tc.localVariables[name] = NullVariable()
+	return tc
+}
+
+// Variables adds multiple process variables (compatibility helper)
+// NOTE: The old convenience method that accepted a map of pre-built
+// variables has been removed to encourage using typed helper methods
+// on TaskCompletion. Use the chainable helpers instead, for example:
+//   tc.StringVariable("name", "alice").IntVariable("age", 42).Execute()
+
+// LocalVariables adds multiple local variables (compatibility helper)
+// Local variables can be added using the Local* helpers on TaskCompletion,
+// for example:
+//   tc.LocalStringVariable("note", "temporary").LocalIntVariable("count", 3)
 
 // Execute sends the completion request
 func (tc *TaskCompletion) Execute() error {

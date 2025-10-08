@@ -21,7 +21,7 @@ func NewLoanGranter(logger *slog.Logger) *LoanGranter {
 }
 
 // Handle processes a loan granting task
-func (h *LoanGranter) Handle(ctx context.Context, client *camunda.Client, task camunda.ExternalTask) error {
+func (h *LoanGranter) Handle(ctx context.Context, client *camunda.Client, task camunda.ExternalTask, complete camunda.CompleteFunc, fail camunda.FailFunc) error {
 	h.logger.Info("Processing loan grant", "taskID", task.ID, "processInstanceID", task.ProcessInstanceID)
 
 	// Extract credit score from task variables (provided by multi-instance subprocess)
@@ -79,16 +79,12 @@ func (h *LoanGranter) Handle(ctx context.Context, client *camunda.Client, task c
 		"creditScore", score)
 
 	// Complete the task with results
-	variables := map[string]camunda.Variable{
-		"loanGranted":     camunda.BooleanVariable(true),
-		"approvedAmount":  camunda.DoubleVariable(approvedAmount),
-		"interestRate":    camunda.DoubleVariable(interestRate),
-		"approvalMessage": camunda.StringVariable(fmt.Sprintf("Congratulations! Your loan of $%.2f has been approved at %.2f%% interest rate.", approvedAmount, interestRate)),
-	}
-
-	err := client.Complete(task.ID).
-		Context(ctx).
-		Variables(variables).
+	// Use the complete factory for fluent completion
+	err := complete().
+		BooleanVariable("loanGranted", true).
+		DoubleVariable("approvedAmount", approvedAmount).
+		DoubleVariable("interestRate", interestRate).
+		StringVariable("approvalMessage", fmt.Sprintf("Congratulations! Your loan of $%.2f has been approved at %.2f%% interest rate.", approvedAmount, interestRate)).
 		Execute()
 	if err != nil {
 		return err

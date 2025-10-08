@@ -102,24 +102,24 @@ func startLoanApplication(ctx context.Context, client *camunda.Client, logger *s
 	employmentYears := 1 + (applicationNumber % 12)
 	loanTerm := 12 + (applicationNumber%5)*12 // 12, 24, 36, 48, 60 months
 
-	variables := map[string]any{
+	variables := map[string]camunda.Variable{
 		// Application metadata
-		"applicationNumber": applicationNumber,
-		"applicantName":     fmt.Sprintf("%s %d", name, applicationNumber),
-		"applicantEmail":    email,
+		"applicationNumber": camunda.IntVariable(applicationNumber),
+		"applicantName":     camunda.StringVariable(fmt.Sprintf("%s %d", name, applicationNumber)),
+		"applicantEmail":    camunda.StringVariable(email),
 
 		// Loan details
-		"requestedAmount": requestedAmount,
-		"loanPurpose":     purpose,
-		"loanTerm":        loanTerm,
+		"requestedAmount": camunda.DoubleVariable(requestedAmount),
+		"loanPurpose":     camunda.StringVariable(purpose),
+		"loanTerm":        camunda.IntVariable(loanTerm),
 
 		// Applicant financial data (used by creditScoreChecker)
-		"monthlyIncome":   monthlyIncome,
-		"existingDebts":   existingDebts,
-		"employmentYears": employmentYears,
+		"monthlyIncome":   camunda.DoubleVariable(monthlyIncome),
+		"existingDebts":   camunda.DoubleVariable(existingDebts),
+		"employmentYears": camunda.IntVariable(employmentYears),
 
 		// Application timestamp
-		"submittedAt": time.Now().Format(time.RFC3339),
+		"submittedAt": camunda.DateVariable(time.Now()),
 	}
 
 	processInstanceID, err := client.StartProcessInstance(ctx, "loan_process", variables)

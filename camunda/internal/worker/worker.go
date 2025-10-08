@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nativebpm/connectors/camunda/internal/builder"
+	"github.com/nativebpm/connectors/camunda/internal/tasks"
 	"github.com/nativebpm/connectors/httpclient"
 )
 
@@ -29,22 +29,22 @@ type TopicRequest struct {
 
 // ExternalTask represents a Camunda external task
 type ExternalTask struct {
-	ID                  string                      `json:"id"`
-	TopicName           string                      `json:"topicName"`
-	WorkerID            string                      `json:"workerId"`
-	LockExpirationTime  *time.Time                  `json:"lockExpirationTime,omitempty"`
-	Retries             *int                        `json:"retries,omitempty"`
-	ErrorMessage        string                      `json:"errorMessage,omitempty"`
-	ErrorDetails        string                      `json:"errorDetails,omitempty"`
-	Variables           map[string]builder.Variable `json:"variables,omitempty"`
-	BusinessKey         string                      `json:"businessKey,omitempty"`
-	TenantID            string                      `json:"tenantId,omitempty"`
-	Priority            int                         `json:"priority,omitempty"`
-	ActivityID          string                      `json:"activityId,omitempty"`
-	ActivityInstanceID  string                      `json:"activityInstanceId,omitempty"`
-	ExecutionID         string                      `json:"executionId,omitempty"`
-	ProcessInstanceID   string                      `json:"processInstanceId,omitempty"`
-	ProcessDefinitionID string                      `json:"processDefinitionId,omitempty"`
+	ID                  string                    `json:"id"`
+	TopicName           string                    `json:"topicName"`
+	WorkerID            string                    `json:"workerId"`
+	LockExpirationTime  *time.Time                `json:"lockExpirationTime,omitempty"`
+	Retries             *int                      `json:"retries,omitempty"`
+	ErrorMessage        string                    `json:"errorMessage,omitempty"`
+	ErrorDetails        string                    `json:"errorDetails,omitempty"`
+	Variables           map[string]tasks.Variable `json:"variables,omitempty"`
+	BusinessKey         string                    `json:"businessKey,omitempty"`
+	TenantID            string                    `json:"tenantId,omitempty"`
+	Priority            int                       `json:"priority,omitempty"`
+	ActivityID          string                    `json:"activityId,omitempty"`
+	ActivityInstanceID  string                    `json:"activityInstanceId,omitempty"`
+	ExecutionID         string                    `json:"executionId,omitempty"`
+	ProcessInstanceID   string                    `json:"processInstanceId,omitempty"`
+	ProcessDefinitionID string                    `json:"processDefinitionId,omitempty"`
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling for ExternalTask
@@ -99,8 +99,10 @@ type TaskHandler interface {
 	Handle(ctx context.Context, task ExternalTask, complete CompleteFunc, fail FailFunc) error
 }
 
-// CompleteFunc is a function to complete a task
-type CompleteFunc func(vars map[string]builder.Variable) error
+// CompleteFunc is a factory function that returns a preconfigured TaskCompletion
+// so handlers can build variables fluently and then call Execute().
+// Example: complete().StringVariable("ok", "yes").Execute()
+type CompleteFunc func() *tasks.TaskCompletion
 
 // FailFunc is a function to report a task failure
 type FailFunc func(errorMessage, errorDetails string, retries, retryTimeout int) error
@@ -277,7 +279,7 @@ func (w *Worker) processTaskSafe(ctx context.Context, task ExternalTask) {
 				"stack", string(debug.Stack()))
 
 			// Try to report failure to Camunda
-			failErr := builder.NewTaskFailure(w.httpClient, w.workerID, task.ID).
+			failErr := tasks.NewTaskFailure(w.httpClient, w.workerID, task.ID).
 				Context(ctx).
 				ErrorMessage("Task handler panicked").
 				ErrorDetails(fmt.Sprintf("Panic: %v\n\nStack:\n%s", r, debug.Stack())).
@@ -307,17 +309,15 @@ func (w *Worker) processTask(ctx context.Context, task ExternalTask) {
 		return
 	}
 
-	// Create complete function
-	complete := func(vars map[string]builder.Variable) error {
-		return builder.NewTaskCompletion(w.httpClient, w.workerID, task.ID).
-			Context(ctx).
-			Variables(vars).
-			Execute()
+	// Create complete factory: handlers can call complete() to get a TaskCompletion
+	// and then use fluent methods: complete().StringVariable(...).Execute()
+	complete := func() *tasks.TaskCompletion {
+		return tasks.NewTaskCompletion(w.httpClient, w.workerID, task.ID).Context(ctx)
 	}
 
 	// Create fail function
 	fail := func(errorMessage, errorDetails string, retries, retryTimeout int) error {
-		return builder.NewTaskFailure(w.httpClient, w.workerID, task.ID).
+		return tasks.NewTaskFailure(w.httpClient, w.workerID, task.ID).
 			Context(ctx).
 			ErrorMessage(errorMessage).
 			ErrorDetails(errorDetails).
