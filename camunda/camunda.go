@@ -10,39 +10,14 @@ import (
 	"time"
 
 	"github.com/nativebpm/connectors/camunda/internal/tasks"
-	"github.com/nativebpm/connectors/camunda/internal/vars"
 	"github.com/nativebpm/connectors/camunda/internal/worker"
 	"github.com/nativebpm/connectors/httpclient"
 )
 
-// ExternalTask represents a Camunda external task
 type ExternalTask = worker.ExternalTask
-
-// Re-export internal helper types so public handlers can accept the
-// completion/failure factories without importing internal packages.
 type CompleteFunc = worker.CompleteFunc
 type FailFunc = worker.FailFunc
-
-// TopicRequest represents a topic request for fetching tasks
 type TopicRequest = worker.TopicRequest
-
-// Note: variable helper constructors (StringVariable, IntVariable, etc.)
-// are implemented in internal/builder package. Use builder.StringVariable
-// or construct camunda.Variable values directly.
-
-// Variable represents a Camunda variable with type safety
-type Variable = vars.Variable
-
-// Re-export helper constructors for backward compatibility
-func StringVariable(value string) Variable  { return vars.StringVariable(value) }
-func IntVariable(value int) Variable        { return vars.IntVariable(value) }
-func LongVariable(value int) Variable       { return vars.LongVariable(value) }
-func DoubleVariable(value float64) Variable { return vars.DoubleVariable(value) }
-func BooleanVariable(value bool) Variable   { return vars.BooleanVariable(value) }
-func DateVariable(value time.Time) Variable { return vars.DateVariable(value) }
-func JSONVariable(value any) Variable       { return vars.JSONVariable(value) }
-func ListVariable(value any) Variable       { return vars.ListVariable(value) }
-func NullVariable() Variable                { return vars.NullVariable() }
 
 // Client represents a Camunda external task client
 type Client struct {

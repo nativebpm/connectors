@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	variables "github.com/nativebpm/connectors/camunda/internal/vars"
 	"github.com/nativebpm/connectors/httpclient"
 )
 
@@ -439,7 +438,7 @@ func BenchmarkFetchAndLockRequestMarshal(b *testing.B) {
 }
 
 func BenchmarkCompleteRequestMarshal(b *testing.B) {
-	vb := variables.NewVars()
+	vb := NewVariables()
 	vb.String("var1", "value1")
 	vb.Int("var2", 42)
 	req := struct {

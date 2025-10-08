@@ -12,7 +12,6 @@ import (
 
 	"github.com/nativebpm/connectors/camunda"
 	"github.com/nativebpm/connectors/camunda/examples/loan-granting/handlers"
-	"github.com/nativebpm/connectors/camunda/internal/vars"
 )
 
 func main() {
@@ -103,35 +102,35 @@ func startLoanApplication(ctx context.Context, client *camunda.Client, logger *s
 	employmentYears := 1 + (applicationNumber % 12)
 	loanTerm := 12 + (applicationNumber%5)*12 // 12, 24, 36, 48, 60 months
 
-	vb := vars.NewVars()
+	vars := camunda.NewVariables()
 	// Application metadata
-	vb.Int("applicationNumber", applicationNumber)
-	vb.String("applicantName", fmt.Sprintf("%s %d", name, applicationNumber))
-	vb.String("applicantEmail", email)
+	vars.Int("applicationNumber", applicationNumber)
+	vars.String("applicantName", fmt.Sprintf("%s %d", name, applicationNumber))
+	vars.String("applicantEmail", email)
 
 	// Loan details
-	vb.Double("requestedAmount", requestedAmount)
-	vb.String("loanPurpose", purpose)
-	vb.Int("loanTerm", loanTerm)
+	vars.Double("requestedAmount", requestedAmount)
+	vars.String("loanPurpose", purpose)
+	vars.Int("loanTerm", loanTerm)
 
 	// Applicant financial data (used by creditScoreChecker)
-	vb.Double("monthlyIncome", monthlyIncome)
-	vb.Double("existingDebts", existingDebts)
-	vb.Int("employmentYears", employmentYears)
+	vars.Double("monthlyIncome", monthlyIncome)
+	vars.Double("existingDebts", existingDebts)
+	vars.Int("employmentYears", employmentYears)
 
 	// Application timestamp
-	vb.Date("submittedAt", time.Now())
+	vars.Date("submittedAt", time.Now())
 
-	vars := vb.Variables()
-	processInstanceID, err := client.StartProcessInstance(ctx, "loan_process", vars)
+	variables := vars.Variables()
+	processInstanceID, err := client.StartProcessInstance(ctx, "loan_process", variables)
 	if err != nil {
 		return err
 	}
 
 	logger.Info("Loan application received",
 		"applicationNumber", applicationNumber,
-		"applicantName", vars["applicantName"],
-		"requestedAmount", vars["requestedAmount"],
+		"applicantName", variables["applicantName"],
+		"requestedAmount", variables["requestedAmount"],
 		"processInstanceID", processInstanceID)
 	return nil
 }
