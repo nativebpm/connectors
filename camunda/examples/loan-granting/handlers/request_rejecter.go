@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/nativebpm/connectors/camunda"
 )
@@ -58,7 +57,7 @@ func (h *RequestRejecter) Handle(ctx context.Context, client *camunda.Client, ta
 		"taskID", task.ID)
 
 	// Simulate rejection processing (notification, compliance checks, etc.)
-	time.Sleep(2 * time.Second)
+	//time.Sleep(2 * time.Second)
 
 	// Prepare detailed rejection reason based on credit score
 	var reason, recommendation string

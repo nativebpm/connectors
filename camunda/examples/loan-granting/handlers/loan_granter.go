@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/nativebpm/connectors/camunda"
 )
@@ -59,7 +58,7 @@ func (h *LoanGranter) Handle(ctx context.Context, client *camunda.Client, task c
 		"taskID", task.ID)
 
 	// Simulate loan processing (background checks, verification, etc.)
-	time.Sleep(2 * time.Second)
+	//time.Sleep(2 * time.Second)
 
 	// Calculate approved amount based on credit score and requested amount
 	// Higher score = higher approval percentage

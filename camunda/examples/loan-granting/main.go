@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -86,23 +87,36 @@ func deployProcess(ctx context.Context, client *camunda.Client, logger *slog.Log
 // startLoanApplication simulates an external loan application request
 // In a real system, this would be triggered by an API call, message queue, etc.
 func startLoanApplication(ctx context.Context, client *camunda.Client, logger *slog.Logger, applicationNumber int) error {
-	// Prepare loan application data
-	// These variables will be available throughout the process execution
+	// Prepare loan application data with more realistic variation
+	applicantNames := []string{"John Doe", "Jane Smith", "Alex Johnson", "Maria Garcia", "Li Wei", "Fatima Al-Farsi", "Ivan Petrov", "Sara Müller"}
+	loanPurposes := []string{"Business expansion", "Home renovation", "Car purchase", "Education", "Medical expenses", "Travel", "Debt consolidation", "Wedding"}
+
+	name := applicantNames[applicationNumber%len(applicantNames)]
+	email := fmt.Sprintf("%s%d@example.com", name[:3], applicationNumber)
+	purpose := loanPurposes[applicationNumber%len(loanPurposes)]
+
+	// Vary requested amount, income, debts, employment years
+	requestedAmount := float64(5000 + (applicationNumber%10)*2500 + (applicationNumber%3)*10000)
+	monthlyIncome := float64(3000 + (applicationNumber%7)*1200 + (applicationNumber%5)*800)
+	existingDebts := float64((applicationNumber%5)*3500 + (applicationNumber%4)*1200)
+	employmentYears := 1 + (applicationNumber % 12)
+	loanTerm := 12 + (applicationNumber%5)*12 // 12, 24, 36, 48, 60 months
+
 	variables := map[string]any{
 		// Application metadata
 		"applicationNumber": applicationNumber,
-		"applicantName":     fmt.Sprintf("John Doe %d", applicationNumber),
-		"applicantEmail":    fmt.Sprintf("applicant%d@example.com", applicationNumber),
+		"applicantName":     fmt.Sprintf("%s %d", name, applicationNumber),
+		"applicantEmail":    email,
 
 		// Loan details
-		"requestedAmount": float64(10000 + (applicationNumber * 5000)), // Varying amounts: 15k, 20k, 25k
-		"loanPurpose":     "Business expansion",
-		"loanTerm":        36, // months
+		"requestedAmount": requestedAmount,
+		"loanPurpose":     purpose,
+		"loanTerm":        loanTerm,
 
 		// Applicant financial data (used by creditScoreChecker)
-		"monthlyIncome":   float64(5000 + (applicationNumber * 1000)),
-		"existingDebts":   float64(2000 * applicationNumber),
-		"employmentYears": 3 + applicationNumber,
+		"monthlyIncome":   monthlyIncome,
+		"existingDebts":   existingDebts,
+		"employmentYears": employmentYears,
 
 		// Application timestamp
 		"submittedAt": time.Now().Format(time.RFC3339),
@@ -133,19 +147,18 @@ func createWorker(client *camunda.Client, logger *slog.Logger) *camunda.Worker {
 	w.RegisterHandler("creditScoreChecker", creditScoreChecker, 60000, []string{})
 	w.RegisterHandler("loanGranter", loanGranter, 60000, []string{"score", "applicantName", "requestedAmount"})
 	w.RegisterHandler("requestRejecter", requestRejecter, 60000, []string{"score", "applicantName", "requestedAmount"})
-	w.SetMaxTasks(10)
+	w.SetMaxTasks(100)
 	w.SetPollInterval(5 * time.Second)
 
 	// Configure concurrency control
-	// For this example, process up to 5 tasks in parallel
-	// This prevents overwhelming the system when many applications arrive
-	w.SetMaxConcurrency(5)
+	numCPU := runtime.NumCPU() / 2
+	w.SetMaxConcurrency(numCPU) // Use half of available CPU cores
 
 	logger.Info("Worker configured",
 		"topics", 3,
 		"maxTasks", 10,
 		"pollInterval", "5s",
-		"maxConcurrency", 5)
+		"maxConcurrency", numCPU)
 
 	return w
 }
