@@ -55,11 +55,8 @@
     </bpmn:endEvent>
     <bpmn:sequenceFlow id="SequenceFlow_1pbe3dr" sourceRef="SubProcess_16kr5xn" targetRef="EndEvent_0q9wl5o" />
     <bpmn:sequenceFlow id="SequenceFlow_12biatx" sourceRef="Task_1lvjtd4" targetRef="SubProcess_16kr5xn" />
-    <bpmn:startEvent id="StartEvent_1">
+    <bpmn:startEvent id="StartEvent_1" name="Loan application received">
       <bpmn:outgoing>SequenceFlow_0nww3wx</bpmn:outgoing>
-      <bpmn:timerEventDefinition>
-        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">0/5 * * * * ?</bpmn:timeCycle>
-      </bpmn:timerEventDefinition>
     </bpmn:startEvent>
     <bpmn:textAnnotation id="TextAnnotation_0k1pblj">
       <bpmn:text>Topic name: creditScoreChecker</bpmn:text>

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -33,11 +34,15 @@ func main() {
 		return
 	}
 
-	// Start a test process instance
-	if err := startTestProcessInstance(ctx, client, logger); err != nil {
-		logger.Error("Failed to start test process instance", "error", err)
-		return
+	// Simulate external requests (3 loan applications)
+	logger.Info("Simulating external loan applications...")
+	for i := 1; i <= 3; i++ {
+		if err := startLoanApplication(ctx, client, logger, i); err != nil {
+			logger.Error("Failed to start loan application", "number", i, "error", err)
+		}
+		time.Sleep(500 * time.Millisecond) // Small delay between applications
 	}
+	logger.Info("All loan applications submitted")
 
 	// Create and configure the worker
 	w := createWorker(client, logger)
@@ -77,14 +82,23 @@ func deployProcess(ctx context.Context, client *camunda.Client, logger *slog.Log
 	return nil
 }
 
-// startTestProcessInstance starts a test process instance
-func startTestProcessInstance(ctx context.Context, client *camunda.Client, logger *slog.Logger) error {
-	processInstanceID, err := client.StartProcessInstance(ctx, "loan_process", map[string]any{})
+// startLoanApplication simulates an external loan application request
+// In a real system, this would be triggered by an API call, message queue, etc.
+func startLoanApplication(ctx context.Context, client *camunda.Client, logger *slog.Logger, applicationNumber int) error {
+	// In real scenario, you might pass application data as process variables
+	variables := map[string]any{
+		"applicationNumber": applicationNumber,
+		"applicantName":     fmt.Sprintf("Applicant-%d", applicationNumber),
+	}
+
+	processInstanceID, err := client.StartProcessInstance(ctx, "loan_process", variables)
 	if err != nil {
 		return err
 	}
 
-	logger.Info("Started test process instance", "id", processInstanceID)
+	logger.Info("Loan application received",
+		"applicationNumber", applicationNumber,
+		"processInstanceID", processInstanceID)
 	return nil
 }
 
