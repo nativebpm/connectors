@@ -72,9 +72,21 @@ func DateVariable(value time.Time) Variable {
 }
 
 // JSONVariable creates a JSON variable from any value
+// The value is serialized to a JSON string as required by Camunda
 func JSONVariable(value any) Variable {
+	// Serialize value to JSON string
+	jsonBytes, err := json.Marshal(value)
+	if err != nil {
+		// If marshaling fails, return the error as a string value
+		// This allows the caller to see what went wrong
+		return Variable{
+			Value: fmt.Sprintf("ERROR: failed to marshal JSON: %v", err),
+			Type:  "String",
+		}
+	}
+
 	return Variable{
-		Value: value,
+		Value: string(jsonBytes),
 		Type:  "json",
 	}
 }

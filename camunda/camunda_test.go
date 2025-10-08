@@ -119,6 +119,39 @@ func TestJSONVariable(t *testing.T) {
 	if v.Type != "json" {
 		t.Errorf("expected type json, got %s", v.Type)
 	}
+
+	// Verify value is a JSON string
+	str, ok := v.Value.(string)
+	if !ok {
+		t.Errorf("expected value to be string, got %T", v.Value)
+	}
+
+	// Verify it's valid JSON
+	expected := `{"key":"value"}`
+	if str != expected {
+		t.Errorf("expected JSON %s, got %s", expected, str)
+	}
+}
+
+func TestJSONVariable_Array(t *testing.T) {
+	value := []int{1, 2, 3}
+	v := JSONVariable(value)
+
+	if v.Type != "json" {
+		t.Errorf("expected type json, got %s", v.Type)
+	}
+
+	// Verify value is a JSON string
+	str, ok := v.Value.(string)
+	if !ok {
+		t.Errorf("expected value to be string, got %T", v.Value)
+	}
+
+	// Verify it's valid JSON array
+	expected := `[1,2,3]`
+	if str != expected {
+		t.Errorf("expected JSON %s, got %s", expected, str)
+	}
 }
 
 func TestNullVariable(t *testing.T) {
