@@ -344,7 +344,7 @@ func BenchmarkDateVariable(b *testing.B) {
 }
 
 func BenchmarkJSONVariable(b *testing.B) {
-	value := map[string]interface{}{"key": "value", "number": 42}
+	value := map[string]any{"key": "value", "number": 42}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = JSONVariable(value)

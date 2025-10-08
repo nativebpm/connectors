@@ -165,7 +165,7 @@ camunda.LongVariable(9223372036854775807)
 camunda.DoubleVariable(3.14)
 camunda.BooleanVariable(true)
 camunda.DateVariable(time.Now())
-camunda.JSONVariable(map[string]interface{}{"key": "value"})
+camunda.JSONVariable(map[string]any{"key": "value"})
 camunda.NullVariable()
 ```
 

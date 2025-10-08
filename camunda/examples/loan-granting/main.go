@@ -79,7 +79,7 @@ func deployProcess(ctx context.Context, client *camunda.Client, logger *slog.Log
 
 // startTestProcessInstance starts a test process instance
 func startTestProcessInstance(ctx context.Context, client *camunda.Client, logger *slog.Logger) error {
-	processInstanceID, err := client.StartProcessInstance(ctx, "loan_process", map[string]interface{}{})
+	processInstanceID, err := client.StartProcessInstance(ctx, "loan_process", map[string]any{})
 	if err != nil {
 		return err
 	}

@@ -152,14 +152,14 @@ func (c *Client) Unlock(taskID string) *TaskUnlock {
 }
 
 // StartProcessInstance starts a new process instance by process definition key
-func (c *Client) StartProcessInstance(ctx context.Context, processDefinitionKey string, variables map[string]interface{}) (string, error) {
+func (c *Client) StartProcessInstance(ctx context.Context, processDefinitionKey string, variables map[string]any) (string, error) {
 	// Prepare the request payload
-	payload := map[string]interface{}{
-		"variables": make(map[string]map[string]interface{}),
+	payload := map[string]any{
+		"variables": make(map[string]map[string]any),
 	}
 
 	for key, value := range variables {
-		payload["variables"].(map[string]map[string]interface{})[key] = map[string]interface{}{
+		payload["variables"].(map[string]map[string]any)[key] = map[string]any{
 			"value": value,
 		}
 	}
