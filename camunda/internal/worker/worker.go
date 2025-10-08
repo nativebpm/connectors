@@ -45,6 +45,53 @@ type ExternalTask struct {
 	ProcessDefinitionID string                      `json:"processDefinitionId,omitempty"`
 }
 
+// UnmarshalJSON implements custom JSON unmarshaling for ExternalTask
+// to handle Camunda's timestamp format (e.g., "2025-10-08T03:50:45.087+0000")
+func (t *ExternalTask) UnmarshalJSON(data []byte) error {
+	// Use an alias type to avoid infinite recursion
+	type Alias ExternalTask
+
+	// Temporary struct with string for LockExpirationTime
+	aux := &struct {
+		LockExpirationTime *string `json:"lockExpirationTime,omitempty"`
+		*Alias
+	}{
+		Alias: (*Alias)(t),
+	}
+
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	// Parse LockExpirationTime if present
+	if aux.LockExpirationTime != nil && *aux.LockExpirationTime != "" {
+		// Camunda format: "2025-10-08T03:50:45.087+0000"
+		// Try multiple formats
+		formats := []string{
+			"2006-01-02T15:04:05.999-0700", // Camunda format with milliseconds
+			"2006-01-02T15:04:05-0700",     // Camunda format without milliseconds
+			time.RFC3339,                   // Standard RFC3339
+			time.RFC3339Nano,               // RFC3339 with nanoseconds
+		}
+
+		var parsed time.Time
+		var err error
+		for _, format := range formats {
+			parsed, err = time.Parse(format, *aux.LockExpirationTime)
+			if err == nil {
+				t.LockExpirationTime = &parsed
+				break
+			}
+		}
+
+		if err != nil {
+			return fmt.Errorf("failed to parse lockExpirationTime %q: %w", *aux.LockExpirationTime, err)
+		}
+	}
+
+	return nil
+}
+
 // TaskHandler defines the interface for external task handlers
 type TaskHandler interface {
 	Handle(ctx context.Context, task ExternalTask, complete CompleteFunc, fail FailFunc) error

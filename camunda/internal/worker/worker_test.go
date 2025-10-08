@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,87 @@ import (
 	"github.com/nativebpm/connectors/camunda/internal/builder"
 	"github.com/nativebpm/connectors/httpclient"
 )
+
+// TestExternalTask_UnmarshalJSON tests parsing of Camunda timestamp formats
+func TestExternalTask_UnmarshalJSON(t *testing.T) {
+	tests := []struct {
+		name    string
+		json    string
+		wantErr bool
+	}{
+		{
+			name: "Camunda format with milliseconds and +0000",
+			json: `{
+				"id": "task-1",
+				"topicName": "test",
+				"workerId": "worker-1",
+				"lockExpirationTime": "2025-10-08T03:50:45.087+0000"
+			}`,
+			wantErr: false,
+		},
+		{
+			name: "Camunda format without milliseconds",
+			json: `{
+				"id": "task-2",
+				"topicName": "test",
+				"workerId": "worker-1",
+				"lockExpirationTime": "2025-10-08T03:50:45+0000"
+			}`,
+			wantErr: false,
+		},
+		{
+			name: "RFC3339 format",
+			json: `{
+				"id": "task-3",
+				"topicName": "test",
+				"workerId": "worker-1",
+				"lockExpirationTime": "2025-10-08T03:50:45Z"
+			}`,
+			wantErr: false,
+		},
+		{
+			name: "RFC3339Nano format",
+			json: `{
+				"id": "task-4",
+				"topicName": "test",
+				"workerId": "worker-1",
+				"lockExpirationTime": "2025-10-08T03:50:45.123456789Z"
+			}`,
+			wantErr: false,
+		},
+		{
+			name: "No lockExpirationTime",
+			json: `{
+				"id": "task-5",
+				"topicName": "test",
+				"workerId": "worker-1"
+			}`,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var task ExternalTask
+			err := json.Unmarshal([]byte(tt.json), &task)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("UnmarshalJSON() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if err == nil {
+				// Verify basic fields are parsed
+				if task.ID == "" {
+					t.Error("Expected task ID to be set")
+				}
+				if task.TopicName == "" {
+					t.Error("Expected topic name to be set")
+				}
+			}
+		})
+	}
+}
 
 // MockHandler for testing
 type MockHandler struct {
