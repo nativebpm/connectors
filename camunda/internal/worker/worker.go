@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nativebpm/connectors/camunda/internal/tasks"
+	"github.com/nativebpm/connectors/camunda/internal/vars"
 	"github.com/nativebpm/connectors/httpclient"
 )
 
@@ -29,22 +30,22 @@ type TopicRequest struct {
 
 // ExternalTask represents a Camunda external task
 type ExternalTask struct {
-	ID                  string                    `json:"id"`
-	TopicName           string                    `json:"topicName"`
-	WorkerID            string                    `json:"workerId"`
-	LockExpirationTime  *time.Time                `json:"lockExpirationTime,omitempty"`
-	Retries             *int                      `json:"retries,omitempty"`
-	ErrorMessage        string                    `json:"errorMessage,omitempty"`
-	ErrorDetails        string                    `json:"errorDetails,omitempty"`
-	Variables           map[string]tasks.Variable `json:"variables,omitempty"`
-	BusinessKey         string                    `json:"businessKey,omitempty"`
-	TenantID            string                    `json:"tenantId,omitempty"`
-	Priority            int                       `json:"priority,omitempty"`
-	ActivityID          string                    `json:"activityId,omitempty"`
-	ActivityInstanceID  string                    `json:"activityInstanceId,omitempty"`
-	ExecutionID         string                    `json:"executionId,omitempty"`
-	ProcessInstanceID   string                    `json:"processInstanceId,omitempty"`
-	ProcessDefinitionID string                    `json:"processDefinitionId,omitempty"`
+	ID                  string                   `json:"id"`
+	TopicName           string                   `json:"topicName"`
+	WorkerID            string                   `json:"workerId"`
+	LockExpirationTime  *time.Time               `json:"lockExpirationTime,omitempty"`
+	Retries             *int                     `json:"retries,omitempty"`
+	ErrorMessage        string                   `json:"errorMessage,omitempty"`
+	ErrorDetails        string                   `json:"errorDetails,omitempty"`
+	Variables           map[string]vars.Variable `json:"variables,omitempty"`
+	BusinessKey         string                   `json:"businessKey,omitempty"`
+	TenantID            string                   `json:"tenantId,omitempty"`
+	Priority            int                      `json:"priority,omitempty"`
+	ActivityID          string                   `json:"activityId,omitempty"`
+	ActivityInstanceID  string                   `json:"activityInstanceId,omitempty"`
+	ExecutionID         string                   `json:"executionId,omitempty"`
+	ProcessInstanceID   string                   `json:"processInstanceId,omitempty"`
+	ProcessDefinitionID string                   `json:"processDefinitionId,omitempty"`
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling for ExternalTask

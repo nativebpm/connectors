@@ -12,6 +12,7 @@ import (
 
 	"github.com/nativebpm/connectors/camunda"
 	"github.com/nativebpm/connectors/camunda/examples/loan-granting/handlers"
+	"github.com/nativebpm/connectors/camunda/internal/vars"
 )
 
 func main() {
@@ -102,35 +103,35 @@ func startLoanApplication(ctx context.Context, client *camunda.Client, logger *s
 	employmentYears := 1 + (applicationNumber % 12)
 	loanTerm := 12 + (applicationNumber%5)*12 // 12, 24, 36, 48, 60 months
 
-	variables := map[string]camunda.Variable{
-		// Application metadata
-		"applicationNumber": camunda.IntVariable(applicationNumber),
-		"applicantName":     camunda.StringVariable(fmt.Sprintf("%s %d", name, applicationNumber)),
-		"applicantEmail":    camunda.StringVariable(email),
+	vb := vars.NewVars()
+	// Application metadata
+	vb.Int("applicationNumber", applicationNumber)
+	vb.String("applicantName", fmt.Sprintf("%s %d", name, applicationNumber))
+	vb.String("applicantEmail", email)
 
-		// Loan details
-		"requestedAmount": camunda.DoubleVariable(requestedAmount),
-		"loanPurpose":     camunda.StringVariable(purpose),
-		"loanTerm":        camunda.IntVariable(loanTerm),
+	// Loan details
+	vb.Double("requestedAmount", requestedAmount)
+	vb.String("loanPurpose", purpose)
+	vb.Int("loanTerm", loanTerm)
 
-		// Applicant financial data (used by creditScoreChecker)
-		"monthlyIncome":   camunda.DoubleVariable(monthlyIncome),
-		"existingDebts":   camunda.DoubleVariable(existingDebts),
-		"employmentYears": camunda.IntVariable(employmentYears),
+	// Applicant financial data (used by creditScoreChecker)
+	vb.Double("monthlyIncome", monthlyIncome)
+	vb.Double("existingDebts", existingDebts)
+	vb.Int("employmentYears", employmentYears)
 
-		// Application timestamp
-		"submittedAt": camunda.DateVariable(time.Now()),
-	}
+	// Application timestamp
+	vb.Date("submittedAt", time.Now())
 
-	processInstanceID, err := client.StartProcessInstance(ctx, "loan_process", variables)
+	vars := vb.Variables()
+	processInstanceID, err := client.StartProcessInstance(ctx, "loan_process", vars)
 	if err != nil {
 		return err
 	}
 
 	logger.Info("Loan application received",
 		"applicationNumber", applicationNumber,
-		"applicantName", variables["applicantName"],
-		"requestedAmount", variables["requestedAmount"],
+		"applicantName", vars["applicantName"],
+		"requestedAmount", vars["requestedAmount"],
 		"processInstanceID", processInstanceID)
 	return nil
 }

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nativebpm/connectors/camunda/internal/tasks"
+	"github.com/nativebpm/connectors/camunda/internal/vars"
 	"github.com/nativebpm/connectors/httpclient"
 )
 
@@ -317,7 +317,7 @@ func TestWorker_ProcessTask(t *testing.T) {
 		ID:        "task-123",
 		TopicName: "testTopic",
 		WorkerID:  "test-worker",
-		Variables: make(map[string]tasks.Variable),
+		Variables: make(map[string]vars.Variable),
 	}
 
 	// Process task
@@ -351,7 +351,7 @@ func TestWorker_ProcessTask_NoHandler(t *testing.T) {
 		ID:        "task-123",
 		TopicName: "unknownTopic",
 		WorkerID:  "test-worker",
-		Variables: make(map[string]tasks.Variable),
+		Variables: make(map[string]vars.Variable),
 	}
 
 	// Process task - should not panic
@@ -385,7 +385,7 @@ func TestCompleteFunc(t *testing.T) {
 	task := ExternalTask{
 		ID:        "task-123",
 		TopicName: "testTopic",
-		Variables: make(map[string]tasks.Variable),
+		Variables: make(map[string]vars.Variable),
 	}
 
 	worker.processTask(context.Background(), task)
@@ -424,7 +424,7 @@ func TestFailFunc(t *testing.T) {
 	task := ExternalTask{
 		ID:        "task-123",
 		TopicName: "testTopic",
-		Variables: make(map[string]tasks.Variable),
+		Variables: make(map[string]vars.Variable),
 	}
 
 	worker.processTask(context.Background(), task)

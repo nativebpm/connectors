@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	variables "github.com/nativebpm/connectors/camunda/internal/vars"
 	"github.com/nativebpm/connectors/httpclient"
 )
 
@@ -438,17 +439,16 @@ func BenchmarkFetchAndLockRequestMarshal(b *testing.B) {
 }
 
 func BenchmarkCompleteRequestMarshal(b *testing.B) {
-	variables := map[string]Variable{
-		"var1": StringVariable("value1"),
-		"var2": IntVariable(42),
-	}
+	vb := variables.NewVars()
+	vb.String("var1", "value1")
+	vb.Int("var2", 42)
 	req := struct {
 		WorkerID       string              `json:"workerId"`
 		Variables      map[string]Variable `json:"variables,omitempty"`
 		LocalVariables map[string]Variable `json:"localVariables,omitempty"`
 	}{
 		WorkerID:  "test-worker",
-		Variables: variables,
+		Variables: vb.Variables(),
 	}
 
 	b.ResetTimer()

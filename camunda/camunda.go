@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nativebpm/connectors/camunda/internal/tasks"
+	"github.com/nativebpm/connectors/camunda/internal/vars"
 	"github.com/nativebpm/connectors/camunda/internal/worker"
 	"github.com/nativebpm/connectors/httpclient"
 )
@@ -30,18 +31,18 @@ type TopicRequest = worker.TopicRequest
 // or construct camunda.Variable values directly.
 
 // Variable represents a Camunda variable with type safety
-type Variable = tasks.Variable
+type Variable = vars.Variable
 
 // Re-export helper constructors for backward compatibility
-func StringVariable(value string) Variable  { return tasks.StringVariable(value) }
-func IntVariable(value int) Variable        { return tasks.IntVariable(value) }
-func LongVariable(value int) Variable       { return tasks.LongVariable(value) }
-func DoubleVariable(value float64) Variable { return tasks.DoubleVariable(value) }
-func BooleanVariable(value bool) Variable   { return tasks.BooleanVariable(value) }
-func DateVariable(value time.Time) Variable { return tasks.DateVariable(value) }
-func JSONVariable(value any) Variable       { return tasks.JSONVariable(value) }
-func ListVariable(value any) Variable       { return tasks.ListVariable(value) }
-func NullVariable() Variable                { return tasks.NullVariable() }
+func StringVariable(value string) Variable  { return vars.StringVariable(value) }
+func IntVariable(value int) Variable        { return vars.IntVariable(value) }
+func LongVariable(value int) Variable       { return vars.LongVariable(value) }
+func DoubleVariable(value float64) Variable { return vars.DoubleVariable(value) }
+func BooleanVariable(value bool) Variable   { return vars.BooleanVariable(value) }
+func DateVariable(value time.Time) Variable { return vars.DateVariable(value) }
+func JSONVariable(value any) Variable       { return vars.JSONVariable(value) }
+func ListVariable(value any) Variable       { return vars.ListVariable(value) }
+func NullVariable() Variable                { return vars.NullVariable() }
 
 // Client represents a Camunda external task client
 type Client struct {

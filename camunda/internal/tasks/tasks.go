@@ -2,65 +2,14 @@ package tasks
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 
+	"github.com/nativebpm/connectors/camunda/internal/vars"
 	"github.com/nativebpm/connectors/httpclient"
 )
-
-// Variable represents a Camunda variable with type safety
-type Variable struct {
-	Value     any    `json:"value"`
-	Type      string `json:"type"`
-	ValueInfo any    `json:"valueInfo,omitempty"`
-}
-
-func StringVariable(value string) Variable {
-	return Variable{Value: value, Type: "String"}
-}
-
-func IntVariable(value int) Variable {
-	return Variable{Value: value, Type: "Integer"}
-}
-
-func LongVariable(value int) Variable {
-	return Variable{Value: value, Type: "Long"}
-}
-
-func DoubleVariable(value float64) Variable {
-	return Variable{Value: value, Type: "Double"}
-}
-
-func BooleanVariable(value bool) Variable {
-	return Variable{Value: value, Type: "Boolean"}
-}
-
-func DateVariable(value time.Time) Variable {
-	return Variable{Value: value.Format(time.RFC3339), Type: "Date"}
-}
-
-func JSONVariable(value any) Variable {
-	jsonBytes, err := json.Marshal(value)
-	if err != nil {
-		return Variable{Value: fmt.Sprintf("ERROR: failed to marshal JSON: %v", err), Type: "String"}
-	}
-	return Variable{Value: string(jsonBytes), Type: "Object", ValueInfo: map[string]any{"objectTypeName": "java.util.LinkedHashMap", "serializationDataFormat": "application/json"}}
-}
-
-func ListVariable(value any) Variable {
-	jsonBytes, err := json.Marshal(value)
-	if err != nil {
-		return Variable{Value: fmt.Sprintf("ERROR: failed to marshal list: %v", err), Type: "String"}
-	}
-	return Variable{Value: string(jsonBytes), Type: "Object", ValueInfo: map[string]any{"objectTypeName": "java.util.ArrayList", "serializationDataFormat": "application/json"}}
-}
-
-func NullVariable() Variable {
-	return Variable{Value: nil, Type: "Null"}
-}
 
 // TaskCompletion provides a fluent API for completing external tasks
 type TaskCompletion struct {
@@ -68,8 +17,8 @@ type TaskCompletion struct {
 	workerID       string
 	ctx            context.Context
 	taskID         string
-	variables      map[string]Variable
-	localVariables map[string]Variable
+	variables      map[string]vars.Variable
+	localVariables map[string]vars.Variable
 }
 
 // NewTaskCompletion creates a new TaskCompletion builder
@@ -79,8 +28,8 @@ func NewTaskCompletion(httpClient *httpclient.HTTPClient, workerID, taskID strin
 		workerID:       workerID,
 		ctx:            context.Background(),
 		taskID:         taskID,
-		variables:      make(map[string]Variable),
-		localVariables: make(map[string]Variable),
+		variables:      make(map[string]vars.Variable),
+		localVariables: make(map[string]vars.Variable),
 	}
 }
 
@@ -89,113 +38,104 @@ func (tc *TaskCompletion) Context(ctx context.Context) *TaskCompletion {
 	return tc
 }
 
+// Typed fluent helpers for adding variables to the completion request.
+// These mirror the helpers in the variables package and make it ergonomic
+// to build up variables in handlers via the complete() factory.
 func (tc *TaskCompletion) StringVariable(name, value string) *TaskCompletion {
-	tc.variables[name] = StringVariable(value)
+	tc.variables[name] = vars.StringVariable(value)
 	return tc
 }
 
 func (tc *TaskCompletion) LocalStringVariable(name, value string) *TaskCompletion {
-	tc.localVariables[name] = StringVariable(value)
+	tc.localVariables[name] = vars.StringVariable(value)
 	return tc
 }
 
 func (tc *TaskCompletion) IntVariable(name string, value int) *TaskCompletion {
-	tc.variables[name] = IntVariable(value)
+	tc.variables[name] = vars.IntVariable(value)
 	return tc
 }
 
 func (tc *TaskCompletion) LocalIntVariable(name string, value int) *TaskCompletion {
-	tc.localVariables[name] = IntVariable(value)
+	tc.localVariables[name] = vars.IntVariable(value)
 	return tc
 }
 
 func (tc *TaskCompletion) LongVariable(name string, value int) *TaskCompletion {
-	tc.variables[name] = LongVariable(value)
+	tc.variables[name] = vars.LongVariable(value)
 	return tc
 }
 
 func (tc *TaskCompletion) LocalLongVariable(name string, value int) *TaskCompletion {
-	tc.localVariables[name] = LongVariable(value)
+	tc.localVariables[name] = vars.LongVariable(value)
 	return tc
 }
 
 func (tc *TaskCompletion) DoubleVariable(name string, value float64) *TaskCompletion {
-	tc.variables[name] = DoubleVariable(value)
+	tc.variables[name] = vars.DoubleVariable(value)
 	return tc
 }
 
 func (tc *TaskCompletion) LocalDoubleVariable(name string, value float64) *TaskCompletion {
-	tc.localVariables[name] = DoubleVariable(value)
+	tc.localVariables[name] = vars.DoubleVariable(value)
 	return tc
 }
 
 func (tc *TaskCompletion) BooleanVariable(name string, value bool) *TaskCompletion {
-	tc.variables[name] = BooleanVariable(value)
+	tc.variables[name] = vars.BooleanVariable(value)
 	return tc
 }
 
 func (tc *TaskCompletion) LocalBooleanVariable(name string, value bool) *TaskCompletion {
-	tc.localVariables[name] = BooleanVariable(value)
+	tc.localVariables[name] = vars.BooleanVariable(value)
 	return tc
 }
 
 func (tc *TaskCompletion) DateVariable(name string, value time.Time) *TaskCompletion {
-	tc.variables[name] = DateVariable(value)
+	tc.variables[name] = vars.DateVariable(value)
 	return tc
 }
 
 func (tc *TaskCompletion) LocalDateVariable(name string, value time.Time) *TaskCompletion {
-	tc.localVariables[name] = DateVariable(value)
+	tc.localVariables[name] = vars.DateVariable(value)
 	return tc
 }
 
 func (tc *TaskCompletion) JSONVariable(name string, value any) *TaskCompletion {
-	tc.variables[name] = JSONVariable(value)
+	tc.variables[name] = vars.JSONVariable(value)
 	return tc
 }
 
 func (tc *TaskCompletion) LocalJSONVariable(name string, value any) *TaskCompletion {
-	tc.localVariables[name] = JSONVariable(value)
+	tc.localVariables[name] = vars.JSONVariable(value)
 	return tc
 }
 
 func (tc *TaskCompletion) ListVariable(name string, value any) *TaskCompletion {
-	tc.variables[name] = ListVariable(value)
+	tc.variables[name] = vars.ListVariable(value)
 	return tc
 }
 
 func (tc *TaskCompletion) LocalListVariable(name string, value any) *TaskCompletion {
-	tc.localVariables[name] = ListVariable(value)
+	tc.localVariables[name] = vars.ListVariable(value)
 	return tc
 }
 
 func (tc *TaskCompletion) NullVariable(name string) *TaskCompletion {
-	tc.variables[name] = NullVariable()
+	tc.variables[name] = vars.NullVariable()
 	return tc
 }
 
 func (tc *TaskCompletion) LocalNullVariable(name string) *TaskCompletion {
-	tc.localVariables[name] = NullVariable()
+	tc.localVariables[name] = vars.NullVariable()
 	return tc
 }
 
-// Variables adds multiple process variables (compatibility helper)
-// NOTE: The old convenience method that accepted a map of pre-built
-// variables has been removed to encourage using typed helper methods
-// on TaskCompletion. Use the chainable helpers instead, for example:
-//   tc.StringVariable("name", "alice").IntVariable("age", 42).Execute()
-
-// LocalVariables adds multiple local variables (compatibility helper)
-// Local variables can be added using the Local* helpers on TaskCompletion,
-// for example:
-//   tc.LocalStringVariable("note", "temporary").LocalIntVariable("count", 3)
-
-// Execute sends the completion request
 func (tc *TaskCompletion) Execute() error {
 	req := struct {
-		WorkerID       string              `json:"workerId"`
-		Variables      map[string]Variable `json:"variables,omitempty"`
-		LocalVariables map[string]Variable `json:"localVariables,omitempty"`
+		WorkerID       string                   `json:"workerId"`
+		Variables      map[string]vars.Variable `json:"variables,omitempty"`
+		LocalVariables map[string]vars.Variable `json:"localVariables,omitempty"`
 	}{
 		WorkerID:       tc.workerID,
 		Variables:      tc.variables,
