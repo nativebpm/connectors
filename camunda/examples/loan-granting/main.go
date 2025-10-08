@@ -147,8 +147,8 @@ func createWorker(client *camunda.Client, logger *slog.Logger) *camunda.Worker {
 	w.RegisterHandler("creditScoreChecker", creditScoreChecker, 60000, []string{})
 	w.RegisterHandler("loanGranter", loanGranter, 60000, []string{"score", "applicantName", "requestedAmount"})
 	w.RegisterHandler("requestRejecter", requestRejecter, 60000, []string{"score", "applicantName", "requestedAmount"})
-	w.SetMaxTasks(100)
-	w.SetPollInterval(5 * time.Second)
+	w.SetMaxTasks(50)
+	w.SetPollInterval(1 * time.Second)
 
 	// Configure concurrency control
 	numCPU := runtime.NumCPU() / 2
