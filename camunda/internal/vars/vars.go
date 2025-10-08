@@ -34,7 +34,15 @@ func BooleanVariable(value bool) Variable {
 }
 
 func DateVariable(value time.Time) Variable {
-	return Variable{Value: value.Format(time.RFC3339), Type: "Date"}
+	// Camunda expects dates in the format yyyy-MM-dd'T'HH:mm:ss.SSSZ
+	// (note: timezone offset without colon, e.g. +0500). time.RFC3339
+	// uses an offset with a colon (e.g. +05:00) which Camunda's
+	// date parser may reject. Use a layout that produces the
+	// expected format and include valueInfo.dateFormat so the
+	// engine can correctly deserialize the value to java.util.Date.
+	formatted := value.Format("2006-01-02T15:04:05.000-0700")
+	return Variable{Value: formatted, Type: "Date",
+		ValueInfo: map[string]any{"dateFormat": "yyyy-MM-dd'T'HH:mm:ss.SSSZ"}}
 }
 
 func JSONVariable(value any) Variable {

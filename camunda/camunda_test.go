@@ -98,7 +98,8 @@ func TestDateVariable(t *testing.T) {
 	value := time.Date(2023, 10, 1, 12, 0, 0, 0, time.UTC)
 	v := DateVariable(value)
 
-	expected := value.Format(time.RFC3339)
+	// Expected format: 2006-01-02T15:04:05.000-0700 (milliseconds + timezone without colon)
+	expected := value.Format("2006-01-02T15:04:05.000-0700")
 	if v.Value != expected {
 		t.Errorf("expected value %s, got %v", expected, v.Value)
 	}
