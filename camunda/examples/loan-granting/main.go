@@ -34,15 +34,17 @@ func main() {
 		return
 	}
 
-	// Simulate external requests (3 loan applications)
-	logger.Info("Simulating external loan applications...")
-	for i := 1; i <= 3; i++ {
-		if err := startLoanApplication(ctx, client, logger, i); err != nil {
-			logger.Error("Failed to start loan application", "number", i, "error", err)
+	go func() {
+		// Simulate external requests
+		logger.Info("Simulating external loan applications...")
+		for i := 1; i <= 1000; i++ {
+			if err := startLoanApplication(ctx, client, logger, i); err != nil {
+				logger.Error("Failed to start loan application", "number", i, "error", err)
+			}
+			time.Sleep(500 * time.Millisecond) // Small delay between applications
 		}
-		time.Sleep(500 * time.Millisecond) // Small delay between applications
-	}
-	logger.Info("All loan applications submitted")
+		logger.Info("All loan applications submitted")
+	}()
 
 	// Create and configure the worker
 	w := createWorker(client, logger)
