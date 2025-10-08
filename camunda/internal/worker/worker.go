@@ -335,8 +335,12 @@ func (w *Worker) processTask(ctx context.Context, task ExternalTask) {
 
 	// Create complete factory: handlers can call complete() to get a TaskCompletion
 	// and then use fluent methods: complete().StringVariable(...).Execute()
+	// Create a logger pre-attached with process/task context to help correlate
+	// completion logs with engine-side errors (e.g., optimistic locking).
+	loggerWithCtx := w.logger.With("processInstanceID", task.ProcessInstanceID, "activityID", task.ActivityID, "topic", task.TopicName)
+
 	complete := func() *tasks.TaskCompletion {
-		return tasks.NewTaskCompletion(w.httpClient, w.workerID, task.ID, w.logger).Context(ctx)
+		return tasks.NewTaskCompletion(w.httpClient, w.workerID, task.ID, loggerWithCtx).Context(ctx)
 	}
 
 	// Create fail function
