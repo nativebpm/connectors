@@ -147,7 +147,13 @@ func createWorker(client *camunda.Client, logger *slog.Logger) *camunda.Worker {
 	w.RegisterHandler("creditScoreChecker", creditScoreChecker, 60000, []string{})
 	w.RegisterHandler("loanGranter", loanGranter, 60000, []string{"score", "applicantName", "requestedAmount"})
 	w.RegisterHandler("requestRejecter", requestRejecter, 60000, []string{"score", "applicantName", "requestedAmount"})
+	// Recommended: keep maxTasks in the 10-50 range depending on workload
 	w.SetMaxTasks(50)
+
+	// Enable long polling to reduce fetch/load on the REST API
+	w.SetAsyncResponseTimeout(20 * time.Second)
+
+	// Short poll interval fallback when no tasks are returned
 	w.SetPollInterval(1 * time.Second)
 
 	// Configure concurrency control
@@ -156,8 +162,9 @@ func createWorker(client *camunda.Client, logger *slog.Logger) *camunda.Worker {
 
 	logger.Info("Worker configured",
 		"topics", 3,
-		"maxTasks", 10,
-		"pollInterval", "5s",
+		"maxTasks", 50,
+		"asyncResponseTimeout", "20s",
+		"pollInterval", "1s",
 		"maxConcurrency", numCPU)
 
 	return w

@@ -208,6 +208,13 @@ func (w *Worker) SetMaxConcurrency(maxConcurrency int) *Worker {
 	return w
 }
 
+// SetAsyncResponseTimeout enables long polling for fetchAndLock. Pass a time.Duration.
+// Use 0 to disable async long polling.
+func (w *Worker) SetAsyncResponseTimeout(timeout time.Duration) *Worker {
+	w.internalWorker.SetAsyncResponseTimeout(timeout)
+	return w
+}
+
 // Start begins polling for external tasks
 // This is a blocking call that will run until the context is cancelled
 func (w *Worker) Start(ctx context.Context) {

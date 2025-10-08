@@ -409,6 +409,20 @@ func (h *MyHandler) Handle(ctx context.Context, client *camunda.Client, task cam
 | **Memory-intensive** | 5 | 1-3 | Large file processing, PDF generation |
 | **Mixed** | 10 | 20 | Typical business applications |
 
+### Job Executor Smart Configuration
+
+When running many jobs in Camunda, tune the job executor to avoid expensive global operations and unnecessary sorting.
+
+- Enable job acquisition throttling to reduce contention and smooth load:
+    - queueSize (how many jobs to queue locally)
+    - maxJobsPerAcquisition (limit how many jobs the executor grabs in one acquisition)
+
+- Avoid setting `jobExecutorAcquireByDueDate=true` when the system has a large number of jobs – it causes sorting of all available jobs which can be expensive. Prefer acquisition by id or partitioning.
+
+- Consider running multiple job executors with filters (different `jobExecutor` configurations or process/job priorities) to separate workloads (e.g., short-running vs long-running jobs).
+
+These settings are on the Camunda engine side (process-engine configuration) and are orthogonal to the external task worker. The worker should focus on reasonable `maxTasks` (10–50) and `asyncResponseTimeout` (long polling) to reduce REST API pressure.
+
 ## Development
 
 ### Run Tests

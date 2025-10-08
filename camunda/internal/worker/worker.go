@@ -110,16 +110,17 @@ type FailFunc func(errorMessage, errorDetails string, retries, retryTimeout int)
 
 // Worker manages external task polling and processing
 type Worker struct {
-	httpClient     *httpclient.HTTPClient
-	workerID       string
-	logger         *slog.Logger
-	handlers       map[string]TaskHandler
-	topics         []TopicRequest
-	maxTasks       int
-	pollInterval   time.Duration
-	maxConcurrency int            // Maximum number of concurrent task processors
-	taskSemaphore  chan struct{}  // Semaphore to limit concurrent tasks
-	activeTasksWg  sync.WaitGroup // Tracks active task goroutines
+	httpClient           *httpclient.HTTPClient
+	workerID             string
+	logger               *slog.Logger
+	handlers             map[string]TaskHandler
+	topics               []TopicRequest
+	maxTasks             int
+	pollInterval         time.Duration
+	maxConcurrency       int            // Maximum number of concurrent task processors
+	taskSemaphore        chan struct{}  // Semaphore to limit concurrent tasks
+	activeTasksWg        sync.WaitGroup // Tracks active task goroutines
+	asyncResponseTimeout int            // asyncResponseTimeout in milliseconds (long polling). 0 = disabled
 }
 
 // New creates a new external task worker
@@ -131,17 +132,32 @@ func New(httpClient *httpclient.HTTPClient, workerID string, logger *slog.Logger
 	// Default concurrency: 2x maxTasks to allow for some buffering
 	maxConcurrency := 20
 
+	// Default: enable long polling 20s to reduce fetch/lock pressure
+	defaultAsyncTimeout := 20000 // milliseconds
+
 	return &Worker{
-		httpClient:     httpClient,
-		workerID:       workerID,
-		logger:         logger,
-		handlers:       make(map[string]TaskHandler),
-		topics:         []TopicRequest{},
-		maxTasks:       10,
-		pollInterval:   5 * time.Second,
-		maxConcurrency: maxConcurrency,
-		taskSemaphore:  make(chan struct{}, maxConcurrency),
+		httpClient:           httpClient,
+		workerID:             workerID,
+		logger:               logger,
+		handlers:             make(map[string]TaskHandler),
+		topics:               []TopicRequest{},
+		maxTasks:             10,
+		pollInterval:         5 * time.Second,
+		maxConcurrency:       maxConcurrency,
+		taskSemaphore:        make(chan struct{}, maxConcurrency),
+		asyncResponseTimeout: defaultAsyncTimeout,
 	}
+}
+
+// SetAsyncResponseTimeout sets the asyncResponseTimeout (long polling) for fetchAndLock in milliseconds.
+// Pass a time.Duration; a zero duration disables asyncResponseTimeout.
+func (w *Worker) SetAsyncResponseTimeout(timeout time.Duration) *Worker {
+	if timeout <= 0 {
+		w.asyncResponseTimeout = 0
+		return w
+	}
+	w.asyncResponseTimeout = int(timeout.Milliseconds())
+	return w
 }
 
 // RegisterHandler registers a handler for a specific topic
@@ -224,11 +240,18 @@ func (w *Worker) fetchAndLock(ctx context.Context) ([]ExternalTask, error) {
 		MaxTasks    int            `json:"maxTasks"`
 		UsePriority bool           `json:"usePriority"`
 		Topics      []TopicRequest `json:"topics"`
+		// AsyncResponseTimeout enables long polling on the REST API. Omit when 0.
+		AsyncResponseTimeout *int `json:"asyncResponseTimeout,omitempty"`
 	}{
 		WorkerID:    w.workerID,
 		MaxTasks:    w.maxTasks,
 		UsePriority: true,
 		Topics:      w.topics,
+	}
+
+	if w.asyncResponseTimeout > 0 {
+		val := w.asyncResponseTimeout
+		req.AsyncResponseTimeout = &val
 	}
 
 	resp, err := w.httpClient.POST(ctx, "/external-task/fetchAndLock").
