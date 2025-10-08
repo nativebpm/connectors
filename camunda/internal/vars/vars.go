@@ -58,3 +58,64 @@ func ListVariable(value any) Variable {
 func NullVariable() Variable {
 	return Variable{Value: nil, Type: "Null"}
 }
+
+// Variables is a convenience builder for creating a map[string]Variable
+// for use when starting process instances or completing tasks.
+type Variables struct {
+	vars map[string]Variable
+}
+
+// NewVariables creates a new Variables builder.
+func NewVariables() *Variables {
+	return &Variables{vars: make(map[string]Variable)}
+}
+
+func (b *Variables) String(name, value string) *Variables {
+	b.vars[name] = StringVariable(value)
+	return b
+}
+
+func (b *Variables) Int(name string, value int) *Variables {
+	b.vars[name] = IntVariable(value)
+	return b
+}
+
+func (b *Variables) Long(name string, value int) *Variables {
+	b.vars[name] = LongVariable(value)
+	return b
+}
+
+func (b *Variables) Double(name string, value float64) *Variables {
+	b.vars[name] = DoubleVariable(value)
+	return b
+}
+
+func (b *Variables) Boolean(name string, value bool) *Variables {
+	b.vars[name] = BooleanVariable(value)
+	return b
+}
+
+func (b *Variables) Date(name string, value time.Time) *Variables {
+	b.vars[name] = DateVariable(value)
+	return b
+}
+
+func (b *Variables) JSON(name string, value any) *Variables {
+	b.vars[name] = JSONVariable(value)
+	return b
+}
+
+func (b *Variables) List(name string, value any) *Variables {
+	b.vars[name] = ListVariable(value)
+	return b
+}
+
+func (b *Variables) Null(name string) *Variables {
+	b.vars[name] = NullVariable()
+	return b
+}
+
+// Variables returns the underlying map[string]Variable
+func (b *Variables) Variables() map[string]Variable {
+	return b.vars
+}

@@ -313,11 +313,12 @@ func TestWorker_ProcessTask(t *testing.T) {
 	handler := &MockHandler{}
 	worker.RegisterHandler("testTopic", handler, 60000, []string{})
 
+	vb := vars.NewVariables()
 	task := ExternalTask{
 		ID:        "task-123",
 		TopicName: "testTopic",
 		WorkerID:  "test-worker",
-		Variables: make(map[string]vars.Variable),
+		Variables: vb.Variables(),
 	}
 
 	// Process task
@@ -347,11 +348,12 @@ func TestWorker_ProcessTask_NoHandler(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 	worker := New(httpClient, "test-worker", logger)
 
+	vb2 := vars.NewVariables()
 	task := ExternalTask{
 		ID:        "task-123",
 		TopicName: "unknownTopic",
 		WorkerID:  "test-worker",
-		Variables: make(map[string]vars.Variable),
+		Variables: vb2.Variables(),
 	}
 
 	// Process task - should not panic
@@ -382,10 +384,11 @@ func TestCompleteFunc(t *testing.T) {
 	handler := &MockHandler{}
 	worker.RegisterHandler("testTopic", handler, 60000, []string{})
 
+	vb3 := vars.NewVariables()
 	task := ExternalTask{
 		ID:        "task-123",
 		TopicName: "testTopic",
-		Variables: make(map[string]vars.Variable),
+		Variables: vb3.Variables(),
 	}
 
 	worker.processTask(context.Background(), task)
@@ -421,10 +424,11 @@ func TestFailFunc(t *testing.T) {
 	handler := &MockHandler{}
 	worker.RegisterHandler("testTopic", handler, 60000, []string{})
 
+	vb4 := vars.NewVariables()
 	task := ExternalTask{
 		ID:        "task-123",
 		TopicName: "testTopic",
-		Variables: make(map[string]vars.Variable),
+		Variables: vb4.Variables(),
 	}
 
 	worker.processTask(context.Background(), task)
