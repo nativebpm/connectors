@@ -97,7 +97,7 @@ func createWorker(client *camunda.Client, logger *slog.Logger) *camunda.Worker {
 
 	// Create worker and register handlers
 	w := camunda.NewWorker(client, logger)
-	w.RegisterHandler("creditScoreChecker", creditScoreChecker, 60000, []string{"defaultScore"})
+	w.RegisterHandler("creditScoreChecker", creditScoreChecker, 60000, []string{})
 	w.RegisterHandler("loanGranter", loanGranter, 60000, []string{"score"})
 	w.RegisterHandler("requestRejecter", requestRejecter, 60000, []string{"score"})
 	w.SetMaxTasks(10)
