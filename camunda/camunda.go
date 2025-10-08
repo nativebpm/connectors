@@ -72,7 +72,8 @@ func DateVariable(value time.Time) Variable {
 }
 
 // JSONVariable creates a JSON variable from any value
-// The value is serialized to a JSON string as required by Camunda
+// The value is serialized to a JSON string and stored as a Camunda Object type
+// This allows the JSON to be accessed in BPMN expressions
 func JSONVariable(value any) Variable {
 	// Serialize value to JSON string
 	jsonBytes, err := json.Marshal(value)
@@ -87,7 +88,34 @@ func JSONVariable(value any) Variable {
 
 	return Variable{
 		Value: string(jsonBytes),
-		Type:  "json",
+		Type:  "Object",
+		ValueInfo: map[string]any{
+			"objectTypeName":          "java.util.LinkedHashMap",
+			"serializationDataFormat": "application/json",
+		},
+	}
+}
+
+// ListVariable creates a list variable from a slice
+// This is used for multi-instance activities in BPMN where Camunda needs to iterate over a collection
+// The value must be a slice ([]int, []string, []any, etc.)
+func ListVariable(value any) Variable {
+	// Serialize value to JSON string (required by Camunda for Object type)
+	jsonBytes, err := json.Marshal(value)
+	if err != nil {
+		return Variable{
+			Value: fmt.Sprintf("ERROR: failed to marshal list: %v", err),
+			Type:  "String",
+		}
+	}
+
+	return Variable{
+		Value: string(jsonBytes),
+		Type:  "Object",
+		ValueInfo: map[string]any{
+			"objectTypeName":          "java.util.ArrayList",
+			"serializationDataFormat": "application/json",
+		},
 	}
 }
 

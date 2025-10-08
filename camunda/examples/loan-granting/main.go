@@ -85,10 +85,26 @@ func deployProcess(ctx context.Context, client *camunda.Client, logger *slog.Log
 // startLoanApplication simulates an external loan application request
 // In a real system, this would be triggered by an API call, message queue, etc.
 func startLoanApplication(ctx context.Context, client *camunda.Client, logger *slog.Logger, applicationNumber int) error {
-	// In real scenario, you might pass application data as process variables
+	// Prepare loan application data
+	// These variables will be available throughout the process execution
 	variables := map[string]any{
+		// Application metadata
 		"applicationNumber": applicationNumber,
-		"applicantName":     fmt.Sprintf("Applicant-%d", applicationNumber),
+		"applicantName":     fmt.Sprintf("John Doe %d", applicationNumber),
+		"applicantEmail":    fmt.Sprintf("applicant%d@example.com", applicationNumber),
+
+		// Loan details
+		"requestedAmount": float64(10000 + (applicationNumber * 5000)), // Varying amounts: 15k, 20k, 25k
+		"loanPurpose":     "Business expansion",
+		"loanTerm":        36, // months
+
+		// Applicant financial data (used by creditScoreChecker)
+		"monthlyIncome":   float64(5000 + (applicationNumber * 1000)),
+		"existingDebts":   float64(2000 * applicationNumber),
+		"employmentYears": 3 + applicationNumber,
+
+		// Application timestamp
+		"submittedAt": time.Now().Format(time.RFC3339),
 	}
 
 	processInstanceID, err := client.StartProcessInstance(ctx, "loan_process", variables)
@@ -98,6 +114,8 @@ func startLoanApplication(ctx context.Context, client *camunda.Client, logger *s
 
 	logger.Info("Loan application received",
 		"applicationNumber", applicationNumber,
+		"applicantName", variables["applicantName"],
+		"requestedAmount", variables["requestedAmount"],
 		"processInstanceID", processInstanceID)
 	return nil
 }
@@ -112,8 +130,8 @@ func createWorker(client *camunda.Client, logger *slog.Logger) *camunda.Worker {
 	// Create worker and register handlers
 	w := camunda.NewWorker(client, logger)
 	w.RegisterHandler("creditScoreChecker", creditScoreChecker, 60000, []string{})
-	w.RegisterHandler("loanGranter", loanGranter, 60000, []string{"score"})
-	w.RegisterHandler("requestRejecter", requestRejecter, 60000, []string{"score"})
+	w.RegisterHandler("loanGranter", loanGranter, 60000, []string{"score", "applicantName", "requestedAmount"})
+	w.RegisterHandler("requestRejecter", requestRejecter, 60000, []string{"score", "applicantName", "requestedAmount"})
 	w.SetMaxTasks(10)
 	w.SetPollInterval(5 * time.Second)
 
