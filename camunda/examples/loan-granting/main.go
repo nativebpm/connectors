@@ -41,7 +41,6 @@ func main() {
 			if err := startLoanApplication(ctx, client, logger, i); err != nil {
 				logger.Error("Failed to start loan application", "number", i, "error", err)
 			}
-			time.Sleep(500 * time.Millisecond) // Small delay between applications
 		}
 		logger.Info("All loan applications submitted")
 	}()

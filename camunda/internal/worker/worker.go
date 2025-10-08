@@ -182,45 +182,35 @@ func (w *Worker) Start(ctx context.Context) {
 		"maxTasks", w.maxTasks,
 		"maxConcurrency", w.maxConcurrency)
 
+	ticker := time.NewTicker(w.pollInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			w.logger.Info("Context cancelled, waiting for active tasks to complete...")
-			// Wait for all active tasks to complete before returning
 			w.activeTasksWg.Wait()
 			w.logger.Info("Worker stopped gracefully")
 			return
-		default:
+		case <-ticker.C:
+			tasks, err := w.fetchAndLock(ctx)
+			if err != nil {
+				w.logger.Error("Failed to fetch tasks", "error", err)
+				continue
+			}
+
+			if len(tasks) == 0 {
+				continue
+			}
+
+			w.logger.Info("Fetched tasks", "count", len(tasks))
+
+			for _, task := range tasks {
+				w.taskSemaphore <- struct{}{}
+				w.activeTasksWg.Add(1)
+				go w.processTaskSafe(ctx, task)
+			}
 		}
-
-		tasks, err := w.fetchAndLock(ctx)
-		if err != nil {
-			w.logger.Error("Failed to fetch tasks", "error", err)
-			time.Sleep(w.pollInterval)
-			continue
-		}
-
-		if len(tasks) == 0 {
-			time.Sleep(w.pollInterval)
-			continue
-		}
-
-		w.logger.Info("Fetched tasks", "count", len(tasks))
-
-		// Process each task in a separate goroutine with concurrency control
-		for _, task := range tasks {
-			// Acquire semaphore slot (blocks if max concurrency reached)
-			w.taskSemaphore <- struct{}{}
-
-			// Track this task in WaitGroup
-			w.activeTasksWg.Add(1)
-
-			// Launch task processor
-			go w.processTaskSafe(ctx, task)
-		}
-
-		// Brief pause before next poll
-		time.Sleep(1 * time.Second)
 	}
 }
 
