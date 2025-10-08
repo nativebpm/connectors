@@ -336,7 +336,7 @@ func (w *Worker) processTask(ctx context.Context, task ExternalTask) {
 	// Create complete factory: handlers can call complete() to get a TaskCompletion
 	// and then use fluent methods: complete().StringVariable(...).Execute()
 	complete := func() *tasks.TaskCompletion {
-		return tasks.NewTaskCompletion(w.httpClient, w.workerID, task.ID).Context(ctx)
+		return tasks.NewTaskCompletion(w.httpClient, w.workerID, task.ID, w.logger).Context(ctx)
 	}
 
 	// Create fail function

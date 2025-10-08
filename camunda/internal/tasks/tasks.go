@@ -4,12 +4,20 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
+	"math/rand"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/nativebpm/connectors/camunda/internal/vars"
 	"github.com/nativebpm/connectors/httpclient"
 )
+
+// rnd is a package-local random number generator used for jitter.
+// Using a dedicated generator avoids mutating the global rand state
+// and improves test isolation.
+var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 // TaskCompletion provides a fluent API for completing external tasks
 type TaskCompletion struct {
@@ -19,10 +27,14 @@ type TaskCompletion struct {
 	taskID         string
 	variables      map[string]vars.Variable
 	localVariables map[string]vars.Variable
+	logger         *slog.Logger
 }
 
 // NewTaskCompletion creates a new TaskCompletion builder
-func NewTaskCompletion(httpClient *httpclient.HTTPClient, workerID, taskID string) *TaskCompletion {
+func NewTaskCompletion(httpClient *httpclient.HTTPClient, workerID, taskID string, logger *slog.Logger) *TaskCompletion {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &TaskCompletion{
 		httpClient:     httpClient,
 		workerID:       workerID,
@@ -30,6 +42,7 @@ func NewTaskCompletion(httpClient *httpclient.HTTPClient, workerID, taskID strin
 		taskID:         taskID,
 		variables:      make(map[string]vars.Variable),
 		localVariables: make(map[string]vars.Variable),
+		logger:         logger,
 	}
 }
 
@@ -142,28 +155,76 @@ func (tc *TaskCompletion) Execute() error {
 		LocalVariables: tc.localVariables,
 	}
 
-	resp, err := tc.httpClient.POST(tc.ctx, "/external-task/{taskID}/complete").
-		PathParam("taskID", tc.taskID).
-		JSON(req).
-		Send()
-	if err != nil {
-		return fmt.Errorf("failed to send complete request: %w", err)
-	}
-	defer resp.Body.Close()
+	// Retry on optimistic locking exceptions returned by Camunda
+	const maxRetries = 3
+	baseBackoff := 100 * time.Millisecond
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		resp, err := tc.httpClient.POST(tc.ctx, "/external-task/{taskID}/complete").
+			PathParam("taskID", tc.taskID).
+			JSON(req).
+			Send()
+		if err != nil {
+			return fmt.Errorf("failed to send complete request: %w", err)
+		}
 
-	if resp.StatusCode != http.StatusNoContent {
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			return fmt.Errorf("failed to read response body: %w", readErr)
+		}
+
+		if resp.StatusCode == http.StatusNoContent {
+			return nil
+		}
+
+		// Log diagnostic details for non-204 responses so engine errors
+		// (e.g., OptimisticLockingException) are visible in application output.
+		tc.logger.Debug("complete failed",
+			"taskID", tc.taskID,
+			"attempt", attempt,
+			"status", resp.StatusCode,
+			"response", string(body),
+			"variables", req.Variables,
+		)
+
+		// If we get an optimistic locking exception, retry with backoff
+		if resp.StatusCode == http.StatusInternalServerError && strings.Contains(string(body), "OptimisticLockingException") {
+			if attempt < maxRetries {
+				// exponential backoff with small jitter (context-aware)
+				sleep := baseBackoff * (1 << attempt)
+				sleep += time.Duration(rnd.Intn(100)) * time.Millisecond
+
+				tc.logger.Info("optimistic locking, retrying",
+					"taskID", tc.taskID,
+					"attempt", attempt,
+					"backoff", sleep,
+				)
+
+				timer := time.NewTimer(sleep)
+				select {
+				case <-tc.ctx.Done():
+					timer.Stop()
+					return tc.ctx.Err()
+				case <-timer.C:
+					// continue to next attempt
+				}
+				continue
+			}
+			tc.logger.Warn("complete failed after retries due to optimistic locking",
+				"taskID", tc.taskID,
+				"retries", maxRetries,
+			)
+			return fmt.Errorf("complete request failed after %d retries due to optimistic locking: %s", maxRetries, string(body))
+		}
+
 		return fmt.Errorf("complete request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	return nil
+	return fmt.Errorf("complete request failed after retries")
 }
 
-// TaskFailure provides a fluent API for reporting task failures
+// TaskFailure preovides a fluent API for reporting task failures
 type TaskFailure struct {
 	httpClient   *httpclient.HTTPClient
 	workerID     string

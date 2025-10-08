@@ -20,7 +20,7 @@ func main() {
 	defer cancel()
 
 	// Create a new Camunda client
-	client, err := camunda.NewClient("http://localhost:8080", "loan-worker")
+	client, err := camunda.NewClient("http://localhost:8080", "loan-worker", logger)
 	if err != nil {
 		logger.Error("Failed to create client", "error", err)
 		return

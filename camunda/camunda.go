@@ -23,10 +23,11 @@ type TopicRequest = worker.TopicRequest
 type Client struct {
 	httpClient *httpclient.HTTPClient
 	workerID   string
+	logger     *slog.Logger
 }
 
 // NewClient creates a new Camunda external task client
-func NewClient(hostURL, workerID string) (*Client, error) {
+func NewClient(hostURL, workerID string, logger *slog.Logger) (*Client, error) {
 	baseURL := hostURL + "/engine-rest"
 	httpClient, err := httpclient.NewClient(http.Client{Timeout: 30 * time.Second}, baseURL)
 	if err != nil {
@@ -36,6 +37,7 @@ func NewClient(hostURL, workerID string) (*Client, error) {
 	return &Client{
 		httpClient: httpClient,
 		workerID:   workerID,
+		logger:     logger,
 	}, nil
 }
 
@@ -47,7 +49,11 @@ func (c *Client) Use(middleware httpclient.Middleware) *Client {
 
 // WithLogger adds logging middleware to the HTTP client
 func (c *Client) WithLogger(logger *slog.Logger) *Client {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	c.httpClient.WithLogger(logger)
+	c.logger = logger
 	return c
 }
 
@@ -56,7 +62,7 @@ type TaskCompletion = tasks.TaskCompletion
 
 // Complete creates a new TaskCompletion builder
 func (c *Client) Complete(taskID string) *TaskCompletion {
-	return tasks.NewTaskCompletion(c.httpClient, c.workerID, taskID)
+	return tasks.NewTaskCompletion(c.httpClient, c.workerID, taskID, c.logger)
 }
 
 // TaskFailure provides a fluent API for reporting task failures

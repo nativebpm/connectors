@@ -3,6 +3,7 @@ package camunda
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,10 +13,11 @@ import (
 )
 
 func TestNewClient(t *testing.T) {
+	logger := slog.Default()
 	baseURL := "http://localhost:8080/engine-rest"
 	workerID := "test-worker"
 
-	client, err := NewClient(baseURL, workerID)
+	client, err := NewClient(baseURL, workerID, logger)
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
@@ -407,7 +409,7 @@ func BenchmarkNewClient(b *testing.B) {
 	workerID := "test-worker"
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = NewClient(baseURL, workerID)
+		_, _ = NewClient(baseURL, workerID, slog.Default())
 	}
 }
 
