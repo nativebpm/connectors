@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math/rand"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/nativebpm/connectors/camunda/internal/tasks"
@@ -98,63 +96,32 @@ func (c *Client) StartProcessInstance(ctx context.Context, processDefinitionKey,
 	// Prepare request payload
 	payload := map[string]any{"businessKey": businessKey, "variables": variables}
 
-	// Retry on optimistic locking errors during process start
-	const maxRetries = 3
-	baseBackoff := 100 * time.Millisecond
-	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	resp, err := c.httpClient.POST(ctx, "/process-definition/key/{processDefinitionKey}/start").
+		PathParam("processDefinitionKey", processDefinitionKey).
+		JSON(payload).
+		Send()
 
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		resp, err := c.httpClient.POST(ctx, "/process-definition/key/{processDefinitionKey}/start").
-			PathParam("processDefinitionKey", processDefinitionKey).
-			JSON(payload).
-			Send()
+	if err != nil {
+		return "", fmt.Errorf("failed to send start process request: %w", err)
+	}
 
-		if err != nil {
-			return "", fmt.Errorf("failed to send start process request: %w", err)
-		}
+	body, readErr := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if readErr != nil {
+		return "", fmt.Errorf("failed to read response body: %w", readErr)
+	}
 
-		body, readErr := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if readErr != nil {
-			return "", fmt.Errorf("failed to read response body: %w", readErr)
-		}
-
-		if resp.StatusCode == http.StatusOK {
-			var result struct {
-				ID string `json:"id"`
-			}
-			if err := json.Unmarshal(body, &result); err != nil {
-				return "", fmt.Errorf("failed to unmarshal process instance: %w", err)
-			}
-			return result.ID, nil
-		}
-
-		// Inspect for optimistic locking and retry with backoff+jitter
-		if resp.StatusCode == http.StatusInternalServerError && strings.Contains(string(body), "OptimisticLockingException") {
-			if attempt < maxRetries {
-				sleep := baseBackoff * (1 << attempt)
-				sleep += time.Duration(rnd.Intn(100)) * time.Millisecond
-				c.logger.Info("optimistic locking during start, retrying",
-					"processDefinitionKey", processDefinitionKey,
-					"attempt", attempt,
-					"backoff", sleep,
-				)
-				timer := time.NewTimer(sleep)
-				select {
-				case <-ctx.Done():
-					timer.Stop()
-					return "", ctx.Err()
-				case <-timer.C:
-					continue
-				}
-			}
-			return "", fmt.Errorf("start process request failed after %d retries due to optimistic locking: %s", maxRetries, string(body))
-		}
-
+	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("start process request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	return "", fmt.Errorf("start process request failed after retries")
+	var result struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("failed to unmarshal process instance: %w", err)
+	}
+	return result.ID, nil
 }
 
 // DeployProcess deploys a BPMN process definition to Camunda

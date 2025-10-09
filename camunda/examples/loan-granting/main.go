@@ -14,7 +14,6 @@ import (
 	"github.com/nativebpm/connectors/camunda"
 	"github.com/nativebpm/connectors/camunda/examples/loan-granting/handlers"
 	storepkg "github.com/nativebpm/connectors/camunda/examples/loan-granting/store"
-	"github.com/nativebpm/connectors/httpclient"
 )
 
 func main() {
@@ -42,7 +41,6 @@ func main() {
 
 	// Add logging middleware
 	client.WithLogger(logger)
-	client.Use(httpclient.ConcurrencyMiddleware(10))
 
 	// Deploy the BPMN process
 	if err := deployProcess(ctx, client, logger); err != nil {
