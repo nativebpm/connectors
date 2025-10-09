@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sync"
 
 	"github.com/nativebpm/connectors/httpclient/internal/httprequest"
 	"github.com/nativebpm/connectors/httpclient/internal/httptransport"
@@ -30,9 +31,32 @@ type Multipart = httprequest.Multipart
 type Request = httprequest.Request
 
 type HTTPClient struct {
-	client      http.Client
-	baseURL     url.URL
+	client  http.Client
+	baseURL url.URL
+	// mu protects access to middlewares for concurrent Use()/Request() calls.
+	mu          sync.RWMutex
 	middlewares []Middleware
+}
+
+// clone creates a shallow copy of the underlying http.Client and applies the
+// configured middlewares to the copy's Transport. This avoids mutating the
+// shared client or its Transport when building per-request middleware chains,
+// preventing data races when the HTTPClient is used concurrently.
+func (c *HTTPClient) clone() http.Client {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	client := c.client
+	transport := client.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+
+	for _, mw := range c.middlewares {
+		transport = mw(transport)
+	}
+	client.Transport = transport
+	return client
 }
 
 func NewClient(client http.Client, baseURL string) (*HTTPClient, error) {
@@ -53,30 +77,18 @@ func (c *HTTPClient) url(path string) string {
 }
 
 func (c *HTTPClient) Use(middleware Middleware) *HTTPClient {
+	c.mu.Lock()
 	c.middlewares = append(c.middlewares, middleware)
+	c.mu.Unlock()
 	return c
 }
 
 func (c *HTTPClient) Request(ctx context.Context, method method, path string) *httprequest.Request {
-	client := c.client
-	for _, mw := range c.middlewares {
-		if client.Transport == nil {
-			client.Transport = http.DefaultTransport
-		}
-		client.Transport = mw(client.Transport)
-	}
-	return httprequest.NewRequest(ctx, client, string(method), c.url(path))
+	return httprequest.NewRequest(ctx, c.clone(), string(method), c.url(path))
 }
 
 func (c *HTTPClient) MultipartRequest(ctx context.Context, method method, path string) *httprequest.Multipart {
-	client := c.client
-	for _, mw := range c.middlewares {
-		if client.Transport == nil {
-			client.Transport = http.DefaultTransport
-		}
-		client.Transport = mw(client.Transport)
-	}
-	return httprequest.NewMultipart(ctx, client, string(method), c.url(path))
+	return httprequest.NewMultipart(ctx, c.clone(), string(method), c.url(path))
 }
 
 func (c *HTTPClient) GET(ctx context.Context, path string) *httprequest.Request {
