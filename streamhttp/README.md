@@ -1,6 +1,6 @@
 # Stream-first HTTP client for Go
 
-A minimal, middleware-friendly HTTP client that streams data directly via `io.Pipe`, avoiding in-memory buffering.
+A minimal, middleware-friendly HTTP client that streams data directly via `io.Pipe`, avoiding full in-memory buffering.
 
 ```bash
 go get github.com/nativebpm/connectors/streamhttp
@@ -32,12 +32,12 @@ The standard `net/http` helpers buffer full payloads before sending. This become
 - Thin wrapper over `net/http`
 - Composable middleware: `func(http.RoundTripper) http.RoundTripper`
 - Fluent API: `GET`, `POST`, `Multipart`, etc.
-- Safe for concurrent use - no globals, no leaks, no reflection
+- Safe for concurrent use - no globals, no internal state, no reflection
 
 ## Examples
 
 - [Streaming multipart upload](examples/multipart_streaming_example)
-- [Without fluent API (comparison)](examples/multipart_streaming_example/multipart_straming_without_fluent_api)
+- [Without fluent API (for comparison)](examples/multipart_streaming_example/multipart_streaming_without_fluent_api)
 - [Logger middleware](examples/logger_slog_example)
 
 ## License
