@@ -7,17 +7,30 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/nativebpm/connectors/camunda"
 	"github.com/nativebpm/connectors/camunda/examples/loan-granting/handlers"
+	"github.com/nativebpm/connectors/httpclient"
 )
 
 func main() {
 	logger := slog.Default()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Make submission throttle configurable via env var
+	submissionDelayMs := 5 // default
+	if v := os.Getenv("CAMUNDA_SUBMISSION_DELAY_MS"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 0 {
+			submissionDelayMs = parsed
+		} else {
+			logger.Warn("Invalid CAMUNDA_SUBMISSION_DELAY_MS, using default", "value", v)
+		}
+	}
+	logger.Info("Submission throttle configured", "delay_ms", submissionDelayMs)
 
 	// Create a new Camunda client
 	client, err := camunda.NewClient("http://localhost:8080", "loan-worker", logger)
@@ -28,6 +41,7 @@ func main() {
 
 	// Add logging middleware
 	client.WithLogger(logger)
+	client.Use(httpclient.ConcurrencyMiddleware(10))
 
 	// Deploy the BPMN process
 	if err := deployProcess(ctx, client, logger); err != nil {
@@ -36,12 +50,16 @@ func main() {
 	}
 
 	go func() {
-		// Simulate external requests
-		logger.Info("Simulating external loan applications...")
+		// Simulate external requests with throttling to avoid DB contention
+		logger.Info("Simulating external loan applications (throttled)...")
 		for i := 1; i <= 1000; i++ {
 			if err := startLoanApplication(ctx, client, logger, i); err != nil {
 				logger.Error("Failed to start loan application", "number", i, "error", err)
 			}
+
+			// Small sleep between submissions to reduce burst load on Camunda/DB
+			// Adjustable via CAMUNDA_SUBMISSION_DELAY_MS (milliseconds)
+			time.Sleep(time.Duration(submissionDelayMs) * time.Millisecond)
 		}
 		logger.Info("All loan applications submitted")
 	}()

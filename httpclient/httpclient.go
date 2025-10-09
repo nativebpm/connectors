@@ -106,3 +106,10 @@ func (c *HTTPClient) Multipart(ctx context.Context, path string) *httprequest.Mu
 func (c *HTTPClient) WithLogger(logger *slog.Logger) *HTTPClient {
 	return c.Use(httptransport.LoggingMiddleware(logger))
 }
+
+// ConcurrencyMiddleware is a convenience wrapper that exposes the internal
+// concurrency limiter middleware for external packages. It returns a
+// Middleware that limits the number of concurrent in-flight HTTP requests.
+func ConcurrencyMiddleware(limit int) Middleware {
+	return httptransport.ConcurrencyMiddleware(limit)
+}
