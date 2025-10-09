@@ -42,23 +42,23 @@ func main() {
 
 	client := &http.Client{Timeout: 60 * time.Second}
 
-	server1Client, err := streamhttp.NewClient(*client, "http://localhost:8080")
+	server1Client, err := streamhttp.NewClient(*client, "http://localhost:8080",
+		streamhttp.LoggingMiddleware(logger.WithGroup("server1")),
+		// middleware.ProgressMiddleware(logger.WithGroup("server1")),
+	)
 	if err != nil {
 		logger.Error("Failed to server1Client client", "error", err)
 		return
 	}
 
-	server2Client, err := streamhttp.NewClient(*client, "http://localhost:8081")
+	server2Client, err := streamhttp.NewClient(*client, "http://localhost:8081",
+		streamhttp.LoggingMiddleware(logger.WithGroup("server2")),
+		// middleware.UploadProgressMiddleware(logger.WithGroup("server2")),
+	)
 	if err != nil {
 		logger.Error("Failed to server2Client client", "error", err)
 		return
 	}
-
-	server1Client.WithLogger(logger.WithGroup("server1"))
-	// server1Client.Use(middleware.ProgressMiddleware(logger.WithGroup("server1")))
-
-	server2Client.WithLogger(logger.WithGroup("server2"))
-	// server2Client.Use(middleware.UploadProgressMiddleware(logger.WithGroup("server2")))
 
 	server1Resp, err := server1Client.GET(context.Background(), "/file").
 		Timeout(30 * time.Second).

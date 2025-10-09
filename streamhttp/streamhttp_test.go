@@ -41,21 +41,6 @@ func TestNewClient(t *testing.T) {
 	}
 }
 
-func TestClient_UseMiddleware(t *testing.T) {
-	client := http.Client{}
-	hc, _ := NewClient(client, "https://example.com")
-
-	// Mock middleware
-	middleware := func(rt http.RoundTripper) http.RoundTripper {
-		return rt
-	}
-
-	result := hc.Use(middleware)
-	if len(result.middlewares) != 1 {
-		t.Errorf("Use() should add one middleware, got %d", len(result.middlewares))
-	}
-}
-
 func TestClient_url(t *testing.T) {
 	client := http.Client{}
 	hc, _ := NewClient(client, "https://example.com/api")
@@ -135,10 +120,7 @@ func TestClient_WithMiddleware(t *testing.T) {
 	defer server.Close()
 
 	client := http.Client{}
-	hc, _ := NewClient(client, server.URL)
-
-	// Add middleware that sets a header
-	hc.Use(func(rt http.RoundTripper) http.RoundTripper {
+	hc, _ := NewClient(client, server.URL, func(rt http.RoundTripper) http.RoundTripper {
 		return &testTransport{rt: rt}
 	})
 
