@@ -54,8 +54,8 @@ func (r *Multipart) Send() (*http.Response, error) {
 	r.request.Header.Set("Content-Type", mw.FormDataContentType())
 
 	go func() {
-		defer mw.Close()
 		defer pw.Close()
+		defer mw.Close()
 
 		for _, field := range r.fields {
 			select {
