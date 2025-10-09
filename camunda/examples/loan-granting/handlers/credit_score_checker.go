@@ -74,7 +74,7 @@ func (h *CreditScoreChecker) Handle(ctx context.Context, client *camunda.Client,
 	// Use ListVariable for creditScores so that multi-instance subprocess can iterate over it
 	// Complete using the provided complete factory for fluent variable building
 	err := complete().
-		ListVariable("creditScores", scores).
+		LocalListVariable("creditScores", scores).
 		Execute()
 	if err != nil {
 		return err

@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/nativebpm/connectors/camunda"
 	"github.com/nativebpm/connectors/camunda/examples/loan-granting/handlers"
 	storepkg "github.com/nativebpm/connectors/camunda/examples/loan-granting/store"
@@ -55,7 +57,8 @@ func main() {
 		logger.Info("Simulating external loan applications (throttled)...")
 		for i := 1; i <= 1000; i++ {
 			// Build application object and save to in-memory store under a businessKey
-			businessKey := fmt.Sprintf("loan-%d", i)
+			// Use a UUID to ensure globally-unique business keys
+			businessKey := "loan-" + uuid.NewString()
 			app := storepkg.Application{
 				ApplicationNumber: i,
 				ApplicantName:     fmt.Sprintf("Applicant %d", i),
