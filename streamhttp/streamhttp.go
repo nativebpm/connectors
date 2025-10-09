@@ -2,12 +2,10 @@ package streamhttp
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"net/url"
 
 	"github.com/nativebpm/connectors/streamhttp/internal/httprequest"
-	"github.com/nativebpm/connectors/streamhttp/internal/httptransport"
 )
 
 type HttpMethod string
@@ -85,15 +83,4 @@ func (c *Client) DELETE(ctx context.Context, path string) *httprequest.Request {
 
 func (c *Client) Multipart(ctx context.Context, path string) *httprequest.Multipart {
 	return c.MultipartRequest(ctx, POST, path)
-}
-
-func LoggingMiddleware(logger *slog.Logger) func(http.RoundTripper) http.RoundTripper {
-	return httptransport.LoggingMiddleware(logger)
-}
-
-// ConcurrencyMiddleware is a convenience wrapper that exposes the internal
-// concurrency limiter middleware for external packages. It returns a
-// Middleware that limits the number of concurrent in-flight HTTP requests.
-func ConcurrencyMiddleware(limit int) func(http.RoundTripper) http.RoundTripper {
-	return httptransport.ConcurrencyMiddleware(limit)
 }
