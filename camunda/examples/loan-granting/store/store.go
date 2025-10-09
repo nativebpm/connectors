@@ -16,6 +16,8 @@ type Application struct {
 	SubmittedAtUnix   int64
 	// Results collected from loanGranter / requestRejecter tasks
 	Results []Result
+	// Raw scores collected from credit score checker
+	Scores []int
 }
 
 // Store is a simple in-memory store for application data.
@@ -65,6 +67,30 @@ func (s *Store) AppendResult(businessKey string, r Result) {
 	}
 	app.Results = append(app.Results, r)
 	s.data[businessKey] = app
+}
+
+// AppendScores appends raw integer scores to the application identified by businessKey.
+// If the application does not exist, this is a no-op.
+func (s *Store) AppendScores(businessKey string, scores []int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	app, ok := s.data[businessKey]
+	if !ok {
+		return
+	}
+	app.Scores = append(app.Scores, scores...)
+	s.data[businessKey] = app
+}
+
+// GetScores returns the scores slice for the given businessKey.
+func (s *Store) GetScores(businessKey string) ([]int, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	app, ok := s.data[businessKey]
+	if !ok {
+		return nil, false
+	}
+	return app.Scores, true
 }
 
 // GetResults returns the results slice for the given businessKey.

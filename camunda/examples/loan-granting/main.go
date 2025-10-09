@@ -143,13 +143,16 @@ func createWorker(client *camunda.Client, logger *slog.Logger, store *storepkg.S
 	creditScoreChecker := handlers.NewCreditScoreChecker(logger, store)
 	loanGranter := handlers.NewLoanGranter(logger, store)
 	requestRejecter := handlers.NewRequestRejecter(logger, store)
+	decider := handlers.NewDecider(logger, store)
 
 	// Create worker and register handlers
 	w := camunda.NewWorker(client, logger)
 	w.RegisterHandler("creditScoreChecker", creditScoreChecker, 60000, []string{})
-	// Only request the score variable from Camunda; applicant data is fetched from the in-memory store
-	w.RegisterHandler("loanGranter", loanGranter, 60000, []string{"score"})
-	w.RegisterHandler("requestRejecter", requestRejecter, 60000, []string{"score"})
+	// Decider makes a decision based on scores in the external store and sets a small process variable `decision`
+	w.RegisterHandler("decider", decider, 60000, []string{})
+	// Grant/reject tasks will be executed after the decision; they only need the `decision` variable if desired
+	w.RegisterHandler("loanGranter", loanGranter, 60000, []string{"decision"})
+	w.RegisterHandler("requestRejecter", requestRejecter, 60000, []string{"decision"})
 	// Recommended: keep maxTasks in the 10-50 range depending on workload
 	w.SetMaxTasks(50)
 

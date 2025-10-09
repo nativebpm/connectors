@@ -70,26 +70,13 @@ func (h *CreditScoreChecker) Handle(ctx context.Context, client *camunda.Client,
 
 	h.logger.Info("Credit scores calculated", "scores", scores, "taskID", task.ID)
 
-	// Complete the task with results
-	// Use ListVariable for creditScores so that multi-instance subprocess can iterate over it
-	// Complete using the provided complete factory for fluent variable building
-	// Also persist scores to the in-memory store for later inspection/aggregation
+	// Complete the task with results.
+	// Persist raw scores to the in-memory store for later inspection/aggregation.
 	if task.BusinessKey != "" && h.store != nil {
-		for _, sc := range scores {
-			res := storepkg.Result{
-				Score:          sc,
-				LoanGranted:    false,
-				ApprovedAmount: 0,
-				InterestRate:   0,
-				Message:        "credit score recorded",
-			}
-			h.store.AppendResult(task.BusinessKey, res)
-		}
+		h.store.AppendScores(task.BusinessKey, scores)
 	}
 
-	err := complete().
-		LocalListVariable("creditScores", scores).
-		Execute()
+	err := complete().Execute()
 	if err != nil {
 		return err
 	}
