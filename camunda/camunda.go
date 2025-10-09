@@ -91,10 +91,12 @@ func (c *Client) Unlock(taskID string) *TaskUnlock {
 	return tasks.NewTaskUnlock(c.httpClient, c.workerID, taskID)
 }
 
-// StartProcessInstance starts a new process instance by process definition key
-func (c *Client) StartProcessInstance(ctx context.Context, processDefinitionKey string, variables map[string]Variable) (string, error) {
+// StartProcessInstance starts a process instance and sets the businessKey
+// The variables map can be nil or empty; heavy application data should be stored
+// outside Camunda (for example in an in-memory store) and referenced by businessKey.
+func (c *Client) StartProcessInstance(ctx context.Context, processDefinitionKey, businessKey string, variables map[string]Variable) (string, error) {
 	// Prepare request payload
-	payload := map[string]any{"variables": variables}
+	payload := map[string]any{"businessKey": businessKey, "variables": variables}
 
 	// Retry on optimistic locking errors during process start
 	const maxRetries = 3

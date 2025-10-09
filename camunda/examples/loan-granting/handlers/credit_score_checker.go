@@ -6,17 +6,20 @@ import (
 	"time"
 
 	"github.com/nativebpm/connectors/camunda"
+	storepkg "github.com/nativebpm/connectors/camunda/examples/loan-granting/store"
 )
 
 // CreditScoreChecker handles credit score checking tasks
 type CreditScoreChecker struct {
 	logger *slog.Logger
+	store  *storepkg.Store
 }
 
 // NewCreditScoreChecker creates a new credit score checker handler
-func NewCreditScoreChecker(logger *slog.Logger) *CreditScoreChecker {
+func NewCreditScoreChecker(logger *slog.Logger, store *storepkg.Store) *CreditScoreChecker {
 	return &CreditScoreChecker{
 		logger: logger,
+		store:  store,
 	}
 }
 
@@ -27,7 +30,7 @@ func (h *CreditScoreChecker) Handle(ctx context.Context, client *camunda.Client,
 	// Extract applicant data from process variables
 	var monthlyIncome, existingDebts float64
 	var employmentYears int
-
+	// Prefer variables, but fall back to in-memory store (by businessKey) when variables are not present
 	if income, ok := task.Variables["monthlyIncome"]; ok {
 		if val, ok := income.Value.(float64); ok {
 			monthlyIncome = val
@@ -41,6 +44,14 @@ func (h *CreditScoreChecker) Handle(ctx context.Context, client *camunda.Client,
 	if years, ok := task.Variables["employmentYears"]; ok {
 		if val, ok := years.Value.(float64); ok {
 			employmentYears = int(val)
+		}
+	}
+
+	if monthlyIncome == 0 && task.BusinessKey != "" && h.store != nil {
+		if app, ok := h.store.Get(task.BusinessKey); ok {
+			monthlyIncome = app.MonthlyIncome
+			existingDebts = app.ExistingDebts
+			employmentYears = app.EmploymentYears
 		}
 	}
 

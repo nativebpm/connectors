@@ -13,6 +13,7 @@ import (
 
 	"github.com/nativebpm/connectors/camunda"
 	"github.com/nativebpm/connectors/camunda/examples/loan-granting/handlers"
+	storepkg "github.com/nativebpm/connectors/camunda/examples/loan-granting/store"
 	"github.com/nativebpm/connectors/httpclient"
 )
 
@@ -49,12 +50,31 @@ func main() {
 		return
 	}
 
+	// Create in-memory store for application payloads (not stored in Camunda)
+	store := storepkg.New()
+
 	go func() {
 		// Simulate external requests with throttling to avoid DB contention
 		logger.Info("Simulating external loan applications (throttled)...")
 		for i := 1; i <= 1000; i++ {
-			if err := startLoanApplication(ctx, client, logger, i); err != nil {
-				logger.Error("Failed to start loan application", "number", i, "error", err)
+			// Build application object and save to in-memory store under a businessKey
+			businessKey := fmt.Sprintf("loan-%d", i)
+			app := storepkg.Application{
+				ApplicationNumber: i,
+				ApplicantName:     fmt.Sprintf("Applicant %d", i),
+				ApplicantEmail:    fmt.Sprintf("app%d@example.com", i),
+				RequestedAmount:   5000.0,
+				LoanPurpose:       "General",
+				LoanTerm:          12,
+				MonthlyIncome:     3000.0,
+				ExistingDebts:     0.0,
+				EmploymentYears:   1,
+				SubmittedAtUnix:   time.Now().Unix(),
+			}
+			store.Save(businessKey, app)
+
+			if err := startLoanApplication(ctx, client, logger, businessKey); err != nil {
+				logger.Error("Failed to start loan application", "number", i, "businessKey", businessKey, "error", err)
 			}
 
 			// Small sleep between submissions to reduce burst load on Camunda/DB
@@ -64,8 +84,8 @@ func main() {
 		logger.Info("All loan applications submitted")
 	}()
 
-	// Create and configure the worker
-	w := createWorker(client, logger)
+	// Create and configure the worker (pass the in-memory store so handlers can fetch data)
+	w := createWorker(client, logger, store)
 
 	// Handle graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -85,6 +105,21 @@ func main() {
 	logger.Info("Worker stopped gracefully")
 }
 
+// startLoanApplication starts the process with only a businessKey.
+// Heavy application data is stored in the in-memory store and not in Camunda variables.
+func startLoanApplication(ctx context.Context, client *camunda.Client, logger *slog.Logger, businessKey string) error {
+	// Start process with businessKey only (no large variables)
+	processInstanceID, err := client.StartProcessInstance(ctx, "loan_process", businessKey, nil)
+	if err != nil {
+		return err
+	}
+
+	logger.Info("Loan application started",
+		"businessKey", businessKey,
+		"processInstanceID", processInstanceID)
+	return nil
+}
+
 // deployProcess deploys the BPMN process definition
 func deployProcess(ctx context.Context, client *camunda.Client, logger *slog.Logger) error {
 	file, err := os.Open("bpmn/loan-granting.bpmn")
@@ -102,69 +137,19 @@ func deployProcess(ctx context.Context, client *camunda.Client, logger *slog.Log
 	return nil
 }
 
-// startLoanApplication simulates an external loan application request
-// In a real system, this would be triggered by an API call, message queue, etc.
-func startLoanApplication(ctx context.Context, client *camunda.Client, logger *slog.Logger, applicationNumber int) error {
-	// Prepare loan application data with more realistic variation
-	applicantNames := []string{"John Doe", "Jane Smith", "Alex Johnson", "Maria Garcia", "Li Wei", "Fatima Al-Farsi", "Ivan Petrov", "Sara Müller"}
-	loanPurposes := []string{"Business expansion", "Home renovation", "Car purchase", "Education", "Medical expenses", "Travel", "Debt consolidation", "Wedding"}
-
-	name := applicantNames[applicationNumber%len(applicantNames)]
-	email := fmt.Sprintf("%s%d@example.com", name[:3], applicationNumber)
-	purpose := loanPurposes[applicationNumber%len(loanPurposes)]
-
-	// Vary requested amount, income, debts, employment years
-	requestedAmount := float64(5000 + (applicationNumber%10)*2500 + (applicationNumber%3)*10000)
-	monthlyIncome := float64(3000 + (applicationNumber%7)*1200 + (applicationNumber%5)*800)
-	existingDebts := float64((applicationNumber%5)*3500 + (applicationNumber%4)*1200)
-	employmentYears := 1 + (applicationNumber % 12)
-	loanTerm := 12 + (applicationNumber%5)*12 // 12, 24, 36, 48, 60 months
-
-	vars := camunda.NewVariables()
-	// Application metadata
-	vars.Int("applicationNumber", applicationNumber)
-	vars.String("applicantName", fmt.Sprintf("%s %d", name, applicationNumber))
-	vars.String("applicantEmail", email)
-
-	// Loan details
-	vars.Double("requestedAmount", requestedAmount)
-	vars.String("loanPurpose", purpose)
-	vars.Int("loanTerm", loanTerm)
-
-	// Applicant financial data (used by creditScoreChecker)
-	vars.Double("monthlyIncome", monthlyIncome)
-	vars.Double("existingDebts", existingDebts)
-	vars.Int("employmentYears", employmentYears)
-
-	// Application timestamp
-	vars.Date("submittedAt", time.Now())
-
-	variables := vars.Variables()
-	processInstanceID, err := client.StartProcessInstance(ctx, "loan_process", variables)
-	if err != nil {
-		return err
-	}
-
-	logger.Info("Loan application received",
-		"applicationNumber", applicationNumber,
-		"applicantName", variables["applicantName"],
-		"requestedAmount", variables["requestedAmount"],
-		"processInstanceID", processInstanceID)
-	return nil
-}
-
 // createWorker creates and configures the external task worker
-func createWorker(client *camunda.Client, logger *slog.Logger) *camunda.Worker {
+func createWorker(client *camunda.Client, logger *slog.Logger, store *storepkg.Store) *camunda.Worker {
 	// Create handlers
-	creditScoreChecker := handlers.NewCreditScoreChecker(logger)
-	loanGranter := handlers.NewLoanGranter(logger)
-	requestRejecter := handlers.NewRequestRejecter(logger)
+	creditScoreChecker := handlers.NewCreditScoreChecker(logger, store)
+	loanGranter := handlers.NewLoanGranter(logger, store)
+	requestRejecter := handlers.NewRequestRejecter(logger, store)
 
 	// Create worker and register handlers
 	w := camunda.NewWorker(client, logger)
 	w.RegisterHandler("creditScoreChecker", creditScoreChecker, 60000, []string{})
-	w.RegisterHandler("loanGranter", loanGranter, 60000, []string{"score", "applicantName", "requestedAmount"})
-	w.RegisterHandler("requestRejecter", requestRejecter, 60000, []string{"score", "applicantName", "requestedAmount"})
+	// Only request the score variable from Camunda; applicant data is fetched from the in-memory store
+	w.RegisterHandler("loanGranter", loanGranter, 60000, []string{"score"})
+	w.RegisterHandler("requestRejecter", requestRejecter, 60000, []string{"score"})
 	// Recommended: keep maxTasks in the 10-50 range depending on workload
 	w.SetMaxTasks(50)
 
