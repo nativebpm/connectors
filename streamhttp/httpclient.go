@@ -26,7 +26,6 @@ const (
 	TRACE   method = http.MethodTrace
 )
 
-type Middleware = httptransport.Middleware
 type Multipart = httprequest.Multipart
 type Request = httprequest.Request
 
@@ -35,7 +34,7 @@ type streamhttp struct {
 	baseURL url.URL
 	// mu protects access to middlewares for concurrent Use()/Request() calls.
 	mu          sync.RWMutex
-	middlewares []Middleware
+	middlewares []func(http.RoundTripper) http.RoundTripper
 }
 
 // clone creates a shallow copy of the underlying http.Client and applies the
@@ -68,7 +67,7 @@ func NewClient(client http.Client, baseURL string) (*streamhttp, error) {
 	return &streamhttp{
 		client:      client,
 		baseURL:     *u,
-		middlewares: []Middleware{},
+		middlewares: []func(http.RoundTripper) http.RoundTripper{},
 	}, nil
 }
 
@@ -76,7 +75,7 @@ func (c *streamhttp) url(path string) string {
 	return c.baseURL.JoinPath(path).String()
 }
 
-func (c *streamhttp) Use(middleware Middleware) *streamhttp {
+func (c *streamhttp) Use(middleware func(http.RoundTripper) http.RoundTripper) *streamhttp {
 	c.mu.Lock()
 	c.middlewares = append(c.middlewares, middleware)
 	c.mu.Unlock()
@@ -122,6 +121,6 @@ func (c *streamhttp) WithLogger(logger *slog.Logger) *streamhttp {
 // ConcurrencyMiddleware is a convenience wrapper that exposes the internal
 // concurrency limiter middleware for external packages. It returns a
 // Middleware that limits the number of concurrent in-flight HTTP requests.
-func ConcurrencyMiddleware(limit int) Middleware {
+func ConcurrencyMiddleware(limit int) func(http.RoundTripper) http.RoundTripper {
 	return httptransport.ConcurrencyMiddleware(limit)
 }

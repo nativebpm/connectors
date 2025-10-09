@@ -7,7 +7,7 @@ import (
 // ConcurrencyMiddleware returns a Middleware that limits the number of
 // concurrent HTTP requests in flight. It uses a buffered channel as a semaphore.
 // When limit <= 0, the middleware is a no-op.
-func ConcurrencyMiddleware(limit int) Middleware {
+func ConcurrencyMiddleware(limit int) func(http.RoundTripper) http.RoundTripper {
 	if limit <= 0 {
 		return func(next http.RoundTripper) http.RoundTripper { return next }
 	}
