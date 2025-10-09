@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"runtime"
 	"strconv"
 	"syscall"
 	"time"
@@ -157,16 +156,11 @@ func createWorker(client *camunda.Client, logger *slog.Logger, store *storepkg.S
 	// Short poll interval fallback when no tasks are returned
 	w.SetPollInterval(1 * time.Second)
 
-	// Configure concurrency control
-	numCPU := runtime.NumCPU() / 2
-	w.SetMaxConcurrency(numCPU) // Use half of available CPU cores
-
 	logger.Info("Worker configured",
 		"topics", 3,
 		"maxTasks", 50,
 		"asyncResponseTimeout", "20s",
-		"pollInterval", "1s",
-		"maxConcurrency", numCPU)
+		"pollInterval", "1s")
 
 	return w
 }
