@@ -355,5 +355,16 @@ func (w *Worker) processTask(ctx context.Context, task ExternalTask) {
 	}
 
 	// Handler is responsible for logging and error handling
-	_ = handler.Handle(ctx, task, complete, fail)
+	if err := handler.Handle(ctx, task, complete, fail); err != nil {
+		loggerWithCtx.Error("task handler returned error",
+			"taskID", task.ID,
+			"error", err)
+
+		// Try to report failure to Camunda so the engine records the error and retries if configured
+		if failErr := fail(err.Error(), "handler error", 0, 0); failErr != nil {
+			loggerWithCtx.Error("failed to report task failure to Camunda",
+				"taskID", task.ID,
+				"reportError", failErr)
+		}
+	}
 }
