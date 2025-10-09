@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nativebpm/connectors/httpclient"
-	"github.com/nativebpm/connectors/httpclient/internal/httptransport"
+	"github.com/nativebpm/connectors/streamhttp"
+	"github.com/nativebpm/connectors/streamhttp/internal/httptransport"
 )
 
 func TestLoggingMiddleware_EndToEnd(t *testing.T) {
@@ -22,7 +22,7 @@ func TestLoggingMiddleware_EndToEnd(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client, err := httpclient.NewClient(http.Client{Timeout: 5 * time.Second}, ts.URL)
+	client, err := streamhttp.NewClient(http.Client{Timeout: 5 * time.Second}, ts.URL)
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}

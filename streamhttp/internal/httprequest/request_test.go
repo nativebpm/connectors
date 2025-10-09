@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nativebpm/connectors/httpclient/internal/httprequest"
+	"github.com/nativebpm/connectors/streamhttp/internal/httprequest"
 )
 
 func TestNewRequest(t *testing.T) {

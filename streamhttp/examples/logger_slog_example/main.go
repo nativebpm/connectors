@@ -8,11 +8,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/nativebpm/connectors/httpclient"
+	"github.com/nativebpm/connectors/streamhttp"
 )
 
 func main() {
-	client, err := httpclient.NewClient(http.Client{Timeout: 10 * time.Second}, "https://httpbin.org")
+	client, err := streamhttp.NewClient(http.Client{Timeout: 10 * time.Second}, "https://httpbin.org")
 	if err != nil {
 		log.Fatal(err)
 	}

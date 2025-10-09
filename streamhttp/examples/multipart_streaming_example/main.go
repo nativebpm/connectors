@@ -10,8 +10,8 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/nativebpm/connectors/httpclient"
-	// "github.com/nativebpm/connectors/httpclient/examples/multipart_streaming_example/middleware"
+	"github.com/nativebpm/connectors/streamhttp"
+	// "github.com/nativebpm/connectors/streamhttp/examples/multipart_streaming_example/middleware"
 )
 
 // countingReader wraps an io.Reader and tracks the number of bytes read
@@ -40,15 +40,15 @@ func main() {
 	runtime.ReadMemStats(&m)
 	logger.Info("Before streaming", "Alloc (KB)", m.Alloc/1024, "TotalAlloc (KB)", m.TotalAlloc/1024)
 
-	httpClient := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{Timeout: 60 * time.Second}
 
-	server1Client, err := httpclient.NewClient(*httpClient, "http://localhost:8080")
+	server1Client, err := streamhttp.NewClient(*client, "http://localhost:8080")
 	if err != nil {
 		logger.Error("Failed to server1Client client", "error", err)
 		return
 	}
 
-	server2Client, err := httpclient.NewClient(*httpClient, "http://localhost:8081")
+	server2Client, err := streamhttp.NewClient(*client, "http://localhost:8081")
 	if err != nil {
 		logger.Error("Failed to server2Client client", "error", err)
 		return

@@ -1,4 +1,4 @@
-package httpclient
+package streamhttp
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"sync"
 
-	"github.com/nativebpm/connectors/httpclient/internal/httprequest"
-	"github.com/nativebpm/connectors/httpclient/internal/httptransport"
+	"github.com/nativebpm/connectors/streamhttp/internal/httprequest"
+	"github.com/nativebpm/connectors/streamhttp/internal/httptransport"
 )
 
 type method string
@@ -30,7 +30,7 @@ type Middleware = httptransport.Middleware
 type Multipart = httprequest.Multipart
 type Request = httprequest.Request
 
-type HTTPClient struct {
+type streamhttp struct {
 	client  http.Client
 	baseURL url.URL
 	// mu protects access to middlewares for concurrent Use()/Request() calls.
@@ -41,8 +41,8 @@ type HTTPClient struct {
 // clone creates a shallow copy of the underlying http.Client and applies the
 // configured middlewares to the copy's Transport. This avoids mutating the
 // shared client or its Transport when building per-request middleware chains,
-// preventing data races when the HTTPClient is used concurrently.
-func (c *HTTPClient) clone() http.Client {
+// preventing data races when the streamhttp is used concurrently.
+func (c *streamhttp) clone() http.Client {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -59,63 +59,63 @@ func (c *HTTPClient) clone() http.Client {
 	return client
 }
 
-func NewClient(client http.Client, baseURL string) (*HTTPClient, error) {
+func NewClient(client http.Client, baseURL string) (*streamhttp, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base URL: %w", err)
 	}
 
-	return &HTTPClient{
+	return &streamhttp{
 		client:      client,
 		baseURL:     *u,
 		middlewares: []Middleware{},
 	}, nil
 }
 
-func (c *HTTPClient) url(path string) string {
+func (c *streamhttp) url(path string) string {
 	return c.baseURL.JoinPath(path).String()
 }
 
-func (c *HTTPClient) Use(middleware Middleware) *HTTPClient {
+func (c *streamhttp) Use(middleware Middleware) *streamhttp {
 	c.mu.Lock()
 	c.middlewares = append(c.middlewares, middleware)
 	c.mu.Unlock()
 	return c
 }
 
-func (c *HTTPClient) Request(ctx context.Context, method method, path string) *httprequest.Request {
+func (c *streamhttp) Request(ctx context.Context, method method, path string) *httprequest.Request {
 	return httprequest.NewRequest(ctx, c.clone(), string(method), c.url(path))
 }
 
-func (c *HTTPClient) MultipartRequest(ctx context.Context, method method, path string) *httprequest.Multipart {
+func (c *streamhttp) MultipartRequest(ctx context.Context, method method, path string) *httprequest.Multipart {
 	return httprequest.NewMultipart(ctx, c.clone(), string(method), c.url(path))
 }
 
-func (c *HTTPClient) GET(ctx context.Context, path string) *httprequest.Request {
+func (c *streamhttp) GET(ctx context.Context, path string) *httprequest.Request {
 	return c.Request(ctx, GET, path)
 }
 
-func (c *HTTPClient) POST(ctx context.Context, path string) *httprequest.Request {
+func (c *streamhttp) POST(ctx context.Context, path string) *httprequest.Request {
 	return c.Request(ctx, POST, path)
 }
 
-func (c *HTTPClient) PUT(ctx context.Context, path string) *httprequest.Request {
+func (c *streamhttp) PUT(ctx context.Context, path string) *httprequest.Request {
 	return c.Request(ctx, PUT, path)
 }
 
-func (c *HTTPClient) PATCH(ctx context.Context, path string) *httprequest.Request {
+func (c *streamhttp) PATCH(ctx context.Context, path string) *httprequest.Request {
 	return c.Request(ctx, PATCH, path)
 }
 
-func (c *HTTPClient) DELETE(ctx context.Context, path string) *httprequest.Request {
+func (c *streamhttp) DELETE(ctx context.Context, path string) *httprequest.Request {
 	return c.Request(ctx, DELETE, path)
 }
 
-func (c *HTTPClient) Multipart(ctx context.Context, path string) *httprequest.Multipart {
+func (c *streamhttp) Multipart(ctx context.Context, path string) *httprequest.Multipart {
 	return c.MultipartRequest(ctx, POST, path)
 }
 
-func (c *HTTPClient) WithLogger(logger *slog.Logger) *HTTPClient {
+func (c *streamhttp) WithLogger(logger *slog.Logger) *streamhttp {
 	return c.Use(httptransport.LoggingMiddleware(logger))
 }
 
