@@ -11,7 +11,7 @@ import (
 
 	"github.com/nativebpm/connectors/camunda/internal/tasks"
 	"github.com/nativebpm/connectors/camunda/internal/worker"
-	"github.com/nativebpm/connectors/httpclient"
+	"github.com/nativebpm/connectors/streamhttp"
 )
 
 type ExternalTask = worker.ExternalTask
@@ -21,15 +21,16 @@ type TopicRequest = worker.TopicRequest
 
 // Client represents a Camunda external task client
 type Client struct {
-	httpClient *httpclient.HTTPClient
+	httpClient *streamhttp.Client
 	workerID   string
 	logger     *slog.Logger
 }
 
 // NewClient creates a new Camunda external task client
-func NewClient(hostURL, workerID string, logger *slog.Logger) (*Client, error) {
+func NewClient(hostURL, workerID string, logger *slog.Logger,
+	middlewares ...func(http.RoundTripper) http.RoundTripper) (*Client, error) {
 	baseURL := hostURL + "/engine-rest"
-	httpClient, err := httpclient.NewClient(http.Client{Timeout: 30 * time.Second}, baseURL)
+	httpClient, err := streamhttp.NewClient(http.Client{Timeout: 30 * time.Second}, baseURL, middlewares...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}
@@ -39,22 +40,6 @@ func NewClient(hostURL, workerID string, logger *slog.Logger) (*Client, error) {
 		workerID:   workerID,
 		logger:     logger,
 	}, nil
-}
-
-// Use adds middleware to the HTTP client
-func (c *Client) Use(middleware httpclient.Middleware) *Client {
-	c.httpClient.Use(middleware)
-	return c
-}
-
-// WithLogger adds logging middleware to the HTTP client
-func (c *Client) WithLogger(logger *slog.Logger) *Client {
-	if logger == nil {
-		logger = slog.Default()
-	}
-	c.httpClient.WithLogger(logger)
-	c.logger = logger
-	return c
 }
 
 // TaskCompletion provides a fluent API for completing external tasks

@@ -13,7 +13,7 @@ import (
 
 	"github.com/nativebpm/connectors/camunda/internal/tasks"
 	"github.com/nativebpm/connectors/camunda/internal/vars"
-	"github.com/nativebpm/connectors/httpclient"
+	"github.com/nativebpm/connectors/streamhttp"
 )
 
 // TopicRequest represents a topic request for fetching tasks
@@ -110,7 +110,7 @@ type FailFunc func(errorMessage, errorDetails string, retries, retryTimeout int)
 
 // Worker manages external task polling and processing
 type Worker struct {
-	httpClient           *httpclient.HTTPClient
+	httpClient           *streamhttp.Client
 	workerID             string
 	logger               *slog.Logger
 	handlers             map[string]TaskHandler
@@ -124,7 +124,7 @@ type Worker struct {
 }
 
 // New creates a new external task worker
-func New(httpClient *httpclient.HTTPClient, workerID string, logger *slog.Logger) *Worker {
+func New(httpClient *streamhttp.Client, workerID string, logger *slog.Logger) *Worker {
 	if logger == nil {
 		logger = slog.Default()
 	}
