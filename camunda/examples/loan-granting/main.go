@@ -11,11 +11,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
 	"github.com/nativebpm/connectors/camunda"
 	"github.com/nativebpm/connectors/camunda/examples/loan-granting/handlers"
 	storepkg "github.com/nativebpm/connectors/camunda/examples/loan-granting/store"
-	"github.com/nativebpm/connectors/streamhttp"
+	"github.com/nativebpm/connectors/httpstream"
 )
 
 func main() {
@@ -35,12 +34,13 @@ func main() {
 	logger.Info("Submission throttle configured", "delay_ms", submissionDelayMs)
 
 	// Create a new Camunda client
-	client, err := camunda.NewClient("http://localhost:8080", "loan-worker", logger,
-		streamhttp.LoggingMiddleware(logger))
+	client, err := camunda.NewClient("http://localhost:8080", "loan-worker")
 	if err != nil {
 		logger.Error("Failed to create client", "error", err)
 		return
 	}
+
+	client.Use(httpstream.LoggingMiddleware(logger))
 
 	// Deploy the BPMN process
 	if err := deployProcess(ctx, client, logger); err != nil {

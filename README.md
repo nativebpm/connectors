@@ -1,20 +1,11 @@
+### Core connectors
 
-# Connectors
+- [httpstream](httpstream/)
 
-Monorepo
-
-### Utilities
-
-- [streamhttp](streamhttp/)
-
-### Service integrations
+### Service connectors
 
 - [gotenberg](gotenberg/)
 
-### Platform integrations
+### Platform connectors
 
 - [camunda](camunda/)
-
----
-
-See module README files for full documentation.

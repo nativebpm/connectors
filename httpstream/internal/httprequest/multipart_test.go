@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nativebpm/connectors/streamhttp/internal/httprequest"
+	"github.com/nativebpm/connectors/httpstream/internal/httprequest"
 )
 
 func TestNewMultipart(t *testing.T) {
