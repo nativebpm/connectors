@@ -1,4 +1,4 @@
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
-github.com/nativebpm/connectors/httpstream v0.0.0-20251011072506-df276209a8e8 h1:2/MOIafQWSCC8z4sk3eZN0Jjsh+RrkgAgMhqk1I2pQQ=
-github.com/nativebpm/connectors/httpstream v0.0.0-20251011072506-df276209a8e8/go.mod h1:nBNkMFg6xXbhDVT9h54UtDsRFCpsJnuwy0X1QXNXJIo=
+github.com/nativebpm/connectors/httpstream v0.0.1 h1:QEAUngoC0nXBghGcIT0NwtFj9222L+GZnvAQbkuqxCA=
+github.com/nativebpm/connectors/httpstream v0.0.1/go.mod h1:nBNkMFg6xXbhDVT9h54UtDsRFCpsJnuwy0X1QXNXJIo=

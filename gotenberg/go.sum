@@ -1,2 +1,2 @@
-github.com/nativebpm/connectors/httpstream v0.0.0-20251011063649-5fb2fbb0e519 h1:Cp2VyXMrrvQJM7na7vsovAWaxrm3qNnMzhT+6Msb3jM=
-github.com/nativebpm/connectors/httpstream v0.0.0-20251011063649-5fb2fbb0e519/go.mod h1:nBNkMFg6xXbhDVT9h54UtDsRFCpsJnuwy0X1QXNXJIo=
+github.com/nativebpm/connectors/httpstream v0.0.1 h1:QEAUngoC0nXBghGcIT0NwtFj9222L+GZnvAQbkuqxCA=
+github.com/nativebpm/connectors/httpstream v0.0.1/go.mod h1:nBNkMFg6xXbhDVT9h54UtDsRFCpsJnuwy0X1QXNXJIo=
