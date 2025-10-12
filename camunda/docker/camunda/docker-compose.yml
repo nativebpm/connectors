@@ -1,3 +1,6 @@
+include:
+  - ../sequin-docker-compose/docker-compose.ci.yaml
+
 name: camunda
 
 services:
@@ -20,8 +23,6 @@ services:
       retries: 5
       start_period: 2s
       start_interval: 1s
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     deploy:
       resources:
         limits:
