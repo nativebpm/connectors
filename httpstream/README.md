@@ -53,6 +53,7 @@ For large or dynamically generated payloads, this leads to:
 - [Streaming multipart upload](examples/multipart_streaming_example)
 - [Without fluent API (for comparison)](examples/multipart_streaming_example/multipart_streaming_without_fluent_api)
 - [Logger middleware](examples/logger_slog_example)
+- [Gotenbergo Client: Built on httpstream for efficient multipart uploads](https://github.com/nativebpm/gotenberg)
 
 ## License
 
