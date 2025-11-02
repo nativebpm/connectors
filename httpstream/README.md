@@ -23,6 +23,10 @@ Ideal for large JSON bodies, multipart uploads, generated archives, or continuou
 
 ## How It Works
 
+`httpstream` connects your writer directly to the HTTP transport.  
+Data is transmitted as it’s produced — the server can start processing immediately,  
+without waiting for the full body to be buffered.
+
 ```mermaid
 flowchart TB
     subgraph P["io.Pipe()"]
@@ -32,10 +36,6 @@ flowchart TB
     W["Writer (goroutine)"] -->|"writes into"| P
     P -->|"provides data to"| R["Reader"]
 ```
-
-`httpstream` connects your writer directly to the HTTP transport.  
-Data is transmitted as it’s produced — the server can start processing immediately,  
-without waiting for the full body to be buffered.
 
 ## Why Streaming Matters
 
