@@ -78,6 +78,14 @@ func (r *LibreOffice) WebhookErrorURL(url, method string) *LibreOffice {
 	return r
 }
 
+// WebhookEventsURL sets the webhook events URL for structured JSON event callbacks.
+// Added in Gotenberg v8.29.0. Structured JSON events (webhook.success, webhook.error)
+// are POSTed after each webhook operation. Gotenberg-Webhook-Error-Url becomes optional.
+func (r *LibreOffice) WebhookEventsURL(url string) *LibreOffice {
+	r.Gotenberg.WebhookEventsURL(url)
+	return r
+}
+
 // WebhookHeader adds a custom header to be sent with webhook requests.
 // Multiple headers can be added by calling this method multiple times.
 func (r *LibreOffice) WebhookHeader(key, value string) *LibreOffice {
@@ -295,4 +303,139 @@ func (r *LibreOffice) Metadata(key, value string) *LibreOffice {
 func (r *LibreOffice) Flatten(flatten bool) *LibreOffice {
 	r.Gotenberg.Bool("flatten", flatten)
 	return r
+}
+
+// NativeWatermarkText sets the text for LibreOffice's built-in watermark during PDF export.
+// Added in Gotenberg v8.28.0.
+func (r *LibreOffice) NativeWatermarkText(text string) *LibreOffice {
+	return r.Param("nativeWatermarkText", text)
+}
+
+// NativeWatermarkColor sets the color of the native watermark (e.g. "#FF0000").
+// Added in Gotenberg v8.28.0.
+func (r *LibreOffice) NativeWatermarkColor(color string) *LibreOffice {
+	return r.Param("nativeWatermarkColor", color)
+}
+
+// NativeWatermarkFontHeight sets the font height of the native watermark in points.
+// Added in Gotenberg v8.28.0.
+func (r *LibreOffice) NativeWatermarkFontHeight(height int) *LibreOffice {
+	return r.Param("nativeWatermarkFontHeight", strconv.Itoa(height))
+}
+
+// NativeWatermarkRotateAngle sets the rotation angle of the native watermark in degrees.
+// Added in Gotenberg v8.28.0.
+func (r *LibreOffice) NativeWatermarkRotateAngle(angle int) *LibreOffice {
+	return r.Param("nativeWatermarkRotateAngle", strconv.Itoa(angle))
+}
+
+// NativeWatermarkFontName sets the font name for the native watermark.
+// Added in Gotenberg v8.28.0.
+func (r *LibreOffice) NativeWatermarkFontName(name string) *LibreOffice {
+	return r.Param("nativeWatermarkFontName", name)
+}
+
+// NativeTiledWatermarkText sets a tiled watermark text using LibreOffice's built-in rendering.
+// Added in Gotenberg v8.28.0.
+func (r *LibreOffice) NativeTiledWatermarkText(text string) *LibreOffice {
+	return r.Param("nativeTiledWatermarkText", text)
+}
+
+// InitialView sets the initial view when the PDF is opened (e.g. "UseOutlines", "UseThumbs").
+// Added in Gotenberg v8.29.0.
+func (r *LibreOffice) InitialView(view string) *LibreOffice {
+	return r.Param("initialView", view)
+}
+
+// InitialPage sets the initial page number displayed when the PDF is opened.
+// Added in Gotenberg v8.29.0.
+func (r *LibreOffice) InitialPage(page int) *LibreOffice {
+	return r.Param("initialPage", strconv.Itoa(page))
+}
+
+// Magnification sets the magnification mode when the PDF is opened
+// (e.g. "Default", "Fit", "FitWidth", "FitHeight").
+// Added in Gotenberg v8.29.0.
+func (r *LibreOffice) Magnification(mag string) *LibreOffice {
+	return r.Param("magnification", mag)
+}
+
+// Zoom sets the zoom percentage when the PDF is opened (used when Magnification is not set).
+// Added in Gotenberg v8.29.0.
+func (r *LibreOffice) Zoom(zoom int) *LibreOffice {
+	return r.Param("zoom", strconv.Itoa(zoom))
+}
+
+// PageLayout sets the page layout when the PDF is opened
+// (e.g. "SinglePage", "Continuous", "ContinuousFacing").
+// Added in Gotenberg v8.29.0.
+func (r *LibreOffice) PageLayout(layout string) *LibreOffice {
+	return r.Param("pageLayout", layout)
+}
+
+// FirstPageOnLeft sets whether the first page is shown on the left in facing-page view.
+// Added in Gotenberg v8.29.0.
+func (r *LibreOffice) FirstPageOnLeft(v bool) *LibreOffice {
+	return r.Bool("firstPageOnLeft", v)
+}
+
+// ResizeWindowToInitialPage sets whether to resize the viewer window to the initial page.
+// Added in Gotenberg v8.29.0.
+func (r *LibreOffice) ResizeWindowToInitialPage(v bool) *LibreOffice {
+	return r.Bool("resizeWindowToInitialPage", v)
+}
+
+// CenterWindow sets whether to center the viewer window on screen when opened.
+// Added in Gotenberg v8.29.0.
+func (r *LibreOffice) CenterWindow(v bool) *LibreOffice {
+	return r.Bool("centerWindow", v)
+}
+
+// OpenInFullScreenMode sets whether to open the PDF in full-screen mode.
+// Added in Gotenberg v8.29.0.
+func (r *LibreOffice) OpenInFullScreenMode(v bool) *LibreOffice {
+	return r.Bool("openInFullScreenMode", v)
+}
+
+// DisplayPDFDocumentTitle sets whether to display the document title in the viewer title bar.
+// Added in Gotenberg v8.29.0.
+func (r *LibreOffice) DisplayPDFDocumentTitle(v bool) *LibreOffice {
+	return r.Bool("displayPDFDocumentTitle", v)
+}
+
+// HideViewerMenubar sets whether to hide the viewer's menu bar.
+// Added in Gotenberg v8.29.0.
+func (r *LibreOffice) HideViewerMenubar(v bool) *LibreOffice {
+	return r.Bool("hideViewerMenubar", v)
+}
+
+// HideViewerToolbar sets whether to hide the viewer's toolbar.
+// Added in Gotenberg v8.29.0.
+func (r *LibreOffice) HideViewerToolbar(v bool) *LibreOffice {
+	return r.Bool("hideViewerToolbar", v)
+}
+
+// HideViewerWindowControls sets whether to hide the viewer's window controls.
+// Added in Gotenberg v8.29.0.
+func (r *LibreOffice) HideViewerWindowControls(v bool) *LibreOffice {
+	return r.Bool("hideViewerWindowControls", v)
+}
+
+// UseTransitionEffects sets whether to use slide transition effects in Impress presentations.
+// Added in Gotenberg v8.29.0.
+func (r *LibreOffice) UseTransitionEffects(v bool) *LibreOffice {
+	return r.Bool("useTransitionEffects", v)
+}
+
+// OpenBookmarkLevels sets the number of bookmark levels to expand when the PDF is opened.
+// Added in Gotenberg v8.29.0.
+func (r *LibreOffice) OpenBookmarkLevels(levels int) *LibreOffice {
+	return r.Param("openBookmarkLevels", strconv.Itoa(levels))
+}
+
+// EmbedsMetadata sets per-file metadata for embedded files as a JSON object
+// keyed by filename with fields like mimeType, relationship, etc.
+// Added in Gotenberg v8.31.0.
+func (r *LibreOffice) EmbedsMetadata(metadataJSON string) *LibreOffice {
+	return r.Param("embedsMetadata", metadataJSON)
 }

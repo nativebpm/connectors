@@ -126,6 +126,15 @@ func (r *Gotenberg) WebhookErrorURL(url, method string) *Gotenberg {
 	return r
 }
 
+// WebhookEventsURL sets the webhook events URL for structured JSON event callbacks.
+// Added in Gotenberg v8.29.0. When set, structured JSON events (webhook.success, webhook.error)
+// are POSTed after each webhook operation, with correlationId and timestamp.
+// Gotenberg-Webhook-Error-Url becomes optional when this header is set.
+func (r *Gotenberg) WebhookEventsURL(url string) *Gotenberg {
+	r.Req.Header("Gotenberg-Webhook-Events-Url", url)
+	return r
+}
+
 // WebhookHeader adds a custom header to be sent with webhook requests.
 // Multiple headers can be added by calling this method multiple times.
 func (r *Gotenberg) WebhookHeader(key, value string) *Gotenberg {

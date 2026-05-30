@@ -149,6 +149,14 @@ func (r *Chromium) WebhookErrorURL(url, method string) *Chromium {
 	return r
 }
 
+// WebhookEventsURL sets the webhook events URL for structured JSON event callbacks.
+// Added in Gotenberg v8.29.0. Structured JSON events (webhook.success, webhook.error)
+// are POSTed after each webhook operation. Gotenberg-Webhook-Error-Url becomes optional.
+func (r *Chromium) WebhookEventsURL(url string) *Chromium {
+	r.Gotenberg.WebhookEventsURL(url)
+	return r
+}
+
 // WebhookHeader adds a custom header to be sent with webhook requests.
 // Multiple headers can be added by calling this method multiple times.
 func (r *Chromium) WebhookHeader(key, value string) *Chromium {
@@ -285,4 +293,48 @@ func (r *Chromium) WaitDelay(value string) *Chromium {
 // WaitForExpression sets the JavaScript expression to wait before converting an HTML document into PDF until it returns true.
 func (r *Chromium) WaitForExpression(value string) *Chromium {
 	return r.Param("waitForExpression", value)
+}
+
+// WaitForSelector waits for a specific node matching the given CSS selector to become
+// visible before converting to PDF. Alternative to WaitForExpression.
+// Added in Gotenberg v8.26.0.
+func (r *Chromium) WaitForSelector(selector string) *Chromium {
+	return r.Param("waitForSelector", selector)
+}
+
+// IgnoreResourceHttpStatusDomains excludes resources from failOnResourceHttpStatusCodes
+// checks based on their hostname. Accepts a JSON array of domain strings.
+// Added in Gotenberg v8.26.0.
+func (r *Chromium) IgnoreResourceHttpStatusDomains(domainsJSON string) *Chromium {
+	return r.Param("ignoreResourceHttpStatusDomains", domainsJSON)
+}
+
+// EmulatedMediaFeatures sets a JSON array of CSS media features to simulate,
+// e.g. [{"media": "prefers-color-scheme", "value": "dark"}].
+// Added in Gotenberg v8.27.0.
+func (r *Chromium) EmulatedMediaFeatures(featuresJSON string) *Chromium {
+	return r.Param("emulatedMediaFeatures", featuresJSON)
+}
+
+// SkipNetworkAlmostIdleEvent controls whether to wait for the "network almost idle"
+// event (at most 2 open connections for 500ms) before conversion.
+// Default is true (skip). Set to false to enable this intermediate wait.
+// Added in Gotenberg v8.29.0.
+func (r *Chromium) SkipNetworkAlmostIdleEvent(skip bool) *Chromium {
+	return r.Bool("skipNetworkAlmostIdleEvent", skip)
+}
+
+// EmbedsMetadata sets per-file metadata for embedded files as a JSON object
+// keyed by filename with fields like mimeType, relationship, etc.
+// Added in Gotenberg v8.31.0.
+func (r *Chromium) EmbedsMetadata(metadataJSON string) *Chromium {
+	return r.Param("embedsMetadata", metadataJSON)
+}
+
+// ScreenshotDeviceScaleFactor controls the pixel density (device scale factor)
+// for screenshots on /forms/chromium/screenshot/{html,url,markdown}.
+// Defaults to 1. Higher values produce higher-resolution screenshots.
+// Added in Gotenberg v8.33.0.
+func (r *Chromium) ScreenshotDeviceScaleFactor(factor float64) *Chromium {
+	return r.Float("deviceScaleFactor", factor)
 }

@@ -5,6 +5,7 @@ package pdfengines
 import (
 	"context"
 	"io"
+	"strconv"
 	"time"
 
 	"github.com/nativebpm/connectors/gotenberg/v8/internal/gotenberg"
@@ -59,6 +60,45 @@ func (r *PDFEngines) Flatten(ctx context.Context) *PDFEngines {
 	return r
 }
 
+// Watermark creates a request to apply a watermark behind page content.
+// Supports text, image, or PDF sources via Param/File methods.
+// Added in Gotenberg v8.28.0.
+func (r *PDFEngines) Watermark(ctx context.Context) *PDFEngines {
+	r.Req = r.HttpStream.Multipart(ctx, "/forms/pdfengines/watermark")
+	return r
+}
+
+// Stamp creates a request to apply a stamp on top of page content.
+// Supports text, image, or PDF sources via Param/File methods.
+// Added in Gotenberg v8.28.0.
+func (r *PDFEngines) Stamp(ctx context.Context) *PDFEngines {
+	r.Req = r.HttpStream.Multipart(ctx, "/forms/pdfengines/stamp")
+	return r
+}
+
+// Rotate creates a request to rotate PDF pages by 90°, 180°, or 270°.
+// Use RotateAngle and RotatePages to configure the rotation.
+// Added in Gotenberg v8.28.0.
+func (r *PDFEngines) Rotate(ctx context.Context) *PDFEngines {
+	r.Req = r.HttpStream.Multipart(ctx, "/forms/pdfengines/rotate")
+	return r
+}
+
+// BookmarksRead creates a request to read the bookmark outline from PDF files as JSON.
+// Added in Gotenberg v8.28.0.
+func (r *PDFEngines) BookmarksRead(ctx context.Context) *PDFEngines {
+	r.Req = r.HttpStream.Multipart(ctx, "/forms/pdfengines/bookmarks/read")
+	return r
+}
+
+// BookmarksWrite creates a request to write bookmarks to PDF files.
+// Accepts a flat list (applied to all) or a filename-keyed map via Bookmarks().
+// Added in Gotenberg v8.28.0.
+func (r *PDFEngines) BookmarksWrite(ctx context.Context) *PDFEngines {
+	r.Req = r.HttpStream.Multipart(ctx, "/forms/pdfengines/bookmarks/write")
+	return r
+}
+
 // Send executes the request and returns the response.
 // Returns an error if the request fails.
 func (r *PDFEngines) Send() (*gotenberg.Response, error) {
@@ -98,6 +138,14 @@ func (r *PDFEngines) WebhookURL(url, method string) *PDFEngines {
 // WebhookErrorURL sets the webhook URL and HTTP method for failed operations.
 func (r *PDFEngines) WebhookErrorURL(url, method string) *PDFEngines {
 	r.Gotenberg.WebhookErrorURL(url, method)
+	return r
+}
+
+// WebhookEventsURL sets the webhook events URL for structured JSON event callbacks.
+// Added in Gotenberg v8.29.0. Structured JSON events (webhook.success, webhook.error)
+// are POSTed after each webhook operation. Gotenberg-Webhook-Error-Url becomes optional.
+func (r *PDFEngines) WebhookEventsURL(url string) *PDFEngines {
+	r.Gotenberg.WebhookEventsURL(url)
 	return r
 }
 
@@ -170,8 +218,57 @@ func (r *PDFEngines) SplitUnify(unify bool) *PDFEngines {
 	return r
 }
 
-// Flatten sets the flatten flag.
+// FlattenPDF sets the flatten flag.
 func (r *PDFEngines) FlattenPDF(flatten bool) *PDFEngines {
 	r.Gotenberg.Bool("flatten", flatten)
 	return r
+}
+
+// RotateAngle sets the rotation angle for pages: 90, 180, or 270 degrees.
+// Used with Rotate route and as optional field on composite routes.
+// Added in Gotenberg v8.28.0.
+func (r *PDFEngines) RotateAngle(angle int) *PDFEngines {
+	return r.Param("rotateAngle", strconv.Itoa(angle))
+}
+
+// RotatePages sets the page selection for rotation (e.g. "1-3", "2,4", "all").
+// Added in Gotenberg v8.28.0.
+func (r *PDFEngines) RotatePages(pages string) *PDFEngines {
+	return r.Param("rotatePages", pages)
+}
+
+// Bookmarks sets the bookmarks JSON for BookmarksWrite or Merge routes.
+// Accepts a flat list or a filename-keyed map as a JSON string.
+// Added in Gotenberg v8.28.0.
+func (r *PDFEngines) Bookmarks(json string) *PDFEngines {
+	return r.Param("bookmarks", json)
+}
+
+// AutoIndexBookmarks extracts and reindexes existing bookmarks from input files during merge.
+// Added in Gotenberg v8.28.0.
+func (r *PDFEngines) AutoIndexBookmarks(v bool) *PDFEngines {
+	return r.Bool("autoIndexBookmarks", v)
+}
+
+// WatermarkFile adds a watermark source file (image or PDF) to the request.
+// The fieldName should be "watermark" for the watermark route or composite routes.
+// Added in Gotenberg v8.28.0.
+func (r *PDFEngines) WatermarkFile(filename string, content io.Reader) *PDFEngines {
+	r.Gotenberg.File("watermark", filename, content)
+	return r
+}
+
+// StampFile adds a stamp source file (image or PDF) to the request.
+// The fieldName should be "stamp" for the stamp route or composite routes.
+// Added in Gotenberg v8.28.0.
+func (r *PDFEngines) StampFile(filename string, content io.Reader) *PDFEngines {
+	r.Gotenberg.File("stamp", filename, content)
+	return r
+}
+
+// EmbedsMetadata sets per-file metadata for embedded files as a JSON object
+// keyed by filename with fields like mimeType, relationship, etc.
+// Added in Gotenberg v8.31.0.
+func (r *PDFEngines) EmbedsMetadata(metadataJSON string) *PDFEngines {
+	return r.Param("embedsMetadata", metadataJSON)
 }
