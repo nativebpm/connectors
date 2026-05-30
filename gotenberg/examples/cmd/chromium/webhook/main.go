@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nativebpm/connectors/gotenberg"
-	"github.com/nativebpm/connectors/gotenberg/examples/model"
-	"github.com/nativebpm/connectors/gotenberg/examples/pkg/image"
-	"github.com/nativebpm/connectors/gotenberg/examples/pkg/templates/invoice"
+	"github.com/nativebpm/connectors/gotenberg/v8"
+	"github.com/nativebpm/connectors/gotenberg/v8/examples/model"
+	"github.com/nativebpm/connectors/gotenberg/v8/examples/pkg/image"
+	"github.com/nativebpm/connectors/gotenberg/v8/examples/pkg/templates/invoice"
 )
 
 // cleanupPDFFiles removes all PDF files from the current directory
