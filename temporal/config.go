@@ -2,6 +2,8 @@ package temporal
 
 import (
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 // Config содержит параметры подключения к Temporal Server или Temporal Cloud.
@@ -20,8 +22,12 @@ type Config struct {
 	DBName     string
 }
 
-// LoadFromEnv загружает настройки из переменных окружения с разумными дефолтами.
+// LoadFromEnv загружает настройки из переменных окружения (и файлов .env/temporal.env) с разумными дефолтами.
 func LoadFromEnv() *Config {
+	// Пытаемся загрузить файлы конфигурации (.env или temporal.env)
+	_ = godotenv.Load()
+	_ = godotenv.Load("temporal.env")
+
 	hostPort := os.Getenv("TEMPORAL_HOST_PORT")
 	if hostPort == "" {
 		hostPort = "127.0.0.1:7233"

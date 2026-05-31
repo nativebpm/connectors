@@ -18,4 +18,5 @@ __debug_bin*
 *.log
 *.out
 *.exe
+*.env
 go.work.sum
