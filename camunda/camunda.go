@@ -208,6 +208,14 @@ type TaskHandler interface {
 	Handle(ctx context.Context, client *Client, task ExternalTask, complete CompleteFunc, fail FailFunc) error
 }
 
+// TaskHandlerFunc is an adapter to allow the use of ordinary functions as task handlers.
+type TaskHandlerFunc func(ctx context.Context, client *Client, task ExternalTask, complete CompleteFunc, fail FailFunc) error
+
+// Handle calls f(ctx, client, task, complete, fail).
+func (f TaskHandlerFunc) Handle(ctx context.Context, client *Client, task ExternalTask, complete CompleteFunc, fail FailFunc) error {
+	return f(ctx, client, task, complete, fail)
+}
+
 // Worker manages external task polling and processing with a clean handler-based architecture
 type Worker struct {
 	internalWorker *worker.Worker
