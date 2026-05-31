@@ -153,6 +153,12 @@ func main() {
 
 ## 4. Performance Metrics
 
-Under benchmark testing deploying the `loan-granting.bpmn` workflow with **500 concurrent process instances** (generating 2000+ external tasks total):
-- **REST Polling**: Aggressive polling at scale experiences lock wait states and lock timeouts (60 seconds) when parent process instance tasks run in parallel.
-- **Sequin WAL CDC**: Replaces REST polling overhead completely, scaling efficiently with minimal database load and achieving up to **100 Tasks/sec (TPS)** without direct database access.
+Under benchmark testing deploying the `loan-granting.bpmn` workflow, we evaluated traditional REST polling and WAL CDC (using Sequin Pull consumer) under heavy scaling pressures:
+- **REST Polling**: Aggressive polling at scale experiences lock wait states and transactional rollbacks, leading to 60-second lock timeouts under concurrent completion of parallel tasks.
+- **Sequin WAL CDC (Database-Free)**:
+  - **500 instances** (2,047 tasks): Completed in **20.51s** at **24.37 RPS / 99.79 TPS**.
+  - **1000 instances** (4,014 tasks): Completed in **71.52s** at **13.98 RPS / 56.13 TPS** (Latency metrics: p50=57s, p90=67.5s, p99=70.4s).
+  - **2000 instances** (8,038 tasks): Completed in **82.41s** at **24.27 RPS / 97.54 TPS**.
+  - **3000 instances** (12,027 tasks): Completed in **133.62s** at **22.45 RPS / 90.01 TPS** (This is the peak load limit where PostgreSQL CPU saturation and TCP connection pooling limits are reached).
+
+For full benchmark reports, refer to the detailed [report](examples/loadtest/camunda-load-test-results.md).
