@@ -30,7 +30,11 @@ func NewClient(client *http.Client, baseURL string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Client{HttpClient: *client, BaseURL: *u}, nil
+	c := http.Client{}
+	if client != nil {
+		c = *client
+	}
+	return &Client{HttpClient: c, BaseURL: *u}, nil
 }
 
 func (c *Client) url(path string) string {
