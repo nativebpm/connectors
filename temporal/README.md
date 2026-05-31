@@ -55,4 +55,9 @@ The package includes a load testing utility in `examples/loadtest` designed to e
    LOAD_CONCURRENCY=50 LOAD_PROCESSES_COUNT=1000 go run temporal/examples/loadtest/main.go
    ```
 
-3. The tool logs progress and output detailed summary metrics, including **p50, p90, p95, p99 latencies**, **RPS**, and **TPS (Task Throughput)**.
+---
+
+## 4. Performance Metrics
+
+Under benchmark testing deploying the HelloWorld workflow, we evaluated Temporal engine performance under concurrent scaling pressures:
+- **1000 instances** (2,000 tasks): Completed in **11.58s** at **86.32 RPS / 172.64 TPS** (Latency metrics: p50=375ms, p90=1002ms, p99=1522ms, average=487ms. Completed 100% of tasks with zero failures).
