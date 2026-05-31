@@ -210,10 +210,18 @@ func (sw *SequinWorker) processMessage(ctx context.Context, msg sequin.Message) 
 
 	err := sw.client.Lock(record.ID, lockDurationMs).Context(ctx).Execute()
 	if err != nil {
-		// If the lock failed (e.g. task was already completed or deleted in Camunda)
-		// we should ack the message to discard it.
-		sw.logger.Warn("Failed to acquire lock via REST API (task might be completed, deleted, or locked)", "task_id", record.ID, "error", err)
-		sw.ackMessage(context.Background(), msg.AckID)
+		// If the task was not found (404), it means it was already completed or deleted in Camunda.
+		// In this case, ack to discard the message from Sequin queue.
+		if strings.Contains(err.Error(), "status 404") {
+			sw.logger.Debug("Task not found via REST API (likely completed or deleted), acking change", "task_id", record.ID)
+			sw.ackMessage(context.Background(), msg.AckID)
+			return
+		}
+
+		// For other errors (transient network issues, 500 internal errors, or locked by another worker),
+		// we send nack to retry later.
+		sw.logger.Warn("Lock request failed with transient error, nacking in Sequin", "task_id", record.ID, "error", err)
+		sw.nackMessage(context.Background(), msg.AckID)
 		return
 	}
 
@@ -223,6 +231,8 @@ func (sw *SequinWorker) processMessage(ctx context.Context, msg sequin.Message) 
 	variables, err := sw.client.GetProcessVariables(ctx, record.ProcInstID)
 	if err != nil {
 		sw.logger.Error("Failed to fetch process variables for task via REST", "task_id", record.ID, "error", err)
+		// Explicitly unlock task in Camunda before nacking in Sequin so that subsequent attempts can lock it instantly.
+		_ = sw.client.Unlock(record.ID).Context(context.Background()).Execute()
 		sw.nackMessage(context.Background(), msg.AckID)
 		return
 	}
@@ -259,7 +269,11 @@ func (sw *SequinWorker) processMessage(ctx context.Context, msg sequin.Message) 
 		sw.logger.Error("Task handler returned error", "task_id", record.ID, "error", err)
 		if strings.Contains(err.Error(), "OptimisticLockingException") {
 			backoff := time.Duration(500+rnd.Intn(1000)) * time.Millisecond
-			sw.logger.Warn("Optimistic locking collision, backing off and nacking in Sequin", "task_id", record.ID, "backoff", backoff)
+			sw.logger.Warn("Optimistic locking collision, backing off, unlocking and nacking in Sequin", "task_id", record.ID, "backoff", backoff)
+			
+			// Explicitly unlock task in Camunda before nacking in Sequin so that subsequent attempts can lock it instantly.
+			_ = sw.client.Unlock(record.ID).Context(context.Background()).Execute()
+			
 			time.Sleep(backoff)
 			sw.nackMessage(context.Background(), msg.AckID)
 		} else {
