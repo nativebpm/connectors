@@ -429,3 +429,60 @@ func (tu *TaskUnlock) Execute() error {
 
 	return nil
 }
+
+// TaskLock provides a fluent API for locking tasks
+type TaskLock struct {
+	httpClient *httpstream.Client
+	workerID   string
+	ctx        context.Context
+	taskID     string
+	duration   int
+}
+
+// NewTaskLock creates a new TaskLock builder
+func NewTaskLock(httpClient *httpstream.Client, workerID, taskID string, duration int) *TaskLock {
+	return &TaskLock{
+		httpClient: httpClient,
+		workerID:   workerID,
+		ctx:        context.Background(),
+		taskID:     taskID,
+		duration:   duration,
+	}
+}
+
+// Context sets the context for the lock request
+func (tl *TaskLock) Context(ctx context.Context) *TaskLock {
+	tl.ctx = ctx
+	return tl
+}
+
+// Execute sends the lock request
+func (tl *TaskLock) Execute() error {
+	req := struct {
+		WorkerID     string `json:"workerId"`
+		LockDuration int    `json:"lockDuration"`
+	}{
+		WorkerID:     tl.workerID,
+		LockDuration: tl.duration,
+	}
+
+	resp, err := tl.httpClient.POST(tl.ctx, "/external-task/{taskID}/lock").
+		PathParam("taskID", tl.taskID).
+		JSON(req).
+		Send()
+	if err != nil {
+		return fmt.Errorf("failed to send lock request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("lock request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}

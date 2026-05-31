@@ -111,10 +111,6 @@ func main() {
 	var normalWorker *camunda.Worker
 
 	if useSequin {
-		dbDSN := os.Getenv("DB_DSN")
-		if dbDSN == "" {
-			dbDSN = "postgres://camunda:camunda@localhost:7477/process-engine?sslmode=disable"
-		}
 		sequinURL := os.Getenv("SEQUIN_URL")
 		if sequinURL == "" {
 			sequinURL = "http://localhost:7376"
@@ -125,7 +121,7 @@ func main() {
 		}
 
 		var err error
-		sequinWorker, err = camunda.NewSequinWorker(client, dbDSN, sequinURL, sequinConsumer, logger)
+		sequinWorker, err = camunda.NewSequinWorker(client, sequinURL, sequinConsumer, logger)
 		if err != nil {
 			logger.Error("Failed to create Sequin worker", "error", err)
 			return

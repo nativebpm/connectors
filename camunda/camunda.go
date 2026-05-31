@@ -84,6 +84,41 @@ func (c *Client) Unlock(taskID string) *TaskUnlock {
 	return tasks.NewTaskUnlock(c.httpClient, c.workerID, taskID)
 }
 
+// TaskLock provides a fluent API for locking tasks
+type TaskLock = tasks.TaskLock
+
+// Lock creates a new TaskLock builder
+func (c *Client) Lock(taskID string, duration int) *TaskLock {
+	return tasks.NewTaskLock(c.httpClient, c.workerID, taskID, duration)
+}
+
+// GetProcessVariables retrieves all variables of a process instance from Camunda REST API
+func (c *Client) GetProcessVariables(ctx context.Context, processInstanceID string) (map[string]Variable, error) {
+	resp, err := c.httpClient.GET(ctx, "/process-instance/{id}/variables").
+		PathParam("id", processInstanceID).
+		Send()
+	if err != nil {
+		return nil, fmt.Errorf("failed to send get variables request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("get variables request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var variables map[string]Variable
+	if err := json.Unmarshal(body, &variables); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal variables: %w", err)
+	}
+
+	return variables, nil
+}
+
 // StartProcessInstance starts a process instance and sets the businessKey
 // The variables map can be nil or empty; heavy application data should be stored
 // outside Camunda (for example in an in-memory store) and referenced by businessKey.

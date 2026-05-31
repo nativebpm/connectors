@@ -1,6 +1,6 @@
-# Architectural Analysis & Load Testing Report (with WAL CDC Support)
+# Architectural Analysis & Load Testing Report (with Database-Free WAL CDC Support)
 
-This document provides a detailed architectural analysis of the Go client for Camunda 7 External Tasks, detailing both the standard REST polling worker and the high-performance **WAL-based Change Data Capture (CDC)** worker using Sequin. It compiles benchmarking metrics, analysis of system bottlenecks, and configuration recommendations.
+This document provides a detailed architectural analysis of the Go client for Camunda 7 External Tasks, detailing both the standard REST polling worker and the database-free **WAL-based Change Data Capture (CDC)** worker using Sequin. It compiles benchmarking metrics, analysis of system bottlenecks, and configuration recommendations.
 
 ---
 
@@ -8,14 +8,14 @@ This document provides a detailed architectural analysis of the Go client for Ca
 
 The `camunda` Go package supports two distinct processing architectures:
 1. **Standard REST Polling Architecture**: Aggressively polls Camunda Engine using `/fetchAndLock` REST requests with long-polling timeouts.
-2. **WAL logical replication (CDC) Architecture**: Captures database transactions directly from PostgreSQL WAL logs via **Sequin**, locks tasks atomically via direct SQL updates, and completes tasks via REST.
+2. **WAL logical replication (CDC) Architecture (Database-Free)**: Captures database transactions directly from PostgreSQL WAL logs via **Sequin**, locks tasks and retrieves process variables solely via **Camunda REST APIs**, and completes tasks via REST. The worker has **zero direct connection** to the Camunda database.
 
 ### Component Diagram
 
 ```mermaid
 graph TD
     subgraph "Go Client (Worker App)"
-        Worker["SequinWorker / REST Worker"]
+        Worker["SequinWorker (camunda.SequinWorker)"]
         TC["TaskCompletion (internal/tasks)"]
         TF["TaskFailure (internal/tasks)"]
         Handlers["Registered TaskHandlers"]
@@ -34,14 +34,15 @@ graph TD
     %% WAL CDC path
     DB -->|WAL Logs| WAL
     WAL -->|Logical CDC Stream| Sequin
-    Sequin -->|HTTP Pull Events| Worker
+    Sequin -->|1. HTTP Pull Events| Worker
     
     %% Task execution path
-    Worker -->|Lock via direct UPDATE| DB
-    Worker -->|Execute Handler| Handlers
-    Handlers -->|Execute complete| TC
-    TC -->|POST /complete| REST
-    REST -->|Commit transaction| DB
+    Worker -->|2. POST /lock| REST
+    Worker -->|3. GET /variables| REST
+    Worker -->|4. Run Handler| Handlers
+    Handlers -->|5. Complete Task| TC
+    TC -->|6. POST /complete| REST
+    REST -->|7. Commit State| DB
 ```
 
 ### Core Architecture Concepts
@@ -51,16 +52,16 @@ graph TD
    - Only events relating to the `act_ru_ext_task` table are captured and delivered, resulting in near-zero idle database/network overhead.
    - Database schemas and logical slot configs are fully versioned and managed using **Atlas Go**, applied automatically when the engine tables are ready.
 
-2. **Direct Atomicity database locking**:
-   - When Sequin delivers a task-creation event, the `SequinWorker` attempts to acquire a lock directly in PostgreSQL:
-     ```sql
-     UPDATE act_ru_ext_task 
-     SET lock_exp_time_ = $1, worker_id_ = $2, retries_ = $3 
-     WHERE id_ = $4 AND (lock_exp_time_ IS NULL OR lock_exp_time_ < NOW())
-     ```
-   - This ensures exactly-once execution safety and acts as a lightweight optimistic lock.
+2. **Database-Free Decoupling**:
+   - The Go worker client does not require a database connection string (`sw.db` is completely removed).
+   - It communicates with the database layer exclusively through Sequin (on the read/CDC side) and through official Camunda REST APIs (on the write/completion side). This achieves clean architecture separation and protects the database from unauthorized direct updates.
 
-3. **HTTP Connection Pooling & Transport Tuning**:
+3. **Concurrency Control via Sequin Stream**:
+   - Concurrency control between workers is managed by Sequin's native **HTTP Pull Consumer Visibility Timeout**. When a worker pulls a task via `/receive`, Sequin makes it invisible to other workers.
+   - The worker marks the task locked in Camunda using `POST /external-task/{id}/lock` to satisfy the engine completion requirements.
+   - If a transient database rollback (`OptimisticLockingException`) occurs, the worker simply sends a negative acknowledgment (`nack`) to Sequin. Sequin immediately makes the message available for redelivery, initiating an instant retry loop without database locking conflicts.
+
+4. **HTTP Connection Pooling & Transport Tuning**:
    - Both the Camunda Client and the Sequin Worker are configured with a customized `http.Transport` pool:
      - `MaxIdleConns = 100`
      - `MaxIdleConnsPerHost = 100`
@@ -71,7 +72,7 @@ graph TD
 
 ## 2. Load Testing & Benchmark Metrics
 
-We ran benchmarks deploying the `loan-granting.bpmn` workflow, concurrently submitting **100 process instances** (yielding 400 external tasks total). We compare standard REST polling vs. Sequin CDC processing under varying concurrency parameters.
+We ran benchmarks deploying the `loan-granting.bpmn` workflow, concurrently submitting process instances under varying concurrency parameters.
 
 ### Benchmark Metrics Table
 
@@ -82,7 +83,7 @@ We ran benchmarks deploying the `loan-granting.bpmn` workflow, concurrently subm
 | **REST-50** | 50 | REST Polling | 100 | 400 | 1.70 s | **58.67 /s** | **234.70 /s** | 0 | **Success**. Lucky run with no optimistic lock deadlocks. |
 | **CDC-5** | 5 | Sequin CDC | 100 | 400 | 5.77 s | **17.32 /s** | **69.27 /s** | 0 | **Success**. Highly stable, low CPU overhead. |
 | **CDC-20** | 20 | Sequin CDC | 100 | 400 | 111.4 s | **0.90 /s** | **3.60 /s** | 0 | **Contention / Lock Timeout**. Parallel Multi-Instance completions led to consecutive `OptimisticLockingException` rollbacks, causing locks to expire after the configured timeout. |
-| **CDC-500** | 30 | Sequin CDC | 500 | 2000 (2115) | 24.28 s | **20.60 /s** | **87.13 /s** | 0 | **Success (Self-Healing)**. Peak throughput under heavy load. Optimistic lock contentions were automatically resolved via immediate database-level unlocking. |
+| **CDC-500** | 30 | Sequin CDC (REST) | 500 | 2000 (2047) | 20.51 s | **24.37 /s** | **99.79 /s** | 0 | **Success (Database-Free)**. Peak performance. Go worker does not access Camunda DB directly. Locking and variables fetching are performed via REST APIs, while concurrency control is delegated to Sequin Stream. |
 
 ---
 
@@ -97,11 +98,11 @@ We ran benchmarks deploying the `loan-granting.bpmn` workflow, concurrently subm
 2. **Underlying Lock Expirations**:
    - In REST polling, locked tasks timeout in 60s. In the CDC worker, locked tasks originally had a 5-minute timeout. If a task fails its retries, it hangs until the lock expires, showing the importance of tuning `lockDuration` on the CDC client.
 
-3. **Self-Healing Resolution via CDC DB Unlocking**:
-   - To prevent tasks from hanging for the duration of the lock, we optimized `SequinWorker`:
-     - The `lockDuration` was reduced from 5 minutes to **30 seconds**.
-     - If a task completion fails due to `OptimisticLockingException` (after the 3 standard client-side retries), the worker immediately resets the database lock columns (`lock_exp_time_ = NULL`, `worker_id_ = NULL`) instead of marking the task as failed in Camunda.
-     - This `UPDATE` statement triggers a new logical replication event in the Postgres WAL. Sequin captures it and streams it back to the worker, which instantly retries processing, allowing swift completion without artificial delays.
+3. **Self-Healing Resolution via Sequin NACK**:
+   - To prevent tasks from hanging for the duration of the lock, we optimized `SequinWorker` to run **database-free**:
+     - Concurrency and delivery guarantees are managed by Sequin Stream.
+     - If a task completion fails due to `OptimisticLockingException` (after the 3 standard client-side retries), the worker immediately sends a `nack` to Sequin.
+     - Sequin immediately makes the message available for redelivery, initiating an instant retry loop without database lock contention.
 
 ---
 
@@ -116,5 +117,5 @@ We ran benchmarks deploying the `loan-granting.bpmn` workflow, concurrently subm
 3. **Limit Concurrency on Shared Parent Scopes**:
    - For parallel multi-instance processing, throttle the workers' concurrent execution limit, or configure the BPMN subprocess with `asyncBefore` / sequential execution to reduce PostgreSQL transactional collisions.
 
-4. **Implement Automatic CDC DB-Level Unlocking**:
-   - Always catch transient API engine rollbacks (such as `OptimisticLockingException`) and release database lock states immediately. Let PostgreSQL WAL logical replication stream trigger the retry loops naturally.
+4. **Implement Automatic Sequin NACK-based Retries**:
+   - Always catch transient API engine rollbacks (such as `OptimisticLockingException`) and release database lock states immediately via Sequin `nack` to trigger retry loops naturally through logical replication streaming.
