@@ -17,7 +17,7 @@ type Config struct {
 func LoadFromEnv() *Config {
 	hostPort := os.Getenv("TEMPORAL_HOST_PORT")
 	if hostPort == "" {
-		hostPort = "localhost:7233"
+		hostPort = "127.0.0.1:7233"
 	}
 
 	namespace := os.Getenv("TEMPORAL_NAMESPACE")
