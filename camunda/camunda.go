@@ -3,6 +3,7 @@ package camunda
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,10 @@ import (
 
 	"github.com/nativebpm/httpstream"
 )
+
+// ErrTaskDelegated is a sentinel error that indicates a task was successfully
+// delegated for asynchronous execution and should not be completed by the worker.
+var ErrTaskDelegated = errors.New("camunda: task delegated for asynchronous execution")
 
 // Client represents a Camunda external task client
 type Client struct {

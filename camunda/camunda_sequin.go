@@ -3,6 +3,7 @@ package camunda
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -24,6 +25,7 @@ type SequinWorker struct {
 	consumer       string
 	logger         *slog.Logger
 	handlers       map[string]TaskHandler
+	lockDurations  map[string]int
 	workerID       string
 	wg             sync.WaitGroup
 	maxConcurrency int
@@ -54,15 +56,24 @@ func NewSequinWorker(client *Client, sequinURL string, consumer string, logger *
 		consumer:       consumer,
 		logger:         logger,
 		handlers:       make(map[string]TaskHandler),
+		lockDurations:  make(map[string]int),
 		workerID:       client.workerID,
 		maxConcurrency: maxConcurrency,
 		taskSemaphore:  make(chan struct{}, maxConcurrency),
 	}, nil
 }
 
-// RegisterHandler registers a task handler for a topic
+// RegisterHandler registers a task handler for a topic with default 30s lock duration
 func (sw *SequinWorker) RegisterHandler(topicName string, handler TaskHandler) *SequinWorker {
 	sw.handlers[topicName] = handler
+	sw.lockDurations[topicName] = 30000 // default 30 seconds
+	return sw
+}
+
+// RegisterHandlerWithOptions registers a task handler for a topic with custom lock duration
+func (sw *SequinWorker) RegisterHandlerWithOptions(topicName string, handler TaskHandler, lockDurationMs int) *SequinWorker {
+	sw.handlers[topicName] = handler
+	sw.lockDurations[topicName] = lockDurationMs
 	return sw
 }
 
@@ -205,8 +216,11 @@ func (sw *SequinWorker) processMessage(ctx context.Context, msg sequin.Message) 
 	}
 
 	// 1. Lock the task using Camunda REST API
-	lockDurationMs := 30000 // 30 seconds
-	lockExpiration := time.Now().Add(30 * time.Second)
+	lockDurationMs := 30000 // 30 seconds by default
+	if customDuration, ok := sw.lockDurations[record.TopicName]; ok && customDuration > 0 {
+		lockDurationMs = customDuration
+	}
+	lockExpiration := time.Now().Add(time.Duration(lockDurationMs) * time.Millisecond)
 
 	err := sw.client.Lock(record.ID, lockDurationMs).Context(ctx).Execute()
 	if err != nil {
@@ -266,6 +280,14 @@ func (sw *SequinWorker) processMessage(ctx context.Context, msg sequin.Message) 
 
 	// 5. Execute handler
 	if err := handler.Handle(ctx, sw.client, task, complete, fail); err != nil {
+		if errors.Is(err, ErrTaskDelegated) {
+			// Task delegated for asynchronous callback. Free worker thread, ack in Sequin
+			// but do NOT complete or unlock the task in Camunda.
+			sw.logger.Info("Task delegated asynchronously, freeing worker thread", "task_id", record.ID)
+			sw.ackMessage(context.Background(), msg.AckID)
+			return
+		}
+
 		sw.logger.Error("Task handler returned error", "task_id", record.ID, "error", err)
 		if strings.Contains(err.Error(), "OptimisticLockingException") {
 			backoff := time.Duration(500+rnd.Intn(1000)) * time.Millisecond
