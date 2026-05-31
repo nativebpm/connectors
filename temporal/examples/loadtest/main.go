@@ -115,7 +115,6 @@ func main() {
 	}()
 
 	// Запускаем инстансы параллельно в горутинах
-	submitStart := time.Now()
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, concurrency) // Ограничиваем параллельность отправки
 
