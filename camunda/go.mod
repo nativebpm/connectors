@@ -4,12 +4,9 @@ go 1.26
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/nativebpm/httpstream v0.0.2
+	github.com/nativebpm/httpstream v0.0.3
 )
 
-require github.com/lib/pq v1.12.3
+require github.com/sequinstream/sequin-go v0.2.0
 
-require (
-	github.com/sequinstream/sequin-go v0.2.0 // indirect
-	golang.org/x/sync v0.8.0 // indirect
-)
+require golang.org/x/sync v0.8.0 // indirect
