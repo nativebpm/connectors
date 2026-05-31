@@ -82,6 +82,7 @@ We ran benchmarks deploying the `loan-granting.bpmn` workflow, concurrently subm
 | **REST-50** | 50 | REST Polling | 100 | 400 | 1.70 s | **58.67 /s** | **234.70 /s** | 0 | **Success**. Lucky run with no optimistic lock deadlocks. |
 | **CDC-5** | 5 | Sequin CDC | 100 | 400 | 5.77 s | **17.32 /s** | **69.27 /s** | 0 | **Success**. Highly stable, low CPU overhead. |
 | **CDC-20** | 20 | Sequin CDC | 100 | 400 | 111.4 s | **0.90 /s** | **3.60 /s** | 0 | **Contention / Lock Timeout**. Parallel Multi-Instance completions led to consecutive `OptimisticLockingException` rollbacks, causing locks to expire after the configured timeout. |
+| **CDC-500** | 30 | Sequin CDC | 500 | 2000 (2115) | 24.28 s | **20.60 /s** | **87.13 /s** | 0 | **Success (Self-Healing)**. Peak throughput under heavy load. Optimistic lock contentions were automatically resolved via immediate database-level unlocking. |
 
 ---
 
@@ -94,7 +95,13 @@ We ran benchmarks deploying the `loan-granting.bpmn` workflow, concurrently subm
    - This triggers database transactional rollbacks (`OptimisticLockingException`) inside the Camunda Engine.
 
 2. **Underlying Lock Expirations**:
-   - In REST polling, locked tasks timeout in 60s. In the CDC worker, locked tasks had a 5-minute timeout. If a task fails its retries, it hangs until the lock expires, showing the importance of tuning `lockDuration` on the CDC client.
+   - In REST polling, locked tasks timeout in 60s. In the CDC worker, locked tasks originally had a 5-minute timeout. If a task fails its retries, it hangs until the lock expires, showing the importance of tuning `lockDuration` on the CDC client.
+
+3. **Self-Healing Resolution via CDC DB Unlocking**:
+   - To prevent tasks from hanging for the duration of the lock, we optimized `SequinWorker`:
+     - The `lockDuration` was reduced from 5 minutes to **30 seconds**.
+     - If a task completion fails due to `OptimisticLockingException` (after the 3 standard client-side retries), the worker immediately resets the database lock columns (`lock_exp_time_ = NULL`, `worker_id_ = NULL`) instead of marking the task as failed in Camunda.
+     - This `UPDATE` statement triggers a new logical replication event in the Postgres WAL. Sequin captures it and streams it back to the worker, which instantly retries processing, allowing swift completion without artificial delays.
 
 ---
 
@@ -108,3 +115,6 @@ We ran benchmarks deploying the `loan-granting.bpmn` workflow, concurrently subm
 
 3. **Limit Concurrency on Shared Parent Scopes**:
    - For parallel multi-instance processing, throttle the workers' concurrent execution limit, or configure the BPMN subprocess with `asyncBefore` / sequential execution to reduce PostgreSQL transactional collisions.
+
+4. **Implement Automatic CDC DB-Level Unlocking**:
+   - Always catch transient API engine rollbacks (such as `OptimisticLockingException`) and release database lock states immediately. Let PostgreSQL WAL logical replication stream trigger the retry loops naturally.

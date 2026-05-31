@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -227,7 +228,7 @@ func (sw *SequinWorker) processMessage(ctx context.Context, msg sequinMessage) {
 	}
 
 	// 1. Try to lock the task directly in the database (logical locking mechanism)
-	lockDuration := 5 * time.Minute
+	lockDuration := 30 * time.Second
 	lockExpiration := time.Now().Add(lockDuration)
 
 	// In Camunda 7 Postgres schema, column names are id_, topic_name_, lock_exp_time_, worker_id_, retries_
@@ -296,7 +297,12 @@ func (sw *SequinWorker) processMessage(ctx context.Context, msg sequinMessage) {
 	// 5. Execute handler
 	if err := handler.Handle(ctx, sw.client, task, complete, fail); err != nil {
 		sw.logger.Error("Task handler returned error", "task_id", taskID, "error", err)
-		_ = fail(err.Error(), "Handler error", 0, 0)
+		if strings.Contains(err.Error(), "OptimisticLockingException") {
+			sw.logger.Warn("Optimistic locking collision during task execution, unlocking task in database to trigger retry", "task_id", taskID)
+			_, _ = sw.db.ExecContext(context.Background(), "UPDATE act_ru_ext_task SET lock_exp_time_ = NULL, worker_id_ = NULL WHERE id_ = $1", taskID)
+		} else {
+			_ = fail(err.Error(), "Handler error", 0, 0)
+		}
 	} else {
 		sw.logger.Info("Task processed successfully via Sequin", "task_id", taskID)
 	}
