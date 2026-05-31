@@ -68,6 +68,14 @@ func (c *Client) Failure(taskID string) *TaskFailure {
 	return tasks.NewTaskFailure(c.httpClient, c.workerID, taskID)
 }
 
+// TaskBpmnError provides a fluent API for reporting BPMN errors
+type TaskBpmnError = tasks.TaskBpmnError
+
+// BpmnError creates a new TaskBpmnError builder
+func (c *Client) BpmnError(taskID, errorCode, errorMessage string) *TaskBpmnError {
+	return tasks.NewTaskBpmnError(c.httpClient, c.workerID, taskID, errorCode, errorMessage)
+}
+
 // LockExtension provides a fluent API for extending task locks
 type LockExtension = tasks.LockExtension
 
