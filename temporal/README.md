@@ -27,6 +27,10 @@ The module includes a preconfigured Docker Compose file running **Temporal Serve
 
 To start the infrastructure:
 ```bash
+# Using Makefile from temporal/ directory:
+make infra-up
+
+# Or manually:
 cd temporal/docker
 docker compose up -d
 ```
@@ -44,7 +48,10 @@ The package includes a load testing utility in `examples/loadtest` designed to e
 1. Make sure Temporal Docker infrastructure is running.
 2. Run the load test tool:
    ```bash
-   # Runs 1000 workflow instances with concurrency limit of 50
+   # Using Makefile:
+   make run-loadtest
+
+   # Or manually:
    LOAD_CONCURRENCY=50 LOAD_PROCESSES_COUNT=1000 go run temporal/examples/loadtest/main.go
    ```
 

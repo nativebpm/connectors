@@ -27,6 +27,10 @@ temporal/
 
 Для запуска инфраструктуры:
 ```bash
+# С помощью Makefile из папки temporal/:
+make infra-up
+
+# Или вручную:
 cd temporal/docker
 docker compose up -d
 ```
@@ -44,7 +48,10 @@ docker compose up -d
 1. Убедитесь, что Docker-окружение Temporal запущено.
 2. Выполните команду для запуска теста:
    ```bash
-   # Запуск 1000 инстансов workflow с лимитом параллельности 50
+   # С помощью Makefile:
+   make run-loadtest
+
+   # Или вручную:
    LOAD_CONCURRENCY=50 LOAD_PROCESSES_COUNT=1000 go run temporal/examples/loadtest/main.go
    ```
 
