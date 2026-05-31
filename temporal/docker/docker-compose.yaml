@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   temporal-postgresql:
     image: postgres:14-alpine
@@ -10,6 +8,7 @@ services:
       POSTGRES_DB: temporal
     ports:
       - "5432:5432"
+    command: ["postgres", "-c", "wal_level=logical", "-c", "shared_buffers=1GB", "-c", "effective_cache_size=3GB", "-c", "work_mem=32MB", "-c", "maintenance_work_mem=256MB", "-c", "synchronous_commit=off", "-c", "fsync=off", "-c", "checkpoint_completion_target=0.9", "-c", "max_connections=300"]
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -31,11 +30,66 @@ services:
       - POSTGRES_PWD=temporal_password
       - POSTGRES_SEEDS=temporal-postgresql
       - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+      - NUM_HISTORY_SHARDS=512
     depends_on:
       temporal-postgresql:
         condition: service_healthy
     volumes:
       - ./dynamicconfig:/etc/temporal/config/dynamicconfig
+
+  temporal-redis:
+    image: redis:7-alpine
+    container_name: temporal-redis
+    ports:
+      - "6379:6379"
+
+  temporal-sequin:
+    image: sequin/sequin:v0.14.6
+    container_name: temporal-sequin
+    pull_policy: always
+    ports:
+      - "7386:7376"
+    environment:
+      - PG_HOSTNAME=temporal-postgresql
+      - PG_DATABASE=sequin
+      - PG_PORT=5432
+      - PG_USERNAME=temporal
+      - PG_PASSWORD=temporal_password
+      - PG_POOL_SIZE=20
+      - SECRET_KEY_BASE=wDPLYus0pvD6qJhKJICO4dauYPXfO/Yl782Zjtpew5qRBDp7CZvbWtQmY0eB13If
+      - VAULT_KEY=2Sig69bIpuSm2kv0VQfDekET2qy8qUZGI8v3/h3ASiY=
+      - REDIS_URL=redis://temporal-redis:6379
+      - CONFIG_FILE_PATH=/config/playground.yml
+    volumes:
+      - ./playground.yml:/config/playground.yml
+    depends_on:
+      temporal-redis:
+        condition: service_started
+      temporal-postgresql:
+        condition: service_healthy
+      temporal-migrate:
+        condition: service_completed_successfully
+
+  temporal-migrate:
+    image: arigaio/atlas:latest-alpine
+    container_name: temporal-migrate
+    entrypoint: [ "/bin/sh", "-c" ]
+    command: >
+      "
+      apk add --no-cache postgresql-client &&
+      until pg_isready -h temporal-postgresql -U temporal; do
+        echo 'Waiting for postgres...'
+        sleep 1
+      done &&
+      PGPASSWORD=temporal_password psql -h temporal-postgresql -U temporal -d temporal -c \"SELECT 1 FROM pg_database WHERE datname = 'sequin'\" | grep -q 1 || PGPASSWORD=temporal_password psql -h temporal-postgresql -U temporal -d temporal -c \"CREATE DATABASE sequin\" &&
+      echo 'Applying Atlas migrations for Temporal CDC...' &&
+      atlas migrate apply --url 'postgres://temporal:temporal_password@temporal-postgresql:5432/temporal?sslmode=disable' --dir 'file:///migrations' --allow-dirty
+      "
+    volumes:
+      - ./migrations:/migrations
+    depends_on:
+      temporal-postgresql:
+        condition: service_healthy
 
 volumes:
   postgres_data:

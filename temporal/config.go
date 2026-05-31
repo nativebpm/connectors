@@ -11,6 +11,13 @@ type Config struct {
 	CertPath  string
 	KeyPath   string
 	TaskQueue string
+
+	// Настройки базы данных для CDC активности
+	DBHost     string
+	DBPort     string
+	DBUser     string
+	DBPassword string
+	DBName     string
 }
 
 // LoadFromEnv загружает настройки из переменных окружения с разумными дефолтами.
@@ -30,11 +37,41 @@ func LoadFromEnv() *Config {
 		taskQueue = "default-task-queue"
 	}
 
+	dbHost := os.Getenv("TEMPORAL_DB_HOST")
+	if dbHost == "" {
+		dbHost = "127.0.0.1"
+	}
+
+	dbPort := os.Getenv("TEMPORAL_DB_PORT")
+	if dbPort == "" {
+		dbPort = "5432"
+	}
+
+	dbUser := os.Getenv("TEMPORAL_DB_USER")
+	if dbUser == "" {
+		dbUser = "temporal"
+	}
+
+	dbPassword := os.Getenv("TEMPORAL_DB_PASSWORD")
+	if dbPassword == "" {
+		dbPassword = "temporal_password"
+	}
+
+	dbName := os.Getenv("TEMPORAL_DB_NAME")
+	if dbName == "" {
+		dbName = "temporal"
+	}
+
 	return &Config{
-		HostPort:  hostPort,
-		Namespace: namespace,
-		CertPath:  os.Getenv("TEMPORAL_CERT_PATH"),
-		KeyPath:   os.Getenv("TEMPORAL_KEY_PATH"),
-		TaskQueue: taskQueue,
+		HostPort:   hostPort,
+		Namespace:  namespace,
+		CertPath:   os.Getenv("TEMPORAL_CERT_PATH"),
+		KeyPath:    os.Getenv("TEMPORAL_KEY_PATH"),
+		TaskQueue:  taskQueue,
+		DBHost:     dbHost,
+		DBPort:     dbPort,
+		DBUser:     dbUser,
+		DBPassword: dbPassword,
+		DBName:     dbName,
 	}
 }

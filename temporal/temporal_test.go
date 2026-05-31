@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nativebpm/connectors/temporal"
 	"github.com/nativebpm/connectors/temporal/examples/helloworld"
 	"github.com/nativebpm/connectors/temporal/examples/saga"
 	"github.com/nativebpm/connectors/temporal/examples/signal"
@@ -150,4 +151,32 @@ func (s *UnitTestSuite) Test_SagaReservation_Fail() {
 	// Проверяем, что компенсации были вызваны в процессе отката саги
 	s.True(refundCalled, "Должен быть вызван возврат средств (RefundCredit)")
 	s.True(cancelHotelCalled, "Должна быть вызвана отмена отеля (CancelHotel)")
+}
+
+// Test_CDCWorkflow проверяет корректность выполнения workflow по схеме CDC-делегирования.
+func (s *UnitTestSuite) Test_CDCWorkflow() {
+	env := s.NewTestWorkflowEnvironment()
+	var a *temporal.CDCActivities
+
+	// Регистрируем Workflow и активность
+	env.RegisterWorkflow(temporal.GreetCDCWorkflow)
+	
+	// Мокаем активность делегирования (она просто возвращает nil, т.е. запись в БД успешна)
+	env.OnActivity(a.DelegateToSequin, mock.Anything, "greet-cdc", "Temporal CDC User").Return(nil)
+
+	// Регистрируем отправку сигнала через 5 секунд виртуального времени
+	env.RegisterDelayedCallback(func() {
+		// Симулируем отправку сигнала CDC воркером с результатом
+		env.SignalWorkflow("TaskCompletedSignal", "Hello, Temporal CDC User (via CDC)!")
+	}, 5*time.Second)
+
+	env.ExecuteWorkflow(temporal.GreetCDCWorkflow, "Temporal CDC User")
+
+	s.True(env.IsWorkflowCompleted())
+	s.NoError(env.GetWorkflowError())
+
+	var result string
+	err := env.GetWorkflowResult(&result)
+	s.NoError(err)
+	s.Equal("Hello, Temporal CDC User (via CDC)!", result)
 }
