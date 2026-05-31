@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nativebpm/connectors/httpstream"
+	"github.com/nativebpm/httpstream"
 )
 
 // BenchmarkStreamingUpload benchmarks the streaming version

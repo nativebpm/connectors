@@ -14,7 +14,7 @@ import (
 	"github.com/nativebpm/connectors/camunda"
 	"github.com/nativebpm/connectors/camunda/examples/loan-granting/handlers"
 	storepkg "github.com/nativebpm/connectors/camunda/examples/loan-granting/store"
-	"github.com/nativebpm/connectors/httpstream"
+	"github.com/nativebpm/httpstream"
 )
 
 func main() {

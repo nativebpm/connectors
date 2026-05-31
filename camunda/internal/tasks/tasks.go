@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/nativebpm/connectors/camunda/internal/vars"
-	"github.com/nativebpm/connectors/httpstream"
+	"github.com/nativebpm/httpstream"
 )
 
 // rnd is a package-local random number generator used for jitter.

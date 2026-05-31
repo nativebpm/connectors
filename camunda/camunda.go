@@ -11,7 +11,7 @@ import (
 
 	"github.com/nativebpm/connectors/camunda/internal/tasks"
 	"github.com/nativebpm/connectors/camunda/internal/worker"
-	"github.com/nativebpm/connectors/httpstream"
+	"github.com/nativebpm/httpstream"
 )
 
 type ExternalTask = worker.ExternalTask

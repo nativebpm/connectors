@@ -10,8 +10,8 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/nativebpm/connectors/httpstream"
-	// "github.com/nativebpm/connectors/httpstream/examples/multipart_streaming_example/middleware"
+	"github.com/nativebpm/httpstream"
+	// "github.com/nativebpm/httpstream/examples/multipart_streaming_example/middleware"
 )
 
 // countingReader wraps an io.Reader and tracks the number of bytes read

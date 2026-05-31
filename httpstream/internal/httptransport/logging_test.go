@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nativebpm/connectors/httpstream"
-	"github.com/nativebpm/connectors/httpstream/internal/httptransport"
+	"github.com/nativebpm/httpstream"
+	"github.com/nativebpm/httpstream/internal/httptransport"
 )
 
 func TestLoggingMiddleware_EndToEnd(t *testing.T) {

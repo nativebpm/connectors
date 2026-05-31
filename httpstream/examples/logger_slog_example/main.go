@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/nativebpm/connectors/httpstream"
+	"github.com/nativebpm/httpstream"
 )
 
 func main() {

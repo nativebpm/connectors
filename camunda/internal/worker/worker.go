@@ -13,7 +13,7 @@ import (
 
 	"github.com/nativebpm/connectors/camunda/internal/tasks"
 	"github.com/nativebpm/connectors/camunda/internal/vars"
-	"github.com/nativebpm/connectors/httpstream"
+	"github.com/nativebpm/httpstream"
 )
 
 // TopicRequest represents a topic request for fetching tasks

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/nativebpm/connectors/httpstream/internal/httprequest"
+	"github.com/nativebpm/httpstream/internal/httprequest"
 )
 
 type HttpMethod string

@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/nativebpm/connectors/httpstream"
+	"github.com/nativebpm/httpstream"
 )
 
 // downloadFrom represents the configuration for downloading files from external URLs.
