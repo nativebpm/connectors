@@ -1,6 +1,16 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+
+# IDEs and editors
 .vscode
 .code
 .idea
+*.sw?
+
+# Outputs & Binaries
 *.pdf
 __debug_bin*
 *.test
