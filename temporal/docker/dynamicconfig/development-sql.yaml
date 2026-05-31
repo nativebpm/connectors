@@ -1,0 +1,18 @@
+frontend.persistenceMaxQPS:
+  - value: 2000
+    constraints: {}
+frontend.historyMaxPageSize:
+  - value: 1000
+    constraints: {}
+limit.maxIDLength:
+  - value: 1000
+    constraints: {}
+history.persistenceMaxQPS:
+  - value: 2000
+    constraints: {}
+matching.persistenceMaxQPS:
+  - value: 2000
+    constraints: {}
+system.forceAccessControl:
+  - value: false
+    constraints: {}

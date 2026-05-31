@@ -9,4 +9,7 @@ require (
 
 require github.com/sequinstream/sequin-go v0.2.0
 
-require golang.org/x/sync v0.8.0 // indirect
+require (
+	github.com/stretchr/testify v1.10.0 // indirect
+	golang.org/x/sync v0.8.0 // indirect
+)
