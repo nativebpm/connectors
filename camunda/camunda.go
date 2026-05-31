@@ -28,7 +28,15 @@ type Client struct {
 // NewClient creates a new Camunda external task client
 func NewClient(hostURL, workerID string) (*Client, error) {
 	baseURL := hostURL + "/engine-rest"
-	httpClient, err := httpstream.NewClient(&http.Client{Timeout: 30 * time.Second}, baseURL)
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 100,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	httpClient, err := httpstream.NewClient(&http.Client{
+		Transport: transport,
+		Timeout:   30 * time.Second,
+	}, baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}

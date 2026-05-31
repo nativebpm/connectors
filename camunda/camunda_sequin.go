@@ -73,6 +73,12 @@ func NewSequinWorker(client *Client, dbDSN string, sequinURL string, consumer st
 		token = "sequin_loadtest_secret_token_12345"
 	}
 
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 100,
+		IdleConnTimeout:     90 * time.Second,
+	}
+
 	return &SequinWorker{
 		client:     client,
 		db:         db,
@@ -82,7 +88,10 @@ func NewSequinWorker(client *Client, dbDSN string, sequinURL string, consumer st
 		logger:     logger,
 		handlers:   make(map[string]TaskHandler),
 		workerID:   client.workerID,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient: &http.Client{
+			Transport: transport,
+			Timeout:   10 * time.Second,
+		},
 	}, nil
 }
 

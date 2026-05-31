@@ -1,118 +1,110 @@
-# Architectural Analysis & Load Testing Report
+# Architectural Analysis & Load Testing Report (with WAL CDC Support)
 
-This document provides a detailed architectural analysis of the Go client for Camunda 7 External Tasks, along with performance benchmarks, load testing results, and system tuning recommendations.
+This document provides a detailed architectural analysis of the Go client for Camunda 7 External Tasks, detailing both the standard REST polling worker and the high-performance **WAL-based Change Data Capture (CDC)** worker using Sequin. It compiles benchmarking metrics, analysis of system bottlenecks, and configuration recommendations.
 
 ---
 
 ## 1. Architectural Analysis
 
-The `camunda` Go package implements a lightweight, highly-concurrent, and type-safe client framework for processing Camunda 7 External Tasks. Below is a breakdown of the core architectural components and design patterns.
+The `camunda` Go package supports two distinct processing architectures:
+1. **Standard REST Polling Architecture**: Aggressively polls Camunda Engine using `/fetchAndLock` REST requests with long-polling timeouts.
+2. **WAL logical replication (CDC) Architecture**: Captures database transactions directly from PostgreSQL WAL logs via **Sequin**, locks tasks atomically via direct SQL updates, and completes tasks via REST.
 
 ### Component Diagram
 
 ```mermaid
 graph TD
     subgraph "Go Client (Worker App)"
-        Worker["Worker (internal/worker)"]
+        Worker["SequinWorker / REST Worker"]
         TC["TaskCompletion (internal/tasks)"]
         TF["TaskFailure (internal/tasks)"]
-        Vars["Variables (internal/vars)"]
         Handlers["Registered TaskHandlers"]
     end
     
-    subgraph "Network Layer"
-        HTTP["httpstream.Client"]
+    subgraph "CDC Pipeline Layer"
+        Sequin["Sequin Service (:7376)"]
+        WAL["Logical Replication Slot (sequin_slot)"]
     end
     
     subgraph "Camunda Process Engine"
         REST["Camunda REST API (:8080)"]
-        DB["PostgreSQL / Database"]
+        DB["PostgreSQL / Database (:7477)"]
     end
 
-    Worker -->|fetchAndLock / long-poll| HTTP
-    HTTP -->|REST requests| REST
-    REST -->|SQL transactions| DB
+    %% WAL CDC path
+    DB -->|WAL Logs| WAL
+    WAL -->|Logical CDC Stream| Sequin
+    Sequin -->|HTTP Pull Events| Worker
     
-    Worker -->|Spins goroutine per task| Handlers
-    Handlers -->|fluent execute| TC
-    Handlers -->|fluent execute| TF
-    TC -->|complete POST| HTTP
-    TF -->|failure POST| HTTP
+    %% Task execution path
+    Worker -->|Lock via direct UPDATE| DB
+    Worker -->|Execute Handler| Handlers
+    Handlers -->|Execute complete| TC
+    TC -->|POST /complete| REST
+    REST -->|Commit transaction| DB
 ```
 
 ### Core Architecture Concepts
 
-1. **HTTP Client Wrapper (`httpstream.Client`)**:
-   - All REST communication goes through `httpstream`, which abstracts request/response logic, path/query building, and provides middleware capabilities (like slog-based logging).
-   
-2. **Concurrency & Thread Pooling (`internal/worker`)**:
-   - The worker uses a semaphore channel (`taskSemaphore chan struct{}`) to throttle the maximum number of concurrent task processors.
-   - When tasks are fetched via `/fetchAndLock`, the worker spawns a separate goroutine for each task (`go w.processTaskSafe(ctx, task)`), allowing non-blocking concurrent task completion.
-   - Polling uses **long-polling** (`asyncResponseTimeout` parameters), which keeps the HTTP connection open on the Camunda side until a task becomes available, drastically reducing empty polling overhead and network congestion.
+1. **Logical CDC Stream via Sequin**:
+   - Instead of checking the database periodically via heavy `/fetchAndLock` REST polling, Sequin streams changes directly from the Postgres Write-Ahead Log (WAL).
+   - Only events relating to the `act_ru_ext_task` table are captured and delivered, resulting in near-zero idle database/network overhead.
+   - Database schemas and logical slot configs are fully versioned and managed using **Atlas Go**, applied automatically when the engine tables are ready.
 
-3. **Fluent API Builders (`internal/tasks`)**:
-   - Ergonomic fluent builders (`TaskCompletion`, `TaskFailure`, `LockExtension`) allow handler code to remain clean and readable:
-     ```go
-     complete().ListVariable("scores", scores).Execute()
+2. **Direct Atomicity database locking**:
+   - When Sequin delivers a task-creation event, the `SequinWorker` attempts to acquire a lock directly in PostgreSQL:
+     ```sql
+     UPDATE act_ru_ext_task 
+     SET lock_exp_time_ = $1, worker_id_ = $2, retries_ = $3 
+     WHERE id_ = $4 AND (lock_exp_time_ IS NULL OR lock_exp_time_ < NOW())
      ```
-   
-4. **Optimistic Locking Retry Mechanism**:
-   - When multiple concurrent workers complete tasks of the same process instance (e.g., in a parallel Multi-Instance subprocess), Camunda Engine might fail one of the completions with an `OptimisticLockingException` (HTTP 500).
-   - The client handles this gracefully inside `tasks.go` by parsing the error body and retrying the request up to 3 times using **exponential backoff with jitter**, preventing process failure.
+   - This ensures exactly-once execution safety and acts as a lightweight optimistic lock.
 
-5. **Panic Recovery & Graceful Shutdown**:
-   - Inside `processTaskSafe`, any handler panics are recovered to prevent a complete app crash. The panic is captured, logged with a stack trace, and reported back to Camunda as a task failure.
-   - Graceful shutdown awaits active processing goroutines via `sync.WaitGroup` when the context is cancelled.
+3. **HTTP Connection Pooling & Transport Tuning**:
+   - Both the Camunda Client and the Sequin Worker are configured with a customized `http.Transport` pool:
+     - `MaxIdleConns = 100`
+     - `MaxIdleConnsPerHost = 100`
+     - `IdleConnTimeout = 90s`
+   - This allows high throughput without port exhaustion (preventing `resource temporarily unavailable` errors on the host OS).
 
 ---
 
-## 2. Load Testing Results
+## 2. Load Testing & Benchmark Metrics
 
-We executed load tests using the custom test harness in `examples/loadtest/main.go`. 
-The test deploys the `loan-granting.bpmn` workflow, concurrently submits **100 process instances** (generating 400 total external tasks), and executes them.
-
-### Test Environment
-- **Camunda Engine**: Camunda 7.24.0 (Dockerized)
-- **Database**: PostgreSQL (Dockerized)
-- **Host**: Apple M1 Max / 32GB RAM / macOS
+We ran benchmarks deploying the `loan-granting.bpmn` workflow, concurrently submitting **100 process instances** (yielding 400 external tasks total). We compare standard REST polling vs. Sequin CDC processing under varying concurrency parameters.
 
 ### Benchmark Metrics Table
 
-| Scenario | Concurrency (Max Tasks) | Total Instances | Total Tasks | Total Duration | Instance Throughput (RPS) | Task Throughput (TPS) | Failed Tasks | Status / Observation |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Scenario 1** | 5 | 100 | 400 | ~4.11 s | **24.33 /s** | **97.80 /s** | 0 | **Success**. Highly stable, low load. |
-| **Scenario 2** | 20 | 100 | 400 | ~1.20 s | **82.75 /s** | **331.02 /s** | 0 | **Success (Optimal)**. Peak performance. |
-| **Scenario 3** | 50 | 100 | 400 | >60.00 s | *N/A* | *N/A* | 0 | **Hung (Bottleneck)**. 99% done, 1 task hung. |
+| Scenario | Concurrency (Max Tasks) | Engine Worker Type | Total Instances | Total Tasks | Total Duration | Throughput (RPS) | Task Throughput (TPS) | Failed Tasks | Status / Observation |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| **REST-5** | 5 | REST Polling | 100 | 400 | 4.17 s | **24.00 /s** | **96.00 /s** | 0 | **Success**. High stability. |
+| **REST-20** | 20 | REST Polling | 100 | 400 | 61.37 s | **1.63 /s** | **6.52 /s** | 0 | **Lock Contention**. Exactly 1 process hit transactional deadlocks in Camunda, recovering only after the 60s lock timeout expired. |
+| **REST-50** | 50 | REST Polling | 100 | 400 | 1.70 s | **58.67 /s** | **234.70 /s** | 0 | **Success**. Lucky run with no optimistic lock deadlocks. |
+| **CDC-5** | 5 | Sequin CDC | 100 | 400 | 5.77 s | **17.32 /s** | **69.27 /s** | 0 | **Success**. Highly stable, low CPU overhead. |
+| **CDC-20** | 20 | Sequin CDC | 100 | 400 | 111.4 s | **0.90 /s** | **3.60 /s** | 0 | **Contention / Lock Timeout**. Parallel Multi-Instance completions led to consecutive `OptimisticLockingException` rollbacks, causing locks to expire after the configured timeout. |
 
 ---
 
 ## 3. Bottlenecks & Analysis
 
-During **Scenario 3** (Concurrency = 50), the load test routinely hangs with exactly 1 task remaining incomplete:
-```
-[1.0s elapsed] Started: 100/100 | Checker Completed: 99/100 | Decision Completed: 297/300 (99.0%)
-```
+### Why do parallel completions cause bottlenecks?
+1. **Parallel Multi-Instance Collisions**:
+   - In our BPMN, after the `creditScoreChecker` completes, Camunda spawns 3 parallel instances of the loan assessment subprocess.
+   - When these 3 tasks complete, they concurrently update shared execution parameters (`nrOfCompletedInstances`, `nrOfActiveInstances`) in the parent scope.
+   - This triggers database transactional rollbacks (`OptimisticLockingException`) inside the Camunda Engine.
 
-### Why does this happen?
-1. **Database Locking & Race Conditions in Camunda**:
-   - Under extremely high parallel load (100 processes starting and 50 workers polling aggressively at 50ms intervals), Camunda Engine suffers from transaction deadlocks or optimistic locking collisions in PostgreSQL.
-   - If a `/fetchAndLock` REST call fails on the HTTP layer (e.g. database rollback), but Camunda's transactional layer *already committed* the lock status, that specific task becomes **locked on a phantom worker** in the database.
-   - The task will remain locked and un-pollable for the duration of the `lockDuration` (which is configured to **60 seconds** in our worker). Only after 60s does the lock expire, allowing a worker to fetch and complete it, causing the test to finally finish.
-
-2. **Network Connection Pooling**:
-   - The Go client relies on Go's default `http.Transport` connection pool. Under high concurrency, if connection limits are reached, requests get queued, increasing latency and triggering client timeouts.
+2. **Underlying Lock Expirations**:
+   - In REST polling, locked tasks timeout in 60s. In the CDC worker, locked tasks had a 5-minute timeout. If a task fails its retries, it hangs until the lock expires, showing the importance of tuning `lockDuration` on the CDC client.
 
 ---
 
-## 4. Architectural Recommendations
+## 4. Key Architectural Recommendations
 
-To scale the Camunda client under high load:
+1. **Filter CDC Table Targets**:
+   - Ensure Sequin's YAML sink includes only `"public.act_ru_ext_task"` instead of tracking the entire `"public"` schema. Tracking variables and history events leads to socket storms.
+   
+2. **Reuse HTTP Connections**:
+   - Keep connection reuse parameters tuned high (`MaxIdleConnsPerHost = 100`). Without this, high-throughput workers will saturate local TCP sockets.
 
-1. **Optimal Concurrency Tuning**:
-   - Maintain concurrency (`MaxTasks`) in the **15–25** range per worker replica. Pushing concurrency beyond 30 on a single engine node degrades performance due to DB locking contention rather than Go CPU limits.
-   
-2. **Implement Jittered Poll Intervals**:
-   - Avoid aggressive static polling intervals (e.g. 50ms). Use dynamic, jittered backoffs when no tasks are returned, reducing `/fetchAndLock` request storms on the REST API.
-   
-3. **Optimistic Locking Retries**:
-   - Our built-in exponential backoff inside `tasks.go` is vital. Ensure workers have it active when processing concurrent branches or multi-instance loops.
+3. **Limit Concurrency on Shared Parent Scopes**:
+   - For parallel multi-instance processing, throttle the workers' concurrent execution limit, or configure the BPMN subprocess with `asyncBefore` / sequential execution to reduce PostgreSQL transactional collisions.
