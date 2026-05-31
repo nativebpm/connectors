@@ -120,15 +120,20 @@ jobs:
           git checkout main 2>/dev/null || git checkout -b main
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           cp -a ../${MODULE}/. ./
-          
           if [[ -f go.mod ]]; then
-            sed -i "s|module github.com/nativebpm/connectors/${MODULE}|module github.com/nativebpm/${MODULE}|" go.mod
+            sed -i "s|github.com/nativebpm/connectors/|github.com/nativebpm/|g" go.mod
           fi
           
-          if grep -Ilr "github.com/nativebpm/connectors/${MODULE}" . 2>/dev/null; then
-            grep -Ilr "github.com/nativebpm/connectors/${MODULE}" . | while read -r file; do
-              sed -i "s|github.com/nativebpm/connectors/${MODULE}|github.com/nativebpm/${MODULE}|g" "$file"
+          if grep -Ilr "github.com/nativebpm/connectors/" . 2>/dev/null; then
+            grep -Ilr "github.com/nativebpm/connectors/" . | while read -r file; do
+              sed -i "s|github.com/nativebpm/connectors/|github.com/nativebpm/|g" "$file"
             done
+          fi
+
+          if [[ -f go.mod ]]; then
+            rm -f go.sum
+            go env -w GOPRIVATE="github.com/nativebpm/*"
+            go mod tidy || true
           fi
           
           git add -A
