@@ -4,6 +4,8 @@ use (
 	./camunda
 	./durable-wasm/host
 	./durable-wasm/worker
+	./durable-wasm/examples/process-csv/host
+	./durable-wasm/examples/process-csv/worker
 	./gotenberg
 	./httpstream
 	./sequin

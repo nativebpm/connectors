@@ -23,6 +23,10 @@ test: build-worker
 clean:
 	@echo "Cleaning artifacts..."
 	rm -f worker/worker.wasm host/host
+	make -C examples/process-csv clean
+
+run-csv-example:
+	make -C examples/process-csv run
 
 docker-build:
 	@echo "Building scratch-based Docker image..."
