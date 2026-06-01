@@ -171,23 +171,30 @@ jobs:
         run: |
           cd mirror
           
-          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            echo "Release $TAG_NAME already exists. Skipping."
-            exit 0
-          fi
+          IS_DRAFT=$(gh release view "$TAG_NAME" --json isDraft -q .isDraft 2>/dev/null || echo "not_found")
           
           TITLE=$(echo "$TAG_ANNOTATION" | head -n 1)
           if [[ -z "$TITLE" ]]; then
             TITLE="$TAG_NAME"
           fi
-          
           echo "$TAG_ANNOTATION" > /tmp/release_body.md
           
-          gh release create "$TAG_NAME" \
-            --title "$TITLE" \
-            --notes-file /tmp/release_body.md
-          
-          echo "✅ Created release: $TAG_NAME"
+          if [[ "$IS_DRAFT" == "true" ]]; then
+            echo "Release $TAG_NAME in mirror is currently a draft. Publishing it..."
+            gh release edit "$TAG_NAME" \
+              --draft=false \
+              --title "$TITLE" \
+              --notes-file /tmp/release_body.md
+            echo "✅ Published existing draft release in mirror: $TAG_NAME"
+          elif [[ "$IS_DRAFT" == "false" ]]; then
+            echo "Release $TAG_NAME in mirror is already published. Skipping."
+          else
+            echo "Release $TAG_NAME does not exist in mirror. Creating it..."
+            gh release create "$TAG_NAME" \
+              --title "$TITLE" \
+              --notes-file /tmp/release_body.md
+            echo "✅ Created and published release in mirror: $TAG_NAME"
+          fi
 
       - name: Create or publish GitHub release in monorepo
         env:
