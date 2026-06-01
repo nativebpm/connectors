@@ -80,6 +80,9 @@ func run() int32 {
 				processedBytes += bytesRead
 			}
 
+			// Signal EOF to the output network stream.
+			stream_data(1, ptr, 0)
+
 			// Transition to step 2 and trigger a checkpoint.
 			step = 2
 			println("[WASM WORKER] Step 1 completed. Initiating checkpoint.")
