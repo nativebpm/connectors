@@ -142,8 +142,8 @@ func main() {
 
 	ctx := context.Background()
 	err := client.StartPolling(ctx, func(ctx context.Context, update telegram.Update) {
-		if update.Message != nil {
-			log.Printf("Received message from %s: %s", update.Message.Chat.FirstName, update.Message.Text)
+		if text := update.MessageText(); text != "" {
+			log.Printf("Received message from %s: %s", update.SenderFirstName(), text)
 		}
 	})
 	if err != nil {
