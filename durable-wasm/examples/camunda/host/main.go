@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nativebpm/connectors/camunda"
-	"github.com/nativebpm/connectors/durable-wasm/host/durable"
+	"github.com/nativebpm/connectors/durable-wasm"
 )
 
 const (

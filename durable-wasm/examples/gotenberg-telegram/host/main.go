@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/nativebpm/connectors/durable-wasm/host/durable"
+	"github.com/nativebpm/connectors/durable-wasm"
 )
 
 const (
