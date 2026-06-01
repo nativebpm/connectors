@@ -3,6 +3,7 @@ package temporal
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
@@ -32,6 +33,14 @@ func NewClient(cfg *Config) (*Client, error) {
 				Certificates: []tls.Certificate{cert},
 			},
 		}
+	}
+
+	if len(cfg.EncryptionKey) > 0 {
+		dc, err := GetEncryptingDataConverter(cfg.EncryptionKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create encrypting data converter: %w", err)
+		}
+		options.DataConverter = dc
 	}
 
 	c, err := client.Dial(options)

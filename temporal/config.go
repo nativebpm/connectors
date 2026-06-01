@@ -1,6 +1,7 @@
 package temporal
 
 import (
+	"crypto/sha256"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -8,11 +9,12 @@ import (
 
 // Config содержит параметры подключения к Temporal Server или Temporal Cloud.
 type Config struct {
-	HostPort  string
-	Namespace string
-	CertPath  string
-	KeyPath   string
-	TaskQueue string
+	HostPort      string
+	Namespace     string
+	CertPath      string
+	KeyPath       string
+	TaskQueue     string
+	EncryptionKey []byte // Ключ шифрования полезных нагрузок
 
 	// Настройки базы данных для CDC активности
 	DBHost     string
@@ -68,16 +70,23 @@ func LoadFromEnv() *Config {
 		dbName = "temporal"
 	}
 
+	var encryptionKey []byte
+	if keyStr := os.Getenv("TEMPORAL_ENCRYPTION_KEY"); keyStr != "" {
+		hash := sha256.Sum256([]byte(keyStr))
+		encryptionKey = hash[:]
+	}
+
 	return &Config{
-		HostPort:   hostPort,
-		Namespace:  namespace,
-		CertPath:   os.Getenv("TEMPORAL_CERT_PATH"),
-		KeyPath:    os.Getenv("TEMPORAL_KEY_PATH"),
-		TaskQueue:  taskQueue,
-		DBHost:     dbHost,
-		DBPort:     dbPort,
-		DBUser:     dbUser,
-		DBPassword: dbPassword,
-		DBName:     dbName,
+		HostPort:      hostPort,
+		Namespace:     namespace,
+		CertPath:      os.Getenv("TEMPORAL_CERT_PATH"),
+		KeyPath:       os.Getenv("TEMPORAL_KEY_PATH"),
+		TaskQueue:     taskQueue,
+		EncryptionKey: encryptionKey,
+		DBHost:        dbHost,
+		DBPort:        dbPort,
+		DBUser:        dbUser,
+		DBPassword:    dbPassword,
+		DBName:        dbName,
 	}
 }

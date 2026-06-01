@@ -31,11 +31,23 @@ services:
       - POSTGRES_SEEDS=temporal-postgresql
       - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
       - NUM_HISTORY_SHARDS=512
+      - TEMPORAL_UI_CODEC_ENDPOINT=http://localhost:8082/decode
     depends_on:
       temporal-postgresql:
         condition: service_healthy
     volumes:
       - ./dynamicconfig:/etc/temporal/config/dynamicconfig
+
+  codec-server:
+    build:
+      context: ../..
+      dockerfile: temporal/docker/codec/Dockerfile
+    container_name: temporal-codec-server
+    ports:
+      - "8082:8082"
+    environment:
+      - TEMPORAL_ENCRYPTION_KEY=my_secure_dev_passphrase_1234567
+      - TEMPORAL_CODEC_SERVER_PORT=8082
 
   temporal-redis:
     image: redis:7-alpine
