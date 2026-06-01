@@ -4,18 +4,14 @@ FROM golang:1.26-alpine AS builder
 # Install build tools needed for CGO compilation
 RUN apk add --no-cache git build-base curl
 
-WORKDIR /app
-
-# Copy the host module files
-COPY host/go.mod ./host/
-# Copy go.sum if it exists (using a wildcard so it doesn't fail if go.sum isn't generated yet)
-COPY host/go.sum* ./host/
-
 WORKDIR /app/host
+
+# Copy the host module dependency files
+COPY host/go.mod host/go.sum* ./
 RUN go mod download
 
-# Copy host source code
-COPY host/main.go ./host/
+# Copy the entire host source code (including main.go and the durable package)
+COPY host/ ./
 
 # Build static binary linked against musl libc
 RUN CGO_ENABLED=1 GOOS=linux go build -tags musl -ldflags '-linkmode external -extldflags "-static"' -o host main.go
