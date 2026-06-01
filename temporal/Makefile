@@ -16,6 +16,14 @@ run-worker-helloworld:
 run-starter-helloworld:
 	go run examples/helloworld/starter/main.go
 
+# Запуск воркера Heartbeat
+run-worker-heartbeat:
+	go run examples/heartbeat/worker/main.go
+
+# Запуск стартера Heartbeat
+run-starter-heartbeat:
+	go run examples/heartbeat/starter/main.go
+
 # Запуск воркера Signal & Query
 run-worker-signal:
 	go run examples/signal/worker/main.go
