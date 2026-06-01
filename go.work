@@ -2,6 +2,7 @@ go 1.26
 
 use (
 	./camunda
+	./durable-wasm
 	./durable-wasm/examples/camunda/host
 	./durable-wasm/examples/camunda/worker
 	./durable-wasm/examples/gotenberg-telegram/host
@@ -10,8 +11,6 @@ use (
 	./durable-wasm/examples/process-csv/worker
 	./durable-wasm/examples/temporal/host
 	./durable-wasm/examples/temporal/worker
-	./durable-wasm/host
-	./durable-wasm/worker
 	./gotenberg
 	./httpstream
 	./sequin

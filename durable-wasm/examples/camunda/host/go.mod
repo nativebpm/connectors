@@ -5,7 +5,7 @@ go 1.26
 require (
 	github.com/google/uuid v1.6.0
 	github.com/nativebpm/connectors/camunda v0.0.0
-	github.com/nativebpm/connectors/durable-wasm/host v0.0.0
+	github.com/nativebpm/connectors/durable-wasm v0.0.0
 )
 
 require (
@@ -17,5 +17,5 @@ require (
 
 replace (
 	github.com/nativebpm/connectors/camunda => ../../../../camunda
-	github.com/nativebpm/connectors/durable-wasm/host => ../../../host
+	github.com/nativebpm/connectors/durable-wasm => ../../../
 )

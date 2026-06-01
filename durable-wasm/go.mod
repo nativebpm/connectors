@@ -1,4 +1,4 @@
-module github.com/nativebpm/connectors/durable-wasm/host
+module github.com/nativebpm/connectors/durable-wasm
 
 go 1.26
 
