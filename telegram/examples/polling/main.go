@@ -22,63 +22,49 @@ func main() {
 	}
 
 	fmt.Println("Starting Telegram Bot updates polling loop...")
-	var offset int64 = 0
 
-	for {
-		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-		updates, err := client.GetUpdates(ctx, &telegram.GetUpdatesParams{
-			Offset:  offset,
-			Timeout: 20, // 20s Telegram long-polling timeout
-		})
-		cancel()
+	ctx := context.Background()
+	err = client.StartPolling(ctx, func(ctx context.Context, update telegram.Update) {
+		// 1. Handle incoming text message
+		if update.Message != nil && update.Message.Text != "" {
+			fmt.Printf("Received message from %s (%d): %s\n", 
+				update.Message.Chat.FirstName, 
+				update.Message.Chat.ID, 
+				update.Message.Text,
+			)
 
-		if err != nil {
-			log.Printf("Error polling updates: %v. Retrying in 3 seconds...", err)
-			time.Sleep(3 * time.Second)
-			continue
-		}
-
-		for _, update := range updates {
-			// Update the offset to acknowledge receipt of this update
-			offset = update.UpdateID + 1
-
-			// 1. Handle incoming text message
-			if update.Message != nil && update.Message.Text != "" {
-				fmt.Printf("Received message from %s (%d): %s\n", 
-					update.Message.Chat.FirstName, 
-					update.Message.Chat.ID, 
-					update.Message.Text,
-				)
-
-				// Reply back to user
-				replyCtx, replyCancel := context.WithTimeout(context.Background(), 5*time.Second)
-				_, err = client.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Hello %s! I received your message: \"%s\"", update.Message.Chat.FirstName, update.Message.Text)).
-					Send(replyCtx)
-				replyCancel()
-				if err != nil {
-					log.Printf("Failed to reply: %v", err)
-				}
-			}
-
-			// 2. Handle button callback query
-			if update.CallbackQuery != nil {
-				fmt.Printf("Received callback button click: ID=%s, Data=%s\n", 
-					update.CallbackQuery.ID, 
-					update.CallbackQuery.Data,
-				)
-
-				// Answer the callback query to remove loading spinner on button
-				answerCtx, answerCancel := context.WithTimeout(context.Background(), 5*time.Second)
-				_, err = client.AnswerCallbackQuery(answerCtx, &telegram.AnswerCallbackQueryParams{
-					CallbackQueryID: update.CallbackQuery.ID,
-					Text:            "Action accepted!",
-					ShowAlert:       false,
-				})
-				answerCancel()
-				if err != nil {
-					log.Printf("Failed to answer callback query: %v", err)
-				}
+			// Reply back to user
+			replyCtx, replyCancel := context.WithTimeout(ctx, 5*time.Second)
+			defer replyCancel()
+			_, err = client.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Hello %s! I received your message: \"%s\"", update.Message.Chat.FirstName, update.Message.Text)).
+				Send(replyCtx)
+			if err != nil {
+				log.Printf("Failed to reply: %v", err)
 			}
 		}
+
+		// 2. Handle button callback query
+		if update.CallbackQuery != nil {
+			fmt.Printf("Received callback button click: ID=%s, Data=%s\n", 
+				update.CallbackQuery.ID, 
+				update.CallbackQuery.Data,
+			)
+
+			// Answer the callback query to remove loading spinner on button
+			answerCtx, answerCancel := context.WithTimeout(ctx, 5*time.Second)
+			defer answerCancel()
+			_, err = client.AnswerCallbackQuery(answerCtx, &telegram.AnswerCallbackQueryParams{
+				CallbackQueryID: update.CallbackQuery.ID,
+				Text:            "Action accepted!",
+				ShowAlert:       false,
+			})
+			if err != nil {
+				log.Printf("Failed to answer callback query: %v", err)
+			}
+		}
+	})
+
+	if err != nil && err != context.Canceled {
+		log.Fatalf("Polling error: %v", err)
 	}
 }

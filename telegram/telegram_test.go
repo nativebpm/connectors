@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -338,5 +339,51 @@ func TestFluentBuilders(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(3), photoMsg.MessageID)
 	assert.Equal(t, "photo123", photoMsg.Photo[0].FileID)
+}
+
+func TestStartPolling(t *testing.T) {
+	called := make(chan Update, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/botTEST_TOKEN/getUpdates", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"ok": true,
+			"result": [
+				{
+					"update_id": 999,
+					"message": {
+						"message_id": 1,
+						"chat": {
+							"id": 123456,
+							"type": "private"
+						},
+						"date": 1700000000,
+						"text": "test message"
+					}
+				}
+			]
+		}`))
+	}))
+	defer server.Close()
+
+	client, err := NewClient("TEST_TOKEN", WithAPIURL(server.URL))
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		err := client.StartPolling(ctx, func(ctx context.Context, update Update) {
+			called <- update
+			cancel() // Stop polling after receiving the first update
+		})
+		assert.ErrorIs(t, err, context.Canceled)
+	}()
+
+	select {
+	case update := <-called:
+		assert.Equal(t, int64(999), update.UpdateID)
+		assert.Equal(t, "test message", update.Message.Text)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Timeout waiting for polling update callback")
+	}
 }
 

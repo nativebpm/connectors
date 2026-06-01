@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 )
 
 // SendMessageParams represents parameters for SendMessage.
@@ -192,4 +193,42 @@ func (c *Client) GetUpdates(ctx context.Context, params *GetUpdatesParams) ([]Up
 		return nil, nil
 	}
 	return *res, nil
+}
+
+// StartPolling starts a polling loop to receive updates. It blocks until the context is cancelled.
+func (c *Client) StartPolling(ctx context.Context, handler func(ctx context.Context, update Update)) error {
+	var offset int64 = 0
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		// Use a timeout slightly longer than the long-polling timeout (20s)
+		pollCtx, pollCancel := context.WithTimeout(ctx, 30*time.Second)
+		updates, err := c.GetUpdates(pollCtx, &GetUpdatesParams{
+			Offset:  offset,
+			Timeout: 20,
+		})
+		pollCancel()
+
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return ctx.Err()
+			}
+			// Wait a bit before retrying to prevent hot looping on errors
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(3 * time.Second):
+			}
+			continue
+		}
+
+		for _, update := range updates {
+			offset = update.UpdateID + 1
+			handler(ctx, update)
+		}
+	}
 }

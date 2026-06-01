@@ -138,7 +138,6 @@ package main
 import (
 	"context"
 	"log"
-	"time"
 
 	"github.com/nativebpm/connectors/telegram"
 )
@@ -146,24 +145,14 @@ import (
 func main() {
 	client, _ := telegram.NewClient("YOUR_BOT_TOKEN")
 
-	var offset int64 = 0
-	for {
-		updates, err := client.GetUpdates(context.Background(), &telegram.GetUpdatesParams{
-			Offset:  offset,
-			Timeout: 20, // 20s long-polling
-		})
-		if err != nil {
-			log.Printf("Error fetching updates: %v, retrying...", err)
-			time.Sleep(2 * time.Second)
-			continue
+	ctx := context.Background()
+	err := client.StartPolling(ctx, func(ctx context.Context, update telegram.Update) {
+		if update.Message != nil {
+			log.Printf("Received message from %s: %s", update.Message.Chat.FirstName, update.Message.Text)
 		}
-
-		for _, update := range updates {
-			if update.Message != nil {
-				log.Printf("Received message from %s: %s", update.Message.Chat.FirstName, update.Message.Text)
-			}
-			offset = update.UpdateID + 1
-		}
+	})
+	if err != nil {
+		log.Fatalf("Polling failed: %v", err)
 	}
 }
 ```
