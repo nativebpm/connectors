@@ -1,4 +1,4 @@
-module github.com/nativebpm/connectors/durable-wasm/examples/camunda-temporal/host
+module github.com/nativebpm/connectors/durable-wasm/examples/camunda/host
 
 go 1.26
 

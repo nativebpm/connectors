@@ -8,26 +8,27 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/nativebpm/connectors/durable-wasm/host/durable"
 )
 
 const (
-	instanceID   = "camunda-temporal-tx"
-	serverAddr   = "localhost:18083"
-	snapshotFile = "camunda-temporal-tx.bin"
-	dbFile       = "database.json"
+	instanceID   = "camunda-task-tx"
+	serverAddr   = "localhost:18086"
+	snapshotFile = "camunda-task-tx.bin"
+	dbFile       = "database_camunda.json"
 )
 
 func main() {
-	fmt.Println("[HOST] Starting Camunda-Temporal Orchestration Durable Execution Example...")
+	fmt.Println("[HOST] Starting Camunda External Task Durable Execution Example...")
 
 	// 1. Clean up old files
 	_ = os.Remove(snapshotFile)
 	_ = os.Remove(dbFile)
 
-	// 2. Start local Mock HTTP Server to mock external billing, CRM, and DB API endpoints
+	// 2. Start local Mock HTTP Server to mock external inventory, payment, and DB endpoints
 	mockServer := startMockServer(serverAddr)
 	defer mockServer.Shutdown(context.Background())
 
@@ -45,11 +46,11 @@ func main() {
 	}
 
 	// 4. RUN 1: Execute with simulated crash on the first checkpoint (Step 0)
-	fmt.Println("\n--- RUN 1: Starting Camunda Process (Billing & CRM Activity) with Simulated Crash ---")
+	fmt.Println("\n--- RUN 1: Starting Camunda External Task (Inventory & Payment Check) with Simulated Crash ---")
 	crashed, err := engine.Execute(instanceID, "run", serverAddr, true)
 	if err != nil {
 		if crashed {
-			fmt.Printf("[HOST] Orchestrator successfully suspended/crashed: %v\n", err)
+			fmt.Printf("[HOST] External Task successfully suspended/crashed: %v\n", err)
 		} else {
 			fmt.Printf("[HOST ERROR] Execution failed: %v\n", err)
 			os.Exit(1)
@@ -64,7 +65,7 @@ func main() {
 	fmt.Println("[HOST] Verified that snapshot file was written to disk.")
 
 	// 5. RUN 2: Restore from checkpoint and resume execution
-	fmt.Println("\n--- RUN 2: Restoring Process State from Snapshot and Resuming execution ---")
+	fmt.Println("\n--- RUN 2: Restoring Task State from Snapshot and Resuming execution ---")
 	crashed, err = engine.Execute(instanceID, "run", serverAddr, false)
 	if err != nil {
 		fmt.Printf("[HOST ERROR] Resumed execution failed: %v\n", err)
@@ -85,35 +86,47 @@ func main() {
 	}
 	fmt.Printf("[HOST] Read from persistent DB (%s): %s\n", dbFile, string(dbBytes))
 
-	// Clean up snapshot since the transaction is completed (we no longer need workflow memory)
+	// Clean up snapshot since the task is completed
 	_ = os.Remove(snapshotFile)
 	if _, err := os.Stat(snapshotFile); os.IsNotExist(err) {
-		fmt.Println("[HOST] Workflow memory snapshot successfully cleaned up from disk (Transaction Completed).")
+		fmt.Println("[HOST] Workflow memory snapshot successfully cleaned up from disk (Task Completed).")
 	}
 
-	// Clean up database.json
+	// Clean up database_camunda.json
 	_ = os.Remove(dbFile)
 	
-	fmt.Println("\n[HOST] Camunda-Temporal Orchestration example completed successfully.")
+	fmt.Println("\n[HOST] Camunda External Task example completed successfully.")
 	os.Exit(0)
 }
 
 func startMockServer(addr string) *http.Server {
 	mux := http.NewServeMux()
 
+	var downloadCount int32
+
 	// Download route (used for reading responses)
 	mux.HandleFunc("/download", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		billingResponse := `{"status":"success","reference_code":"REF-BILL-550-OK"}`
-		_, _ = w.Write([]byte(billingResponse))
+		count := atomic.AddInt32(&downloadCount, 1)
+
+		var responseBody string
+		if count == 1 {
+			// First download request corresponds to Inventory Check response
+			responseBody = `{"status":"available"}`
+		} else {
+			// Second download request corresponds to Payment Capture response
+			responseBody = `{"status":"success"}`
+		}
+		
+		_, _ = w.Write([]byte(responseBody))
 	})
 
 	// Upload route (used for sending requests)
-	var uploadCount int
+	var uploadCount int32
 	mux.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
-		uploadCount++
+		count := atomic.AddInt32(&uploadCount, 1)
 		w.WriteHeader(http.StatusOK)
 
 		body, err := io.ReadAll(r.Body)
@@ -122,12 +135,12 @@ func startMockServer(addr string) *http.Server {
 			return
 		}
 
-		if uploadCount == 1 {
-			fmt.Printf("[MOCK BILLING SERVICE] Received charge request: %s\n", string(body))
-		} else if uploadCount == 2 {
-			fmt.Printf("[MOCK CRM SERVICE] Received update status request: %s\n", string(body))
-		} else if uploadCount == 3 {
-			fmt.Printf("[MOCK DATABASE API] Received final database record to persist: %s\n", string(body))
+		if count == 1 {
+			fmt.Printf("[MOCK INVENTORY SERVICE] Received check request: %s\n", string(body))
+		} else if count == 2 {
+			fmt.Printf("[MOCK PAYMENT SERVICE] Received capture request: %s\n", string(body))
+		} else if count == 3 {
+			fmt.Printf("[MOCK DATABASE API] Received final order record to persist: %s\n", string(body))
 			_ = os.WriteFile(dbFile, body, 0644)
 		}
 	})

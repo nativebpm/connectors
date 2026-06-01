@@ -24,14 +24,18 @@ clean:
 	@echo "Cleaning artifacts..."
 	rm -f worker/worker.wasm host/host
 	make -C examples/process-csv clean
-	make -C examples/camunda-temporal clean
+	make -C examples/temporal clean
+	make -C examples/camunda clean
 	make -C examples/gotenberg-telegram clean
 
 run-csv-example:
 	make -C examples/process-csv run
 
-run-camunda-temporal-example:
-	make -C examples/camunda-temporal run
+run-temporal-example:
+	make -C examples/temporal run
+
+run-camunda-example:
+	make -C examples/camunda run
 
 run-gotenberg-telegram-example:
 	make -C examples/gotenberg-telegram run
