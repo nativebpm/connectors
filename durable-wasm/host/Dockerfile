@@ -1,20 +1,20 @@
-# Stage 1: Build the static Go host binary
-FROM golang:1.26-alpine AS builder
+# Stage 1: Build the static Go host binary using Debian (glibc)
+FROM golang:1.26-bookworm AS builder
 
-# Install build tools needed for CGO compilation
-RUN apk add --no-cache git build-base curl
+# Install build tools and static glibc libraries
+RUN apt-get update && apt-get install -y gcc g++ make git curl libc6-dev
 
 WORKDIR /app/host
 
-# Copy the host module dependency files
+# Copy dependency files
 COPY host/go.mod host/go.sum* ./
 RUN go mod download
 
-# Copy the entire host source code (including main.go and the durable package)
+# Copy the entire host source code
 COPY host/ ./
 
-# Build static binary linked against musl libc
-RUN CGO_ENABLED=1 GOOS=linux go build -tags musl -ldflags '-linkmode external -extldflags "-static"' -o host main.go
+# Build static binary, linking glibc statically
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags '-extldflags "-static"' -o host main.go
 
 # Stage 2: Deploy in a scratch container
 FROM scratch
