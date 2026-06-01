@@ -105,3 +105,50 @@ type ReplyKeyboardMarkup struct {
 type ReplyParameters struct {
 	MessageID int64 `json:"message_id"`
 }
+
+// MessageText returns the text of the message if available, otherwise an empty string.
+func (u Update) MessageText() string {
+	if u.Message == nil {
+		return ""
+	}
+	return u.Message.Text
+}
+
+// ChatID returns the chat ID for the update if available, otherwise 0.
+func (u Update) ChatID() int64 {
+	if u.Message != nil {
+		return u.Message.Chat.ID
+	}
+	if u.CallbackQuery != nil && u.CallbackQuery.Message != nil {
+		return u.CallbackQuery.Message.Chat.ID
+	}
+	return 0
+}
+
+// SenderFirstName returns the first name of the sender if available, otherwise an empty string.
+func (u Update) SenderFirstName() string {
+	if u.Message != nil && u.Message.From != nil {
+		return u.Message.From.FirstName
+	}
+	if u.CallbackQuery != nil {
+		return u.CallbackQuery.From.FirstName
+	}
+	return ""
+}
+
+// CallbackData returns the data associated with the callback query if available, otherwise an empty string.
+func (u Update) CallbackData() string {
+	if u.CallbackQuery == nil {
+		return ""
+	}
+	return u.CallbackQuery.Data
+}
+
+// CallbackID returns the callback query ID if available, otherwise an empty string.
+func (u Update) CallbackID() string {
+	if u.CallbackQuery == nil {
+		return ""
+	}
+	return u.CallbackQuery.ID
+}
+
