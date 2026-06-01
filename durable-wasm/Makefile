@@ -24,9 +24,17 @@ clean:
 	@echo "Cleaning artifacts..."
 	rm -f worker/worker.wasm host/host
 	make -C examples/process-csv clean
+	make -C examples/camunda-temporal clean
+	make -C examples/gotenberg-telegram clean
 
 run-csv-example:
 	make -C examples/process-csv run
+
+run-camunda-temporal-example:
+	make -C examples/camunda-temporal run
+
+run-gotenberg-telegram-example:
+	make -C examples/gotenberg-telegram run
 
 docker-build:
 	@echo "Building scratch-based Docker image..."

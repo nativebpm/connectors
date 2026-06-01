@@ -329,6 +329,11 @@ func (s *Session) handleUpload(ptr int32, length int32) int32 {
 		s.uploadPipeW.Close()
 		err := <-s.uploadErrChan
 		s.uploadPipeW = nil
+
+		// Reset download stream state to allow next download requests
+		s.downloadResp = nil
+		s.downloadEOF = false
+
 		if err != nil {
 			fmt.Printf("[ENGINE ERROR] POST failed: %v\n", err)
 			return -1

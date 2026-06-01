@@ -6,6 +6,10 @@ use (
 	./durable-wasm/worker
 	./durable-wasm/examples/process-csv/host
 	./durable-wasm/examples/process-csv/worker
+	./durable-wasm/examples/camunda-temporal/host
+	./durable-wasm/examples/camunda-temporal/worker
+	./durable-wasm/examples/gotenberg-telegram/host
+	./durable-wasm/examples/gotenberg-telegram/worker
 	./gotenberg
 	./httpstream
 	./sequin
