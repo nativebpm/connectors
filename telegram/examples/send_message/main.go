@@ -32,17 +32,9 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	callbackData := "task_approve_123"
-	markup := telegram.InlineKeyboardMarkup{
-		InlineKeyboard: [][]telegram.InlineKeyboardButton{
-			{
-				{
-					Text:         "Approve Document 📄",
-					CallbackData: &callbackData,
-				},
-			},
-		},
-	}
+	markup := telegram.NewInlineKeyboard().
+		AddButtonRow("Approve Document 📄", "task_approve_123").
+		Build()
 
 	msg, err := client.NewMessage(chatID, "🔔 *New BPM Task*:\n\nA new purchase request needs your approval.").
 		ParseMode("Markdown").

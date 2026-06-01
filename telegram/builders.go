@@ -162,3 +162,127 @@ func (b *PhotoBuilder) ReplyMarkup(markup any) *PhotoBuilder {
 func (b *PhotoBuilder) Send(ctx context.Context) (*Message, error) {
 	return b.client.SendPhoto(ctx, &b.params)
 }
+
+// InlineKeyboardBuilder provides a fluent builder for InlineKeyboardMarkup.
+type InlineKeyboardBuilder struct {
+	rows [][]InlineKeyboardButton
+}
+
+// NewInlineKeyboard initializes a fluent inline keyboard builder.
+func NewInlineKeyboard() *InlineKeyboardBuilder {
+	return &InlineKeyboardBuilder{
+		rows: make([][]InlineKeyboardButton, 0),
+	}
+}
+
+// AddButton adds an inline button to the last row, or creates a new row if empty.
+func (b *InlineKeyboardBuilder) AddButton(text, callbackData string) *InlineKeyboardBuilder {
+	btn := InlineKeyboardButton{
+		Text:         text,
+		CallbackData: &callbackData,
+	}
+	if len(b.rows) == 0 {
+		b.rows = append(b.rows, []InlineKeyboardButton{btn})
+	} else {
+		lastIdx := len(b.rows) - 1
+		b.rows[lastIdx] = append(b.rows[lastIdx], btn)
+	}
+	return b
+}
+
+// AddURLButton adds a URL inline button to the last row, or creates a new row if empty.
+func (b *InlineKeyboardBuilder) AddURLButton(text, url string) *InlineKeyboardBuilder {
+	btn := InlineKeyboardButton{
+		Text: text,
+		URL:  &url,
+	}
+	if len(b.rows) == 0 {
+		b.rows = append(b.rows, []InlineKeyboardButton{btn})
+	} else {
+		lastIdx := len(b.rows) - 1
+		b.rows[lastIdx] = append(b.rows[lastIdx], btn)
+	}
+	return b
+}
+
+// AddButtonRow adds a new row containing a single callback button.
+func (b *InlineKeyboardBuilder) AddButtonRow(text, callbackData string) *InlineKeyboardBuilder {
+	btn := InlineKeyboardButton{
+		Text:         text,
+		CallbackData: &callbackData,
+	}
+	b.rows = append(b.rows, []InlineKeyboardButton{btn})
+	return b
+}
+
+// AddURLButtonRow adds a new row containing a single URL button.
+func (b *InlineKeyboardBuilder) AddURLButtonRow(text, url string) *InlineKeyboardBuilder {
+	btn := InlineKeyboardButton{
+		Text: text,
+		URL:  &url,
+	}
+	b.rows = append(b.rows, []InlineKeyboardButton{btn})
+	return b
+}
+
+// Build constructs and returns the InlineKeyboardMarkup structure.
+func (b *InlineKeyboardBuilder) Build() InlineKeyboardMarkup {
+	return InlineKeyboardMarkup{
+		InlineKeyboard: b.rows,
+	}
+}
+
+// ReplyKeyboardBuilder provides a fluent builder for ReplyKeyboardMarkup.
+type ReplyKeyboardBuilder struct {
+	rows            [][]KeyboardButton
+	resizeKeyboard  bool
+	oneTimeKeyboard bool
+}
+
+// NewReplyKeyboard initializes a fluent reply keyboard builder.
+func NewReplyKeyboard() *ReplyKeyboardBuilder {
+	return &ReplyKeyboardBuilder{
+		rows: make([][]KeyboardButton, 0),
+	}
+}
+
+// AddButton adds a keyboard button to the last row, or creates a new row if empty.
+func (b *ReplyKeyboardBuilder) AddButton(text string) *ReplyKeyboardBuilder {
+	btn := KeyboardButton{Text: text}
+	if len(b.rows) == 0 {
+		b.rows = append(b.rows, []KeyboardButton{btn})
+	} else {
+		lastIdx := len(b.rows) - 1
+		b.rows[lastIdx] = append(b.rows[lastIdx], btn)
+	}
+	return b
+}
+
+// AddButtonRow adds a new row containing a single reply keyboard button.
+func (b *ReplyKeyboardBuilder) AddButtonRow(text string) *ReplyKeyboardBuilder {
+	btn := KeyboardButton{Text: text}
+	b.rows = append(b.rows, []KeyboardButton{btn})
+	return b
+}
+
+// ResizeKeyboard requests clients to resize the keyboard vertically for optimal fit.
+func (b *ReplyKeyboardBuilder) ResizeKeyboard(resize bool) *ReplyKeyboardBuilder {
+	b.resizeKeyboard = resize
+	return b
+}
+
+// OneTimeKeyboard requests clients to hide the keyboard as soon as it's been used.
+func (b *ReplyKeyboardBuilder) OneTimeKeyboard(oneTime bool) *ReplyKeyboardBuilder {
+	b.oneTimeKeyboard = oneTime
+	return b
+}
+
+// Build constructs and returns the ReplyKeyboardMarkup structure.
+func (b *ReplyKeyboardBuilder) Build() ReplyKeyboardMarkup {
+	return ReplyKeyboardMarkup{
+		Keyboard:        b.rows,
+		ResizeKeyboard:  b.resizeKeyboard,
+		OneTimeKeyboard: b.oneTimeKeyboard,
+	}
+}
+

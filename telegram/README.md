@@ -70,14 +70,9 @@ func main() {
 	client, _ := telegram.NewClient("YOUR_BOT_TOKEN")
 
 	// Create an inline keyboard
-	callbackData := "action_approve"
-	markup := telegram.InlineKeyboardMarkup{
-		InlineKeyboard: [][]telegram.InlineKeyboardButton{
-			{
-				{Text: "Approve Task", CallbackData: &callbackData},
-			},
-		},
-	}
+	markup := telegram.NewInlineKeyboard().
+		AddButtonRow("Approve Task", "action_approve").
+		Build()
 
 	msg, err := client.NewMessage(int64(123456789), "**New BPM Task**: Please review and approve the request.").
 		ParseMode("MarkdownV2").

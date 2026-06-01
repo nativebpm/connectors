@@ -387,3 +387,53 @@ func TestStartPolling(t *testing.T) {
 	}
 }
 
+func TestKeyboardBuilders(t *testing.T) {
+	// 1. Test InlineKeyboardBuilder
+	ik := NewInlineKeyboard().
+		AddButton("btn1", "data1").
+		AddURLButton("btn2", "https://google.com").
+		AddButtonRow("btn3", "data3").
+		AddURLButtonRow("btn4", "https://yahoo.com").
+		Build()
+
+	require.Len(t, ik.InlineKeyboard, 3)
+	// Row 1 (added using AddButton and AddURLButton)
+	require.Len(t, ik.InlineKeyboard[0], 2)
+	assert.Equal(t, "btn1", ik.InlineKeyboard[0][0].Text)
+	assert.Equal(t, "data1", *ik.InlineKeyboard[0][0].CallbackData)
+	assert.Nil(t, ik.InlineKeyboard[0][0].URL)
+
+	assert.Equal(t, "btn2", ik.InlineKeyboard[0][1].Text)
+	assert.Equal(t, "https://google.com", *ik.InlineKeyboard[0][1].URL)
+	assert.Nil(t, ik.InlineKeyboard[0][1].CallbackData)
+
+	// Row 2 (added using AddButtonRow)
+	require.Len(t, ik.InlineKeyboard[1], 1)
+	assert.Equal(t, "btn3", ik.InlineKeyboard[1][0].Text)
+
+	// Row 3 (added using AddURLButtonRow)
+	require.Len(t, ik.InlineKeyboard[2], 1)
+	assert.Equal(t, "btn4", ik.InlineKeyboard[2][0].Text)
+
+	// 2. Test ReplyKeyboardBuilder
+	rk := NewReplyKeyboard().
+		AddButton("reply1").
+		AddButton("reply2").
+		AddButtonRow("reply3").
+		ResizeKeyboard(true).
+		OneTimeKeyboard(true).
+		Build()
+
+	require.Len(t, rk.Keyboard, 2)
+	require.Len(t, rk.Keyboard[0], 2)
+	assert.Equal(t, "reply1", rk.Keyboard[0][0].Text)
+	assert.Equal(t, "reply2", rk.Keyboard[0][1].Text)
+
+	require.Len(t, rk.Keyboard[1], 1)
+	assert.Equal(t, "reply3", rk.Keyboard[1][0].Text)
+
+	assert.True(t, rk.ResizeKeyboard)
+	assert.True(t, rk.OneTimeKeyboard)
+}
+
+
