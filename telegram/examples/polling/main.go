@@ -52,10 +52,8 @@ func main() {
 
 				// Reply back to user
 				replyCtx, replyCancel := context.WithTimeout(context.Background(), 5*time.Second)
-				_, err = client.SendMessage(replyCtx, &telegram.SendMessageParams{
-					ChatID: update.Message.Chat.ID,
-					Text:   fmt.Sprintf("Hello %s! I received your message: \"%s\"", update.Message.Chat.FirstName, update.Message.Text),
-				})
+				_, err = client.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Hello %s! I received your message: \"%s\"", update.Message.Chat.FirstName, update.Message.Text)).
+					Send(replyCtx)
 				replyCancel()
 				if err != nil {
 					log.Printf("Failed to reply: %v", err)

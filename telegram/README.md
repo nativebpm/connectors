@@ -79,12 +79,10 @@ func main() {
 		},
 	}
 
-	msg, err := client.SendMessage(context.Background(), &telegram.SendMessageParams{
-		ChatID:      int64(123456789),
-		Text:        "**New BPM Task**: Please review and approve the request.",
-		ParseMode:   "MarkdownV2",
-		ReplyMarkup: markup,
-	})
+	msg, err := client.NewMessage(int64(123456789), "**New BPM Task**: Please review and approve the request.").
+		ParseMode("MarkdownV2").
+		ReplyMarkup(markup).
+		Send(context.Background())
 	if err != nil {
 		log.Fatalf("Failed to send message: %v", err)
 	}
@@ -119,12 +117,9 @@ func main() {
 	defer file.Close()
 
 	// Send document (streamed directly)
-	msg, err := client.SendDocument(context.Background(), &telegram.SendDocumentParams{
-		ChatID:   int64(123456789),
-		Document: file,
-		Filename: "invoice.pdf",
-		Caption:  "Here is your invoice PDF.",
-	})
+	msg, err := client.NewDocument(int64(123456789), file, "invoice.pdf").
+		Caption("Here is your invoice PDF.").
+		Send(context.Background())
 	if err != nil {
 		log.Fatalf("Failed to stream document: %v", err)
 	}

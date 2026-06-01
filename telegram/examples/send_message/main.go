@@ -44,12 +44,10 @@ func main() {
 		},
 	}
 
-	msg, err := client.SendMessage(ctx, &telegram.SendMessageParams{
-		ChatID:    chatID,
-		Text:      "🔔 *New BPM Task*:\n\nA new purchase request needs your approval.",
-		ParseMode: "Markdown",
-		ReplyMarkup: markup,
-	})
+	msg, err := client.NewMessage(chatID, "🔔 *New BPM Task*:\n\nA new purchase request needs your approval.").
+		ParseMode("Markdown").
+		ReplyMarkup(markup).
+		Send(ctx)
 	if err != nil {
 		log.Fatalf("Failed to send message: %v", err)
 	}

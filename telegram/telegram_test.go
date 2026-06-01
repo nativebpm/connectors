@@ -286,3 +286,57 @@ func TestOtherMethods(t *testing.T) {
 	assert.Equal(t, int64(100), updates[0].UpdateID)
 	assert.Equal(t, "hello", updates[0].Message.Text)
 }
+
+func TestFluentBuilders(t *testing.T) {
+	photoContent := "fake_photo_data"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/botTEST_TOKEN/sendMessage" {
+			_, _ = w.Write([]byte(`{"ok": true, "result": {"message_id": 1, "chat": {"id": 123456, "type": "private"}, "date": 3, "text": "hello"}}`))
+		} else if r.URL.Path == "/botTEST_TOKEN/sendDocument" {
+			_, _ = w.Write([]byte(`{"ok": true, "result": {"message_id": 2, "chat": {"id": 123456, "type": "private"}, "date": 3, "document": {"file_id": "doc123"}}}`))
+		} else if r.URL.Path == "/botTEST_TOKEN/sendPhoto" {
+			_, _ = w.Write([]byte(`{"ok": true, "result": {"message_id": 3, "chat": {"id": 123456, "type": "private"}, "date": 3, "photo": [{"file_id": "photo123"}]}}`))
+		}
+	}))
+	defer server.Close()
+
+	client, err := NewClient("TEST_TOKEN", WithAPIURL(server.URL))
+	require.NoError(t, err)
+
+	// Test Message Builder
+	msg, err := client.NewMessage(int64(123456), "hello").
+		ParseMode("HTML").
+		DisableWebPagePreview(true).
+		DisableNotification(true).
+		ReplyTo(999).
+		Send(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), msg.MessageID)
+	assert.Equal(t, "hello", msg.Text)
+
+	// Test Document Builder
+	docMsg, err := client.NewDocument(int64(123456), strings.NewReader("doc"), "doc.txt").
+		Caption("my doc").
+		ParseMode("HTML").
+		DisableNotification(true).
+		ReplyTo(999).
+		ReplyMarkup(nil).
+		Send(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), docMsg.MessageID)
+	assert.Equal(t, "doc123", docMsg.Document.FileID)
+
+	// Test Photo Builder
+	photoMsg, err := client.NewPhoto(int64(123456), strings.NewReader(photoContent), "photo.jpg").
+		Caption("my photo").
+		ParseMode("HTML").
+		DisableNotification(true).
+		ReplyTo(999).
+		ReplyMarkup(nil).
+		Send(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), photoMsg.MessageID)
+	assert.Equal(t, "photo123", photoMsg.Photo[0].FileID)
+}
+

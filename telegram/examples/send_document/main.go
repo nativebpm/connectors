@@ -39,12 +39,9 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	msg, err := client.SendDocument(ctx, &telegram.SendDocumentParams{
-		ChatID:   chatID,
-		Document: file,
-		Filename: "telegram-readme.md",
-		Caption:  "Here is the README documentation streamed directly from the disk.",
-	})
+	msg, err := client.NewDocument(chatID, file, "telegram-readme.md").
+		Caption("Here is the README documentation streamed directly from the disk.").
+		Send(ctx)
 	if err != nil {
 		log.Fatalf("Failed to stream document: %v", err)
 	}
