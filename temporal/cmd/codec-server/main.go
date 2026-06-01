@@ -12,26 +12,26 @@ import (
 func main() {
 	log.Println("Starting Temporal Codec Server...")
 
-	// Загружаем общую конфигурацию
+	// Load general configuration
 	cfg := temporal.LoadFromEnv()
 
 	if len(cfg.EncryptionKey) == 0 {
 		log.Fatal("TEMPORAL_ENCRYPTION_KEY environment variable is required but not set")
 	}
 
-	// Создаем шифрующий кодек
+	// Create encrypting codec
 	codec, err := temporal.NewCryptCodec(cfg.EncryptionKey)
 	if err != nil {
 		log.Fatalf("Failed to initialize CryptCodec: %v", err)
 	}
 
-	// Создаем HTTP обработчик для кодека
+	// Create HTTP handler for codec
 	handler := converter.NewPayloadCodecHTTPHandler(codec)
 
-	// Добавляем CORS-заголовки для доступа из браузера (админки Temporal Web UI)
+	// Add CORS headers for browser access (Temporal Web UI Admin)
 	corsHandler := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*") // В prod рекомендуется ограничить доменом админки
+			w.Header().Set("Access-Control-Allow-Origin", "*") // In prod it is recommended to restrict to admin domain
 			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Namespace, Authorization")
 			

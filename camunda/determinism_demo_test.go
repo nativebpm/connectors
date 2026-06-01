@@ -6,44 +6,44 @@ import (
 	"time"
 )
 
-// TestRealTimeDemo демонстрирует, как ведет себя обычный тест, если мы попытаемся 
-// подождать завершения долгой операции (например, тайм-аута в 2 секунды).
-// Мы закомментировали реальное выполнение, чтобы не замедлять тесты проекта,
-// но логика показывает реальные накладные расходы.
+// TestRealTimeDemo demonstrates how a regular test behaves when we attempt to
+// wait for a long operation (e.g. 2 seconds timeout) to finish.
+// We commented out the actual long execution to prevent slowing down project tests,
+// but the logic shows the real overhead.
 func TestRealTimeDemo(t *testing.T) {
 	start := time.Now()
 	
-	// Симулируем задержку в 100 миллисекунд реального времени
+	// Simulate 100 milliseconds of real-time delay
 	time.Sleep(100 * time.Millisecond)
 	
 	elapsed := time.Since(start)
-	t.Logf("[Real Time] Прошло реального времени: %v", elapsed)
+	t.Logf("[Real Time] Real time elapsed: %v", elapsed)
 }
 
-// TestVirtualTimeDemo демонстрирует мощь детерминированного тестирования с synctest.
-// Мы запускаем горутину, которая засыпает на 10 СЕКУНД (10000 мс).
-// В обычном окружении этот тест шел бы 10 секунд. В пузыре synctest он выполняется мгновенно!
+// TestVirtualTimeDemo demonstrates the power of deterministic testing with synctest.
+// We launch a goroutine that sleeps for 10 SECONDS (10000 ms).
+// In a normal environment, this test would take 10 seconds. In the synctest bubble, it executes instantly!
 func TestVirtualTimeDemo(t *testing.T) {
-	// Замеряем реальное время выполнения теста снаружи пузыря виртуального времени
+	// Measure the real execution time of the test outside the virtual time bubble
 	realStart := time.Now()
 
 	synctest.Test(t, func(t *testing.T) {
 		virtualStart := time.Now()
 		ch := make(chan struct{})
 
-		// Запускаем конкурентный процесс в виртуальном времени
+		// Start concurrent process in virtual time
 		go func() {
-			// Засыпаем на 10 секунд виртуального времени
+			// Sleep for 10 seconds of virtual time
 			time.Sleep(10 * time.Second)
 			close(ch)
 		}()
 
-		// Имитируем ожидание в основном потоке на те же 10 виртуальных секунд
+		// Simulate waiting in the main thread for the same 10 virtual seconds
 		time.Sleep(10 * time.Second)
 		<-ch
 
-		t.Logf("[Synctest] Прошло виртуального времени: %v", time.Since(virtualStart))
+		t.Logf("[Synctest] Virtual time elapsed: %v", time.Since(virtualStart))
 	})
 
-	t.Logf("[Synctest] Реальное время выполнения теста на CPU: %v", time.Since(realStart))
+	t.Logf("[Synctest] Real test CPU execution time: %v", time.Since(realStart))
 }

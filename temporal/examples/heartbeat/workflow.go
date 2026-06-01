@@ -7,15 +7,15 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// HeartbeatWorkflow координирует выполнение процесса с использованием Heartbeats.
+// HeartbeatWorkflow coordinates process execution using Heartbeats.
 func HeartbeatWorkflow(ctx workflow.Context, totalSteps int) (string, error) {
 	options := workflow.ActivityOptions{
-		// Общий таймаут выполнения Activity
+		// Overall Activity execution timeout
 		StartToCloseTimeout: 1 * time.Minute,
-		// Максимальное время между Heartbeats. Если воркер не пришлет
-		// heartbeat в течение этого времени, сервер считает задачу зависшей.
+		// Maximum time between Heartbeats. If the worker does not send
+		// a heartbeat within this time, the server considers the task hung.
 		HeartbeatTimeout: 2 * time.Second,
-		// Настройка политики повторных попыток
+		// Configure retry policy
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    1 * time.Second,
 			BackoffCoefficient: 1.0,

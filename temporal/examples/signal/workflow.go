@@ -6,17 +6,17 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// SubscriptionStatus представляет текущий статус подписки.
+// SubscriptionStatus represents the current subscription status.
 type SubscriptionStatus struct {
 	State       string    `json:"state"`
 	BillingInfo string    `json:"billingInfo"`
 	UpdatedTime time.Time `json:"updatedTime"`
 }
 
-// SubscriptionWorkflow моделирует процесс подписки с возможностью обновления биллинга и отмены.
+// SubscriptionWorkflow models the subscription process with options to update billing and cancel.
 func SubscriptionWorkflow(ctx workflow.Context, duration time.Duration) (string, error) {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Начало выполнения SubscriptionWorkflow", "duration", duration)
+	logger.Info("Starting SubscriptionWorkflow", "duration", duration)
 
 	status := SubscriptionStatus{
 		State:       "Active",
@@ -24,28 +24,28 @@ func SubscriptionWorkflow(ctx workflow.Context, duration time.Duration) (string,
 		UpdatedTime: workflow.Now(ctx),
 	}
 
-	// Регистрируем Query-хендлер для возврата текущего статуса
+	// Register Query handler to return current status
 	err := workflow.SetQueryHandler(ctx, "GetSubscriptionStatus", func() (SubscriptionStatus, error) {
 		return status, nil
 	})
 	if err != nil {
-		logger.Error("Не удалось зарегистрировать QueryHandler", "error", err)
+		logger.Error("Failed to register QueryHandler", "error", err)
 		return "", err
 	}
 
-	// Создаем селектор для ожидания различных сигналов или таймаута
+	// Create selector to wait for various signals or timeout
 	selector := workflow.NewSelector(ctx)
 
-	// Сигнал отмены
+	// Cancel signal
 	cancelChan := workflow.GetSignalChannel(ctx, "CancelSubscription")
 	selector.AddReceive(cancelChan, func(c workflow.ReceiveChannel, more bool) {
 		c.Receive(ctx, nil)
 		status.State = "Cancelled"
 		status.UpdatedTime = workflow.Now(ctx)
-		logger.Info("Получен сигнал CancelSubscription")
+		logger.Info("Received CancelSubscription signal")
 	})
 
-	// Сигнал обновления биллинга
+	// Billing update signal
 	billingChan := workflow.GetSignalChannel(ctx, "UpdateBillingInfo")
 	selector.AddReceive(billingChan, func(c workflow.ReceiveChannel, more bool) {
 		var newBilling string
@@ -53,19 +53,19 @@ func SubscriptionWorkflow(ctx workflow.Context, duration time.Duration) (string,
 		status.BillingInfo = newBilling
 		status.State = "Updated"
 		status.UpdatedTime = workflow.Now(ctx)
-		logger.Info("Получен сигнал UpdateBillingInfo", "newBilling", newBilling)
+		logger.Info("Received UpdateBillingInfo signal", "newBilling", newBilling)
 	})
 
-	// Таймаут подписки
+	// Subscription timeout
 	selector.AddFuture(workflow.NewTimer(ctx, duration), func(f workflow.Future) {
 		if status.State != "Cancelled" {
 			status.State = "Expired"
 			status.UpdatedTime = workflow.Now(ctx)
-			logger.Info("Срок действия подписки истек")
+			logger.Info("Subscription expired")
 		}
 	})
 
-	// Ждем наступления одного из событий: таймаут подписки или сигнал отмены
+	// Wait for events: subscription timeout or cancel signal
 	for status.State == "Active" || status.State == "Updated" {
 		selector.Select(ctx)
 	}

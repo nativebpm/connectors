@@ -6,14 +6,14 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// Worker является оберткой над воркером Temporal для упрощенной регистрации 
-// Workflow и Activity и управления их жизненным циклом.
+// Worker is a wrapper around the Temporal worker for simplified
+// Workflow and Activity registration and lifecycle management.
 type Worker struct {
 	rawWorker worker.Worker
 	taskQueue string
 }
 
-// NewWorker инициализирует новый экземпляр воркера для заданной очереди задач (Task Queue).
+// NewWorker initializes a new worker instance for the specified Task Queue.
 func NewWorker(client *Client, taskQueue string) *Worker {
 	if taskQueue == "" {
 		taskQueue = client.config.TaskQueue
@@ -31,42 +31,42 @@ func NewWorker(client *Client, taskQueue string) *Worker {
 	}
 }
 
-// RegisterWorkflow регистрирует функцию Workflow в воркере.
+// RegisterWorkflow registers a Workflow function in the worker.
 func (w *Worker) RegisterWorkflow(wf any) {
 	w.rawWorker.RegisterWorkflow(wf)
 }
 
-// RegisterWorkflowWithOptions регистрирует функцию Workflow с кастомными настройками регистрации.
+// RegisterWorkflowWithOptions registers a Workflow function with custom registration options.
 func (w *Worker) RegisterWorkflowWithOptions(wf any, options workflow.RegisterOptions) {
 	w.rawWorker.RegisterWorkflowWithOptions(wf, options)
 }
 
-// RegisterActivity регистрирует функцию или структуру Activity в воркере.
+// RegisterActivity registers an Activity function or struct in the worker.
 func (w *Worker) RegisterActivity(act any) {
 	w.rawWorker.RegisterActivity(act)
 }
 
-// RegisterActivityWithOptions регистрирует функцию или структуру Activity с настройками.
+// RegisterActivityWithOptions registers an Activity function or struct with options.
 func (w *Worker) RegisterActivityWithOptions(act any, options activity.RegisterOptions) {
 	w.rawWorker.RegisterActivityWithOptions(act, options)
 }
 
-// Start запускает воркер в неблокирующем режиме.
+// Start starts the worker in a non-blocking mode.
 func (w *Worker) Start() error {
 	return w.rawWorker.Start()
 }
 
-// Stop останавливает воркер, завершая обработку текущих задач.
+// Stop stops the worker, finishing active task processing.
 func (w *Worker) Stop() {
 	w.rawWorker.Stop()
 }
 
-// Run запускает воркер в блокирующем режиме до получения сигнала прерывания.
+// Run starts the worker in blocking mode until an interrupt signal is received.
 func (w *Worker) Run(interruptCh <-chan interface{}) error {
 	return w.rawWorker.Run(interruptCh)
 }
 
-// RawWorker возвращает оригинальный объект воркера SDK.
+// RawWorker returns the original SDK worker object.
 func (w *Worker) RawWorker() worker.Worker {
 	return w.rawWorker
 }

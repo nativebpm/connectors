@@ -12,7 +12,7 @@ type TripReservationParams struct {
 	Destination string
 }
 
-// TripReservationWorkflow координирует транзакции и компенсации по паттерну Saga.
+// TripReservationWorkflow coordinates transactions and compensations via the Saga pattern.
 func TripReservationWorkflow(ctx workflow.Context, params TripReservationParams) (string, error) {
 	options := workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Second,
@@ -22,67 +22,67 @@ func TripReservationWorkflow(ctx workflow.Context, params TripReservationParams)
 	var activities *TripReservationActivities
 	logger := workflow.GetLogger(ctx)
 	
-	// Список компенсаций, которые нужно выполнить в случае сбоя (LIFO)
+	// List of compensations to execute in case of failure (LIFO)
 	var compensations []func(ctx workflow.Context) error
 
 	defer func() {
-		// Если функция завершилась с ошибкой (например, паника или ошибка выполнения),
-		// выполняем накопленный стек компенсаций.
-		// В Temporal важно использовать workflow.NewDisconnectedContext, чтобы выполнять
-		// компенсации даже если родительский контекст workflow был отменен (например, по таймауту).
+		// If execution failed (e.g. panic or returned error),
+		// execute the recorded compensations.
+		// In Temporal it is crucial to use workflow.NewDisconnectedContext to execute
+		// compensations even if the parent workflow context was cancelled (e.g. on timeout).
 	}()
 
-	// 1. Списание средств
+	// 1. Credit reservation
 	var creditResult string
 	err := workflow.ExecuteActivity(ctx, activities.ReserveCredit, params.Amount).Get(ctx, &creditResult)
 	if err != nil {
-		logger.Error("Ошибка при ReserveCredit", "error", err)
+		logger.Error("ReserveCredit failed", "error", err)
 		return "", err
 	}
-	// Добавляем компенсацию в начало стека
+	// Add compensation to the stack
 	compensations = append(compensations, func(ctx workflow.Context) error {
 		return workflow.ExecuteActivity(ctx, activities.RefundCredit, params.Amount).Get(ctx, nil)
 	})
 
-	// 2. Бронирование отеля
+	// 2. Hotel booking
 	var hotelResult string
 	err = workflow.ExecuteActivity(ctx, activities.BookHotel, params.HotelName).Get(ctx, &hotelResult)
 	if err != nil {
-		logger.Error("Ошибка при BookHotel, инициируем откат саги", "error", err)
+		logger.Error("BookHotel failed, initiating saga rollback", "error", err)
 		executeCompensations(ctx, compensations)
 		return "", err
 	}
-	// Добавляем компенсацию
+	// Add compensation
 	compensations = append(compensations, func(ctx workflow.Context) error {
 		return workflow.ExecuteActivity(ctx, activities.CancelHotel, params.HotelName).Get(ctx, nil)
 	})
 
-	// 3. Бронирование перелета
+	// 3. Flight booking
 	var flightResult string
 	err = workflow.ExecuteActivity(ctx, activities.BookFlight, params.Destination).Get(ctx, &flightResult)
 	if err != nil {
-		logger.Error("Ошибка при BookFlight, инициируем откат саги", "error", err)
+		logger.Error("BookFlight failed, initiating saga rollback", "error", err)
 		executeCompensations(ctx, compensations)
 		return "", err
 	}
 
-	logger.Info("Бронирование тура успешно завершено!")
+	logger.Info("Trip reservation completed successfully!")
 	return "Trip successfully reserved!", nil
 }
 
-// executeCompensations запускает компенсации в обратном порядке (LIFO)
+// executeCompensations runs compensations in reverse order (LIFO)
 func executeCompensations(ctx workflow.Context, compensations []func(workflow.Context) error) {
-	// Создаем изолированный контекст для выполнения компенсаций, 
-	// чтобы они не прервались, если основной контекст был отменен.
+	// Create disconnected context to execute compensations, 
+	// so they won't be aborted if the main context was cancelled.
 	disconnectedCtx, _ := workflow.NewDisconnectedContext(ctx)
 	logger := workflow.GetLogger(ctx)
 
-	logger.Info("Запуск компенсирующих транзакций (откат саги)...")
+	logger.Info("Running compensations (saga rollback)...")
 	for i := len(compensations) - 1; i >= 0; i-- {
 		err := compensations[i](disconnectedCtx)
 		if err != nil {
-			logger.Error("Ошибка при выполнении компенсирующей транзакции", "index", i, "error", err)
-			// В реальных системах здесь может потребоваться эскалация или очередь ручного разбора
+			logger.Error("Failed to execute compensation", "index", i, "error", err)
+			// In production systems, this might require manual review queue escalation
 		}
 	}
 }

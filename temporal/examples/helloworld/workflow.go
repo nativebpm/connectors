@@ -6,7 +6,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// GreetWorkflow координирует выполнение приветственного процесса.
+// GreetWorkflow coordinates execution of the greeting process.
 func GreetWorkflow(ctx workflow.Context, name string) (string, error) {
 	options := workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Second,

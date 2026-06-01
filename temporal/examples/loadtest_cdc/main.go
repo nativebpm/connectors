@@ -27,7 +27,7 @@ var (
 	durations   []time.Duration
 )
 
-// Локальный Workflow удален, используется общий temporal.GreetCDCWorkflow
+// Local Workflow was removed, using shared temporal.GreetCDCWorkflow
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
@@ -63,35 +63,35 @@ func main() {
 
 	cfg := temporal.LoadFromEnv()
 
-	// Инициализируем клиент Temporal
+	// Initialize Temporal client
 	c, err := temporal.NewClient(cfg)
 	if err != nil {
-		logger.Error("Не удалось создать Temporal клиент", "error", err)
+		logger.Error("Failed to create Temporal client", "error", err)
 		return
 	}
 	defer c.Close()
 
-	// Инициализируем подключения к БД для активностей делегирования
+	// Initialize database connections for delegation activities
 	cdcActs, err := temporal.NewCDCActivities(cfg)
 	if err != nil {
-		logger.Error("Не удалось подключиться к БД для CDC активностей", "error", err)
+		logger.Error("Failed to connect to database for CDC activities", "error", err)
 		return
 	}
 	defer cdcActs.Close()
 
-	// Инициализируем классический воркер Temporal (для оркестрации и активностей делегирования)
+	// Initialize standard Temporal worker (for orchestration and delegation activities)
 	w := temporal.NewWorker(c, cfg.TaskQueue)
 	w.RegisterWorkflow(temporal.GreetCDCWorkflow)
 	w.RegisterActivity(cdcActs)
 
 	err = w.Start()
 	if err != nil {
-		logger.Error("Не удалось запустить Temporal воркер", "error", err)
+		logger.Error("Failed to start Temporal worker", "error", err)
 		return
 	}
 	defer w.Stop()
 
-	// Инициализируем высокопроизводительный Sequin CDC Воркер
+	// Initialize high-performance Sequin CDC Worker
 	sequinURL := os.Getenv("SEQUIN_URL")
 	if sequinURL == "" {
 		sequinURL = "http://127.0.0.1:7386"
@@ -103,23 +103,23 @@ func main() {
 
 	cdcWorker, err := temporal.NewSequinCDCWorker(c, sequinURL, sequinConsumer, logger)
 	if err != nil {
-		logger.Error("Не удалось создать Sequin CDC воркер", "error", err)
+		logger.Error("Failed to create Sequin CDC worker", "error", err)
 		return
 	}
 	cdcWorker.SetMaxConcurrency(concurrency)
 
-	// Регистрируем CDC обработчик
+	// Register CDC handler
 	cdcWorker.RegisterHandler("greet-cdc", func(ctx context.Context, payload string) (string, error) {
-		// Быстро выполняем задачу без участия Temporal Matcher
+		// Quickly execute the task bypassing Temporal Matcher
 		return fmt.Sprintf("Hello, %s (processed via WAL CDC)!", payload), nil
 	})
 
-	// Запускаем CDC воркер
+	// Start CDC worker
 	cdcWorker.Start(context.Background())
 
 	doneChan := make(chan struct{})
 
-	// Мониторинг прогресса
+	// Monitor progress
 	startTime := time.Now()
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
@@ -144,7 +144,7 @@ func main() {
 		}
 	}()
 
-	// Запускаем инстансы параллельно в горутинах
+	// Start instances concurrently in goroutines
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, concurrency)
 
@@ -163,25 +163,25 @@ func main() {
 
 			startTimes.Store(workflowID, time.Now())
 
-			// Стартуем workflow
+			// Start workflow
 			run, err := c.ExecuteWorkflow(context.Background(), options, temporal.GreetCDCWorkflow, fmt.Sprintf("Load-%d", num))
 			if err != nil {
 				failedInstances.Add(1)
-				logger.Error("Ошибка при старте CDC workflow", "id", workflowID, "error", err)
+				logger.Error("Error starting CDC workflow", "id", workflowID, "error", err)
 				return
 			}
 			startedInstances.Add(1)
 
-			// Ожидаем завершения
+			// Wait for completion
 			var result string
 			err = run.Get(context.Background(), &result)
 			if err != nil {
 				failedInstances.Add(1)
-				logger.Error("Ошибка при выполнении CDC workflow", "id", workflowID, "error", err)
+				logger.Error("Error executing CDC workflow", "id", workflowID, "error", err)
 				return
 			}
 
-			// Вычисляем latency
+			// Compute latency
 			if startVal, ok := startTimes.Load(workflowID); ok {
 				if st, ok := startVal.(time.Time); ok {
 					durationsMu.Lock()
@@ -204,7 +204,7 @@ func main() {
 
 	totalDuration := time.Since(startTime)
 
-	// Вычисляем перцентили
+	// Compute percentiles
 	durationsMu.Lock()
 	sort.Slice(durations, func(i, j int) bool {
 		return durations[i] < durations[j]
@@ -237,14 +237,14 @@ func main() {
 	}
 	durationsMu.Unlock()
 
-	// Выводим результаты
+	// Output results
 	logger.Info("TEMPORAL CDC LOAD TEST RESULTS",
 		"total_duration", totalDuration,
 		"submitted", totalProcesses,
 		"completed", completedInstances.Load(),
 		"failed", failedInstances.Load(),
 		"throughput_rps", fmt.Sprintf("%.2f", float64(completedInstances.Load())/totalDuration.Seconds()),
-		// 1 Workflow + 1 Activity + 1 Signal = 3 задачи на инстанс в движке
+		// 1 Workflow + 1 Activity + 1 Signal = 3 tasks per instance in the engine
 		"task_throughput_tps", fmt.Sprintf("%.2f", float64(completedInstances.Load()*3)/totalDuration.Seconds()),
 		"p50_latency_ms", p50.Milliseconds(),
 		"p90_latency_ms", p90.Milliseconds(),

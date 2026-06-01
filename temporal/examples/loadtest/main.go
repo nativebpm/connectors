@@ -29,12 +29,12 @@ var (
 )
 
 func main() {
-	// Используем структурированный slog для логов
+	// Use structured slog for logging
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 
-	// Считываем параметры из переменных окружения
+	// Read parameters from environment variables
 	concurrency := 20
 	if val := os.Getenv("LOAD_CONCURRENCY"); val != "" {
 		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
@@ -64,32 +64,32 @@ func main() {
 
 	cfg := temporal.LoadFromEnv()
 
-	// Инициализируем клиент
+	// Initialize client
 	c, err := temporal.NewClient(cfg)
 	if err != nil {
-		logger.Error("Не удалось создать Temporal клиент", "error", err)
+		logger.Error("Failed to create Temporal client", "error", err)
 		return
 	}
 	defer c.Close()
 
-	// Инициализируем воркер
+	// Initialize worker
 	w := temporal.NewWorker(c, cfg.TaskQueue)
 
-	// Регистрируем Workflow и Activity из примера helloworld
+	// Register Workflow and Activity from helloworld example
 	w.RegisterWorkflow(helloworld.GreetWorkflow)
 	w.RegisterActivity(helloworld.GreetActivity)
 
-	// Запускаем воркер в фоне
+	// Run worker in background
 	err = w.Start()
 	if err != nil {
-		logger.Error("Не удалось запустить воркер", "error", err)
+		logger.Error("Failed to start worker", "error", err)
 		return
 	}
 	defer w.Stop()
 
 	doneChan := make(chan struct{})
 
-	// Запускаем мониторинг прогресса
+	// Start progress monitoring
 	startTime := time.Now()
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
@@ -114,9 +114,9 @@ func main() {
 		}
 	}()
 
-	// Запускаем инстансы параллельно в горутинах
+	// Start instances concurrently in goroutines
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, concurrency) // Ограничиваем параллельность отправки
+	sem := make(chan struct{}, concurrency) // Restrict dispatch concurrency
 
 	for i := 1; i <= totalProcesses; i++ {
 		wg.Add(1)
@@ -133,25 +133,25 @@ func main() {
 
 			startTimes.Store(workflowID, time.Now())
 			
-			// Запускаем workflow
+			// Start workflow
 			run, err := c.ExecuteWorkflow(context.Background(), options, helloworld.GreetWorkflow, fmt.Sprintf("Load-%d", num))
 			if err != nil {
 				failedInstances.Add(1)
-				logger.Error("Ошибка при старте workflow", "id", workflowID, "error", err)
+				logger.Error("Error starting workflow", "id", workflowID, "error", err)
 				return
 			}
 			startedInstances.Add(1)
 
-			// Ожидаем результат
+			// Wait for result
 			var result string
 			err = run.Get(context.Background(), &result)
 			if err != nil {
 				failedInstances.Add(1)
-				logger.Error("Ошибка при выполнении workflow", "id", workflowID, "error", err)
+				logger.Error("Error executing workflow", "id", workflowID, "error", err)
 				return
 			}
 
-			// Вычисляем latency
+			// Compute latency
 			if startVal, ok := startTimes.Load(workflowID); ok {
 				if st, ok := startVal.(time.Time); ok {
 					durationsMu.Lock()
@@ -169,13 +169,13 @@ func main() {
 		}(i)
 	}
 
-	// Ожидаем завершения отправки и выполнения всех горутин
+	// Wait for dispatch and completion of all goroutines
 	wg.Wait()
 	close(doneChan)
 
 	totalDuration := time.Since(startTime)
 
-	// Вычисляем перцентили задержки
+	// Compute latency percentiles
 	durationsMu.Lock()
 	sort.Slice(durations, func(i, j int) bool {
 		return durations[i] < durations[j]
@@ -208,14 +208,14 @@ func main() {
 	}
 	durationsMu.Unlock()
 
-	// Выводим итоговую статистику
+	// Output final statistics
 	logger.Info("TEMPORAL LOAD TEST RESULTS",
 		"total_duration", totalDuration,
 		"submitted", totalProcesses,
 		"completed", completedInstances.Load(),
 		"failed", failedInstances.Load(),
 		"throughput_rps", fmt.Sprintf("%.2f", float64(completedInstances.Load())/totalDuration.Seconds()),
-		// Для HelloWorld (1 Workflow + 1 Activity) общее число задач в движке = 2 * completed
+		// For HelloWorld (1 Workflow + 1 Activity), total tasks in engine = 2 * completed
 		"task_throughput_tps", fmt.Sprintf("%.2f", float64(completedInstances.Load()*2)/totalDuration.Seconds()),
 		"p50_latency_ms", p50.Milliseconds(),
 		"p90_latency_ms", p90.Milliseconds(),

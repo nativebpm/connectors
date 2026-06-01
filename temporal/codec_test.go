@@ -9,7 +9,7 @@ import (
 )
 
 func TestCryptCodec_EncodeDecode(t *testing.T) {
-	// Инициализируем ключ
+	// Initialize key
 	passphrase := "my_test_secure_passphrase"
 	hash := sha256.Sum256([]byte(passphrase))
 	key := hash[:]
@@ -17,7 +17,7 @@ func TestCryptCodec_EncodeDecode(t *testing.T) {
 	codec, err := NewCryptCodec(key)
 	assert.NoError(t, err)
 
-	// Создаем тестовую полезную нагрузку
+	// Create test payload
 	originalPayload := &common.Payload{
 		Metadata: map[string][]byte{
 			"encoding": []byte("json/plain"),
@@ -28,26 +28,26 @@ func TestCryptCodec_EncodeDecode(t *testing.T) {
 
 	payloads := []*common.Payload{originalPayload}
 
-	// 1. Шифруем (Encode)
+	// 1. Encrypt (Encode)
 	encodedPayloads, err := codec.Encode(payloads)
 	assert.NoError(t, err)
 	assert.Len(t, encodedPayloads, 1)
 
 	encoded := encodedPayloads[0]
 	assert.NotNil(t, encoded)
-	// Проверяем, что метаданные изменились на зашифрованные
+	// Verify metadata is changed to encrypted
 	assert.Equal(t, []byte("binary/encrypted"), encoded.Metadata["encoding"])
 	assert.NotEqual(t, originalPayload.Data, encoded.Data)
-	assert.Nil(t, encoded.Metadata["custom"]) // Оригинальные метаданные должны быть скрыты внутри шифрованного блока
+	assert.Nil(t, encoded.Metadata["custom"]) // Original metadata should be hidden inside the encrypted block
 
-	// 2. Расшифровываем (Decode)
+	// 2. Decrypt (Decode)
 	decodedPayloads, err := codec.Decode(encodedPayloads)
 	assert.NoError(t, err)
 	assert.Len(t, decodedPayloads, 1)
 
 	decoded := decodedPayloads[0]
 	assert.NotNil(t, decoded)
-	// Проверяем соответствие оригинальному объекту
+	// Verify match with original object
 	assert.Equal(t, []byte("json/plain"), decoded.Metadata["encoding"])
 	assert.Equal(t, []byte("value"), decoded.Metadata["custom"])
 	assert.Equal(t, originalPayload.Data, decoded.Data)

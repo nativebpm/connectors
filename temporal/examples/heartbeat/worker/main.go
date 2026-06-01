@@ -8,28 +8,28 @@ import (
 )
 
 func main() {
-	// Загружаем конфигурацию из окружения
+	// Load configuration from environment
 	cfg := temporal.LoadFromEnv()
 
-	// Инициализируем клиент Temporal
+	// Initialize Temporal client
 	client, err := temporal.NewClient(cfg)
 	if err != nil {
-		log.Fatalf("Не удалось создать Temporal клиент: %v", err)
+		log.Fatalf("Failed to create Temporal client: %v", err)
 	}
 	defer client.Close()
 
-	// Инициализируем воркер
+	// Initialize worker
 	w := temporal.NewWorker(client, cfg.TaskQueue)
 
-	// Регистрируем Workflow и Activity
+	// Register Workflow and Activity
 	w.RegisterWorkflow(heartbeat.HeartbeatWorkflow)
 	w.RegisterActivity(heartbeat.HeartbeatActivity)
 
-	log.Printf("Воркер heartbeat успешно запущен для Task Queue: %s", cfg.TaskQueue)
+	log.Printf("Worker heartbeat successfully started for Task Queue: %s", cfg.TaskQueue)
 	
-	// Запускаем воркер в блокирующем режиме до прерывания
+	// Run worker in blocking mode until interrupted
 	err = w.Run(nil)
 	if err != nil {
-		log.Fatalf("Воркер завершился с ошибкой: %v", err)
+		log.Fatalf("Worker exited with error: %v", err)
 	}
 }

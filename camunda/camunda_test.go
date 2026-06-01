@@ -635,7 +635,7 @@ func TestLifecycleBPMNAndDMNWithoutState(t *testing.T) {
 func TestSequinWorker_AsyncDelegation(t *testing.T) {
 	var lockCalled, getVarsCalled, completeCalled, unlockCalled bool
 
-	// Создаем тестовый HTTP-сервер для Camunda REST API
+	// Create test HTTP server for Camunda REST API
 	camundaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/external-task/task123/lock"):
@@ -659,7 +659,7 @@ func TestSequinWorker_AsyncDelegation(t *testing.T) {
 	}))
 	defer camundaServer.Close()
 
-	// Создаем тестовый HTTP-сервер для Sequin API
+	// Create test HTTP server for Sequin API
 	var receiveCalled, ackCalled, nackCalled bool
 	var sequinServer *httptest.Server
 	sequinServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -667,7 +667,7 @@ func TestSequinWorker_AsyncDelegation(t *testing.T) {
 			receiveCalled = true
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			// Отдаем одно сообщение и закрываем сервер, чтобы тест не висел
+			// Return one message and close the server to prevent test hang
 			w.Write([]byte(`{
 				"data": [
 					{
@@ -684,7 +684,7 @@ func TestSequinWorker_AsyncDelegation(t *testing.T) {
 					}
 				]
 			}`))
-			// Больше сообщений не отдаем
+			// No more messages to return
 			sequinServer.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method == "POST" && strings.Contains(r.URL.Path, "/ack") {
 					ackCalled = true
@@ -704,31 +704,31 @@ func TestSequinWorker_AsyncDelegation(t *testing.T) {
 	}))
 	defer sequinServer.Close()
 
-	// Инициализируем Camunda клиент
+	// Initialize Camunda client
 	httpClient, _ := httpstream.NewClient(&http.Client{}, camundaServer.URL)
 	client := &Client{
 		httpClient: httpClient,
 		workerID:   "async-worker",
 	}
 
-	// Инициализируем SequinWorker
+	// Initialize SequinWorker
 	sw, err := NewSequinWorker(client, sequinServer.URL, "camunda_tasks", nil)
 	if err != nil {
 		t.Fatalf("failed to create SequinWorker: %v", err)
 	}
 
-	// Регистрируем хэндлер с кастомным таймаутом блокировки 1 час, который возвращает ErrTaskDelegated
+	// Register handler with custom lock timeout of 1 hour that returns ErrTaskDelegated
 	sw.RegisterHandlerWithOptions("asyncTopic", TaskHandlerFunc(func(ctx context.Context, client *Client, task ExternalTask, complete CompleteFunc, fail FailFunc) error {
 		return ErrTaskDelegated
 	}), 3600000)
 
-	// Запускаем воркер в контексте с таймаутом
+	// Start worker in context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
 	sw.Start(ctx)
 
-	// Проверяем утверждения
+	// Assert expectations
 	if !lockCalled {
 		t.Error("expected Lock API to be called")
 	}

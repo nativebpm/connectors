@@ -11,13 +11,13 @@ import (
 )
 
 func main() {
-	// Загружаем конфигурацию из окружения
+	// Load configuration from environment
 	cfg := temporal.LoadFromEnv()
 
-	// Инициализируем клиент Temporal
+	// Initialize Temporal client
 	c, err := temporal.NewClient(cfg)
 	if err != nil {
-		log.Fatalf("Не удалось создать Temporal клиент: %v", err)
+		log.Fatalf("Failed to create Temporal client: %v", err)
 	}
 	defer c.Close()
 
@@ -27,20 +27,20 @@ func main() {
 		TaskQueue: cfg.TaskQueue,
 	}
 
-	log.Printf("Запуск Workflow с ID: %s", workflowID)
+	log.Printf("Starting Workflow with ID: %s", workflowID)
 
-	// Запускаем Workflow с общим количеством шагов = 10
+	// Start Workflow with total steps = 10
 	run, err := c.ExecuteWorkflow(context.Background(), options, heartbeat.HeartbeatWorkflow, 10)
 	if err != nil {
-		log.Fatalf("Ошибка при запуске Workflow: %v", err)
+		log.Fatalf("Failed to start Workflow: %v", err)
 	}
 
 	var result string
-	// Ожидаем результат выполнения
+	// Wait for execution result
 	err = run.Get(context.Background(), &result)
 	if err != nil {
-		log.Fatalf("Ошибка при получении результата Workflow: %v", err)
+		log.Fatalf("Failed to get Workflow result: %v", err)
 	}
 
-	log.Printf("Workflow успешно завершен! Результат: %s", result)
+	log.Printf("Workflow completed successfully! Result: %s", result)
 }

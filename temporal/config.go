@@ -7,16 +7,16 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Config содержит параметры подключения к Temporal Server или Temporal Cloud.
+// Config contains connection parameters for Temporal Server or Temporal Cloud.
 type Config struct {
 	HostPort      string
 	Namespace     string
 	CertPath      string
 	KeyPath       string
 	TaskQueue     string
-	EncryptionKey []byte // Ключ шифрования полезных нагрузок
+	EncryptionKey []byte // Payload encryption key
 
-	// Настройки базы данных для CDC активности
+	// Database configurations for CDC activity
 	DBHost     string
 	DBPort     string
 	DBUser     string
@@ -24,9 +24,9 @@ type Config struct {
 	DBName     string
 }
 
-// LoadFromEnv загружает настройки из переменных окружения (и файлов .env/temporal.env) с разумными дефолтами.
+// LoadFromEnv loads configurations from environment variables (and .env/temporal.env files) with sensible defaults.
 func LoadFromEnv() *Config {
-	// Пытаемся загрузить файлы конфигурации (.env или temporal.env)
+	// Attempt to load configuration files (.env or temporal.env)
 	_ = godotenv.Load()
 	_ = godotenv.Load("temporal.env")
 

@@ -12,7 +12,7 @@ func main() {
 
 	client, err := temporal.NewClient(cfg)
 	if err != nil {
-		log.Fatalf("Не удалось создать Temporal клиент: %v", err)
+		log.Fatalf("Failed to create Temporal client: %v", err)
 	}
 	defer client.Close()
 
@@ -20,15 +20,15 @@ func main() {
 
 	var activities *saga.TripReservationActivities
 
-	// Регистрируем Workflow
+	// Register Workflow
 	w.RegisterWorkflow(saga.TripReservationWorkflow)
-	// Регистрируем структуру с Activities
+	// Register struct with Activities
 	w.RegisterActivity(activities)
 
-	log.Printf("Воркер saga успешно запущен для Task Queue: %s", cfg.TaskQueue)
+	log.Printf("Worker saga successfully started for Task Queue: %s", cfg.TaskQueue)
 
 	err = w.Run(nil)
 	if err != nil {
-		log.Fatalf("Воркер завершился с ошибкой: %v", err)
+		log.Fatalf("Worker exited with error: %v", err)
 	}
 }

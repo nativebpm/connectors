@@ -22,14 +22,14 @@ func TestUnitTestSuite(t *testing.T) {
 	suite.Run(t, new(UnitTestSuite))
 }
 
-// Test_HelloWorldWorkflow проверяет базовое выполнение приветственного процесса.
+// Test_HelloWorldWorkflow verifies the basic execution of the greeting process.
 func (s *UnitTestSuite) Test_HelloWorldWorkflow() {
 	env := s.NewTestWorkflowEnvironment()
 
-	// Регистрируем активности, вызываемые внутри workflow
+	// Register activities invoked inside the workflow
 	env.RegisterActivity(helloworld.GreetActivity)
 
-	// Запускаем Workflow в тестовом окружении
+	// Run Workflow in the test environment
 	env.ExecuteWorkflow(helloworld.GreetWorkflow, "World")
 
 	s.True(env.IsWorkflowCompleted())
@@ -41,16 +41,16 @@ func (s *UnitTestSuite) Test_HelloWorldWorkflow() {
 	s.Equal("Hello, World!", result)
 }
 
-// Test_SubscriptionWorkflow проверяет обработку сигналов и запросов в SubscriptionWorkflow.
+// Test_SubscriptionWorkflow verifies handling of signals and queries in SubscriptionWorkflow.
 func (s *UnitTestSuite) Test_SubscriptionWorkflow() {
 	env := s.NewTestWorkflowEnvironment()
 
-	// Запускаем асинхронное выполнение, чтобы мы могли посылать сигналы в процессе
+	// Run asynchronously so we can send signals during execution
 	env.RegisterWorkflow(signal.SubscriptionWorkflow)
 
-	// Регистрируем отложенную отправку сигналов
+	// Schedule delayed signals
 	env.RegisterDelayedCallback(func() {
-		// Проверяем начальный статус через Query
+		// Verify initial status via Query
 		val, err := env.QueryWorkflow("GetSubscriptionStatus")
 		s.NoError(err)
 		var status signal.SubscriptionStatus
@@ -58,12 +58,12 @@ func (s *UnitTestSuite) Test_SubscriptionWorkflow() {
 		s.NoError(err)
 		s.Equal("Active", status.State)
 
-		// Отправляем сигнал обновления биллинга
+		// Send billing update signal
 		env.SignalWorkflow("UpdateBillingInfo", "Visa Card")
 	}, 10*time.Second)
 
 	env.RegisterDelayedCallback(func() {
-		// Проверяем промежуточный статус через Query
+		// Verify intermediate status via Query
 		val, err := env.QueryWorkflow("GetSubscriptionStatus")
 		s.NoError(err)
 		var status signal.SubscriptionStatus
@@ -72,11 +72,11 @@ func (s *UnitTestSuite) Test_SubscriptionWorkflow() {
 		s.Equal("Updated", status.State)
 		s.Equal("Visa Card", status.BillingInfo)
 
-		// Отправляем сигнал отмены подписки
+		// Send subscription cancellation signal
 		env.SignalWorkflow("CancelSubscription", nil)
 	}, 20*time.Second)
 
-	// Запускаем Workflow на 1 минуту
+	// Start Workflow for 1 minute
 	env.ExecuteWorkflow(signal.SubscriptionWorkflow, 1*time.Minute)
 
 	s.True(env.IsWorkflowCompleted())
@@ -88,7 +88,7 @@ func (s *UnitTestSuite) Test_SubscriptionWorkflow() {
 	s.Equal("Cancelled", finalResult)
 }
 
-// Test_SagaReservation_Success проверяет успешное бронирование без отката.
+// Test_SagaReservation_Success verifies successful booking without compensation.
 func (s *UnitTestSuite) Test_SagaReservation_Success() {
 	env := s.NewTestWorkflowEnvironment()
 	var a *saga.TripReservationActivities
@@ -114,12 +114,12 @@ func (s *UnitTestSuite) Test_SagaReservation_Success() {
 	s.Equal("Trip successfully reserved!", result)
 }
 
-// Test_SagaReservation_Fail проверяет работу Saga Pattern и откат транзакций при сбое.
+// Test_SagaReservation_Fail verifies Saga Pattern and transaction rollbacks on failure.
 func (s *UnitTestSuite) Test_SagaReservation_Fail() {
 	env := s.NewTestWorkflowEnvironment()
 	var a *saga.TripReservationActivities
 
-	// Регистрируем транзакции и их компенсации
+	// Register transactions and their compensations
 	env.RegisterActivity(a.ReserveCredit)
 	env.RegisterActivity(a.RefundCredit)
 	env.RegisterActivity(a.BookHotel)
@@ -130,10 +130,10 @@ func (s *UnitTestSuite) Test_SagaReservation_Fail() {
 	params := saga.TripReservationParams{
 		Amount:      250.0,
 		HotelName:   "Hostel 123",
-		Destination: "Fail", // Вызовет ошибку в BookFlight
+		Destination: "Fail", // Will trigger an error in BookFlight
 	}
 
-	// Отслеживаем вызовы компенсаций
+	// Track compensation calls
 	var refundCalled, cancelHotelCalled bool
 	env.OnActivity(a.RefundCredit, mock.Anything, 250.0).Return(nil).Run(func(args mock.Arguments) {
 		refundCalled = true
@@ -145,28 +145,28 @@ func (s *UnitTestSuite) Test_SagaReservation_Fail() {
 	env.ExecuteWorkflow(saga.TripReservationWorkflow, params)
 
 	s.True(env.IsWorkflowCompleted())
-	// Воркфлоу должен завершиться с ошибкой, так как последний шаг упал
+	// Workflow should fail since the last step failed
 	s.Error(env.GetWorkflowError())
 
-	// Проверяем, что компенсации были вызваны в процессе отката саги
-	s.True(refundCalled, "Должен быть вызван возврат средств (RefundCredit)")
-	s.True(cancelHotelCalled, "Должна быть вызвана отмена отеля (CancelHotel)")
+	// Verify compensations were called during saga rollback
+	s.True(refundCalled, "RefundCredit should be called")
+	s.True(cancelHotelCalled, "CancelHotel should be called")
 }
 
-// Test_CDCWorkflow проверяет корректность выполнения workflow по схеме CDC-делегирования.
+// Test_CDCWorkflow verifies correct execution of a workflow via CDC delegation.
 func (s *UnitTestSuite) Test_CDCWorkflow() {
 	env := s.NewTestWorkflowEnvironment()
 	var a *temporal.CDCActivities
 
-	// Регистрируем Workflow и активность
+	// Register Workflow and Activity
 	env.RegisterWorkflow(temporal.GreetCDCWorkflow)
 	
-	// Мокаем активность делегирования (она просто возвращает nil, т.е. запись в БД успешна)
+	// Mock delegation activity (returns nil, i.e. DB write succeeded)
 	env.OnActivity(a.DelegateToSequin, mock.Anything, "greet-cdc", "Temporal CDC User").Return(nil)
 
-	// Регистрируем отправку сигнала через 5 секунд виртуального времени
+	// Schedule sending signal after 5 seconds of virtual time
 	env.RegisterDelayedCallback(func() {
-		// Симулируем отправку сигнала CDC воркером с результатом
+		// Simulate CDC worker sending result signal
 		env.SignalWorkflow("TaskCompletedSignal", "Hello, Temporal CDC User (via CDC)!")
 	}, 5*time.Second)
 

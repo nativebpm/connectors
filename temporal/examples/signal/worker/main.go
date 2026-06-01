@@ -12,19 +12,19 @@ func main() {
 
 	client, err := temporal.NewClient(cfg)
 	if err != nil {
-		log.Fatalf("Не удалось создать Temporal клиент: %v", err)
+		log.Fatalf("Failed to create Temporal client: %v", err)
 	}
 	defer client.Close()
 
 	w := temporal.NewWorker(client, cfg.TaskQueue)
 
-	// Регистрируем Workflow
+	// Register Workflow
 	w.RegisterWorkflow(signal.SubscriptionWorkflow)
 
-	log.Printf("Воркер signal успешно запущен для Task Queue: %s", cfg.TaskQueue)
+	log.Printf("Worker signal successfully started for Task Queue: %s", cfg.TaskQueue)
 
 	err = w.Run(nil)
 	if err != nil {
-		log.Fatalf("Воркер завершился с ошибкой: %v", err)
+		log.Fatalf("Worker exited with error: %v", err)
 	}
 }

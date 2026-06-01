@@ -12,12 +12,12 @@ import (
 	"go.temporal.io/sdk/converter"
 )
 
-// CryptCodec реализует интерфейс converter.PayloadCodec для шифрования данных.
+// CryptCodec implements converter.PayloadCodec interface to encrypt/decrypt payloads.
 type CryptCodec struct {
 	key []byte
 }
 
-// NewCryptCodec создает новый экземпляр CryptCodec с 16, 24 или 32-байтным ключом для AES.
+// NewCryptCodec creates a new CryptCodec instance with 16, 24, or 32-byte key for AES encryption.
 func NewCryptCodec(key []byte) (*CryptCodec, error) {
 	if len(key) != 16 && len(key) != 24 && len(key) != 32 {
 		return nil, errors.New("key length must be 16, 24, or 32 bytes for AES-128, AES-192, or AES-256")
@@ -25,7 +25,7 @@ func NewCryptCodec(key []byte) (*CryptCodec, error) {
 	return &CryptCodec{key: key}, nil
 }
 
-// Encode шифрует переданные полезные нагрузки (payloads) перед отправкой на сервер.
+// Encode encrypts payloads before sending them to the Temporal server.
 func (c *CryptCodec) Encode(payloads []*common.Payload) ([]*common.Payload, error) {
 	result := make([]*common.Payload, len(payloads))
 	for i, p := range payloads {
@@ -33,13 +33,13 @@ func (c *CryptCodec) Encode(payloads []*common.Payload) ([]*common.Payload, erro
 			continue
 		}
 
-		// Сериализуем оригинальный Payload полностью (включая его метаданные)
+		// Marshal the original Payload completely (including its metadata)
 		payloadBytes, err := p.Marshal()
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal payload: %w", err)
 		}
 
-		// Инициализируем шифр AES-GCM
+		// Initialize AES-GCM cipher
 		block, err := aes.NewCipher(c.key)
 		if err != nil {
 			return nil, err
@@ -57,7 +57,7 @@ func (c *CryptCodec) Encode(payloads []*common.Payload) ([]*common.Payload, erro
 
 		encryptedData := aesGCM.Seal(nonce, nonce, payloadBytes, nil)
 
-		// Создаем новый Payload с зашифрованными данными
+		// Create new Payload with encrypted data
 		result[i] = &common.Payload{
 			Metadata: map[string][]byte{
 				"encoding": []byte("binary/encrypted"),
@@ -68,7 +68,7 @@ func (c *CryptCodec) Encode(payloads []*common.Payload) ([]*common.Payload, erro
 	return result, nil
 }
 
-// Decode расшифровывает полезные нагрузки, пришедшие от сервера.
+// Decode decrypts payloads arriving from the Temporal server.
 func (c *CryptCodec) Decode(payloads []*common.Payload) ([]*common.Payload, error) {
 	result := make([]*common.Payload, len(payloads))
 	for i, p := range payloads {
@@ -76,7 +76,7 @@ func (c *CryptCodec) Decode(payloads []*common.Payload) ([]*common.Payload, erro
 			continue
 		}
 
-		// Декодируем только зашифрованные полезные нагрузки
+		// Decode only encrypted payloads
 		if string(p.Metadata["encoding"]) != "binary/encrypted" {
 			result[i] = p
 			continue
@@ -104,7 +104,7 @@ func (c *CryptCodec) Decode(payloads []*common.Payload) ([]*common.Payload, erro
 			return nil, fmt.Errorf("failed to decrypt payload: %w", err)
 		}
 
-		// Восстанавливаем оригинальный Payload
+		// Restore the original Payload
 		originalPayload := &common.Payload{}
 		if err := originalPayload.Unmarshal(decryptedBytes); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal decrypted payload: %w", err)
@@ -115,7 +115,7 @@ func (c *CryptCodec) Decode(payloads []*common.Payload) ([]*common.Payload, erro
 	return result, nil
 }
 
-// GetEncryptingDataConverter оборачивает дефолтный DataConverter шифрующим кодеком.
+// GetEncryptingDataConverter wraps the default DataConverter with the encrypting codec.
 func GetEncryptingDataConverter(key []byte) (converter.DataConverter, error) {
 	codec, err := NewCryptCodec(key)
 	if err != nil {
