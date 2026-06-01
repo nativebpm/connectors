@@ -40,7 +40,6 @@ func run() int32 {
 			step = 1
 			println("[WASM WORKER] Step 0 completed. Initiating checkpoint.")
 			checkpoint()
-			return 0
 
 		case 1:
 			println("[WASM WORKER] Step 1: Processing data stream...")
@@ -85,7 +84,6 @@ func run() int32 {
 			step = 2
 			println("[WASM WORKER] Step 1 completed. Initiating checkpoint.")
 			checkpoint()
-			return 0
 
 		case 2:
 			println("[WASM WORKER] Step 2: Finalizing business process...")
@@ -93,7 +91,6 @@ func run() int32 {
 			step = 3
 			println("[WASM WORKER] Step 2 completed. Initiating final checkpoint.")
 			checkpoint()
-			return 0
 
 		case 3:
 			println("[WASM WORKER] Execution already completed.")
