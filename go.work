@@ -2,6 +2,8 @@ go 1.26
 
 use (
 	./camunda
+	./durable-wasm/host
+	./durable-wasm/worker
 	./gotenberg
 	./httpstream
 	./sequin
