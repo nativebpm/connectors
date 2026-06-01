@@ -17,15 +17,17 @@ const (
 	instanceID   = "camunda-temporal-tx"
 	serverAddr   = "localhost:18083"
 	snapshotFile = "camunda-temporal-tx.bin"
+	dbFile       = "database.json"
 )
 
 func main() {
 	fmt.Println("[HOST] Starting Camunda-Temporal Orchestration Durable Execution Example...")
 
-	// 1. Clean up old snapshots
+	// 1. Clean up old files
 	_ = os.Remove(snapshotFile)
+	_ = os.Remove(dbFile)
 
-	// 2. Start local Mock HTTP Server to mock external billing and CRM API endpoints
+	// 2. Start local Mock HTTP Server to mock external billing, CRM, and DB API endpoints
 	mockServer := startMockServer(serverAddr)
 	defer mockServer.Shutdown(context.Background())
 
@@ -61,7 +63,7 @@ func main() {
 	}
 	fmt.Println("[HOST] Verified that snapshot file was written to disk.")
 
-	// 5. RUN 2: Restore from checkpoint and resume execution from Step 1 (Billing) and Step 2 (CRM)
+	// 5. RUN 2: Restore from checkpoint and resume execution
 	fmt.Println("\n--- RUN 2: Restoring Process State from Snapshot and Resuming execution ---")
 	crashed, err = engine.Execute(instanceID, "run", serverAddr, false)
 	if err != nil {
@@ -74,8 +76,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 6. Final Clean up
+	// 6. Verify Database Persistence (Hybrid approach validation)
+	fmt.Println("\n--- HYBRID APPROACH VALIDATION ---")
+	dbBytes, err := os.ReadFile(dbFile)
+	if err != nil {
+		fmt.Printf("[HOST ERROR] Final database record not found: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("[HOST] Read from persistent DB (%s): %s\n", dbFile, string(dbBytes))
+
+	// Clean up snapshot since the transaction is completed (we no longer need workflow memory)
 	_ = os.Remove(snapshotFile)
+	if _, err := os.Stat(snapshotFile); os.IsNotExist(err) {
+		fmt.Println("[HOST] Workflow memory snapshot successfully cleaned up from disk (Transaction Completed).")
+	}
+
+	// Clean up database.json
+	_ = os.Remove(dbFile)
+	
 	fmt.Println("\n[HOST] Camunda-Temporal Orchestration example completed successfully.")
 	os.Exit(0)
 }
@@ -84,8 +102,6 @@ func startMockServer(addr string) *http.Server {
 	mux := http.NewServeMux()
 
 	// Download route (used for reading responses)
-	// We dynamically decide which response to return based on path or simple state.
-	// In our case, the worker does a single download (read response) which is the billing status.
 	mux.HandleFunc("/download", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -95,7 +111,6 @@ func startMockServer(addr string) *http.Server {
 	})
 
 	// Upload route (used for sending requests)
-	// Since we upload twice (once for billing, once for CRM), we output the received bodies.
 	var uploadCount int
 	mux.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
 		uploadCount++
@@ -109,8 +124,11 @@ func startMockServer(addr string) *http.Server {
 
 		if uploadCount == 1 {
 			fmt.Printf("[MOCK BILLING SERVICE] Received charge request: %s\n", string(body))
-		} else {
+		} else if uploadCount == 2 {
 			fmt.Printf("[MOCK CRM SERVICE] Received update status request: %s\n", string(body))
+		} else if uploadCount == 3 {
+			fmt.Printf("[MOCK DATABASE API] Received final database record to persist: %s\n", string(body))
+			_ = os.WriteFile(dbFile, body, 0644)
 		}
 	})
 

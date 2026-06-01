@@ -74,6 +74,15 @@ type CRMRequest struct {
 	Status string `json:"status"`
 }
 
+// FinalResult represents the structured entity saved to the persistent database
+type FinalResult struct {
+	TxID      string  `json:"tx_id"`
+	Amount    float64 `json:"amount"`
+	Status    string  `json:"status"`
+	RefCode   string  `json:"reference_code"`
+	Completed bool    `json:"completed"`
+}
+
 //export run
 func run() int32 {
 	for {
@@ -113,7 +122,6 @@ func run() int32 {
 
 			billingStatus = resp.Status
 			println("[CAMUNDA-TEMPORAL WORKER] Billing reference received:", resp.Reference)
-			println("[CAMUNDA-TEMPORAL WORKER] Charge status:", billingStatus)
 
 			if billingStatus != "success" {
 				println("[CAMUNDA-TEMPORAL WORKER] Billing charge failed, aborting process.")
@@ -144,11 +152,42 @@ func run() int32 {
 			println("[CAMUNDA-TEMPORAL WORKER] CRM updated successfully.")
 
 			step = 3
-			println("[CAMUNDA-TEMPORAL WORKER] Step 2 completed. Saving final checkpoint.")
+			println("[CAMUNDA-TEMPORAL WORKER] Step 2 completed. Saving checkpoint.")
 			checkpoint()
 
 		case 3:
-			println("[CAMUNDA-TEMPORAL WORKER] Step 3: Completing Camunda BPM process.")
+			println("[CAMUNDA-TEMPORAL WORKER] Step 3: Saving final structured record to persistent Database...")
+
+			writer := &StreamWriter{direction: 1}
+
+			// Construct the final database record
+			result := FinalResult{
+				TxID:      transactionID,
+				Amount:    amountToBill,
+				Status:    "success",
+				RefCode:   "REF-BILL-550-OK",
+				Completed: true,
+			}
+
+			// Stream JSON payload directly to the host's DB endpoint
+			err := json.NewEncoder(writer).Encode(result)
+			if err != nil {
+				println("[CAMUNDA-TEMPORAL WORKER] DB record encode failed:", err.Error())
+				return -1
+			}
+
+			// Flush upload
+			var dummy [1]byte
+			stream_data(1, uint32(uintptr(unsafe.Pointer(&dummy[0]))), 0)
+
+			println("[CAMUNDA-TEMPORAL WORKER] DB record saved successfully.")
+
+			step = 4
+			println("[CAMUNDA-TEMPORAL WORKER] Step 3 completed. Saving final checkpoint.")
+			checkpoint()
+
+		case 4:
+			println("[CAMUNDA-TEMPORAL WORKER] Step 4: Completing Camunda BPM process.")
 			println("[CAMUNDA-TEMPORAL WORKER] Orchestration completed successfully.")
 			return 1
 		}
