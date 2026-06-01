@@ -10,6 +10,7 @@ Monorepository containing Go client libraries and integration connectors used ac
 ### Service
 *   **[gotenberg](gotenberg/)** — Go client for Gotenberg document conversion service (HTML, Office docs, PDFs merging).
 *   **[sequin](sequin/)** — Client and sync helpers for Sequin CDC and event stream platform.
+*   **[telegram](telegram/)** — High-performance, stream-first Go client library for the Telegram Bot API with zero-buffer media uploads.
 
 ### Platform
 *   **[camunda](camunda/)** — Client library for Camunda BPMN workflow engine with highly optimized task locking and Postgres CDC integration.
