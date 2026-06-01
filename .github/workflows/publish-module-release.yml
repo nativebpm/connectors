@@ -15,6 +15,7 @@ jobs:
       has_annotation: ${{ steps.check.outputs.has_annotation }}
       module_name: ${{ steps.check.outputs.module_name }}
       tag_name: ${{ steps.check.outputs.tag_name }}
+      full_tag: ${{ steps.check.outputs.full_tag }}
       tag_annotation: ${{ steps.check.outputs.tag_annotation }}
     steps:
       - name: Checkout repository
@@ -86,6 +87,7 @@ jobs:
           echo "has_annotation=true" >> $GITHUB_OUTPUT
           echo "module_name=$MODULE_NAME" >> $GITHUB_OUTPUT
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "full_tag=$FULL_TAG" >> $GITHUB_OUTPUT
           {
             echo "tag_annotation<<EOF_ANNOTATION"
             echo "$ANNOTATION"
@@ -186,3 +188,36 @@ jobs:
             --notes-file /tmp/release_body.md
           
           echo "✅ Created release: $TAG_NAME"
+
+      - name: Create or publish GitHub release in monorepo
+        env:
+          GH_TOKEN: ${{ secrets.PAT_PUSH }}
+          FULL_TAG: ${{ needs.check-tag.outputs.full_tag }}
+          TAG_ANNOTATION: ${{ needs.check-tag.outputs.tag_annotation }}
+        run: |
+          IS_DRAFT=$(gh release view "$FULL_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft 2>/dev/null || echo "not_found")
+          
+          TITLE=$(echo "$TAG_ANNOTATION" | head -n 1)
+          if [[ -z "$TITLE" ]]; then
+            TITLE="$FULL_TAG"
+          fi
+          echo "$TAG_ANNOTATION" > /tmp/monorepo_release_body.md
+          
+          if [[ "$IS_DRAFT" == "true" ]]; then
+            echo "Release $FULL_TAG is currently a draft. Publishing it..."
+            gh release edit "$FULL_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --draft=false \
+              --title "$TITLE" \
+              --notes-file /tmp/monorepo_release_body.md
+            echo "✅ Published existing draft release in monorepo: $FULL_TAG"
+          elif [[ "$IS_DRAFT" == "false" ]]; then
+            echo "Release $FULL_TAG is already published in monorepo. Skipping."
+          else
+            echo "Release $FULL_TAG does not exist in monorepo. Creating it..."
+            gh release create "$FULL_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$TITLE" \
+              --notes-file /tmp/monorepo_release_body.md
+            echo "✅ Created and published release in monorepo: $FULL_TAG"
+          fi
