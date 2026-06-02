@@ -17,7 +17,7 @@ import (
 
 // S3SnapshotStore implements SnapshotStore using an S3-compatible object store.
 type S3SnapshotStore struct {
-	client *s3.Client
+	Client *s3.Client
 	bucket string
 }
 
@@ -32,7 +32,7 @@ func NewS3SnapshotStore(ctx context.Context, bucket string, opts ...func(*s3.Opt
 
 	client := s3.NewFromConfig(cfg, opts...)
 	return &S3SnapshotStore{
-		client: client,
+		Client: client,
 		bucket: bucket,
 	}, nil
 }
@@ -74,7 +74,7 @@ func isPreconditionFailed(err error) bool {
 }
 
 func (s *S3SnapshotStore) readObject(key string) ([]byte, string, error) {
-	out, err := s.client.GetObject(context.Background(), &s3.GetObjectInput{
+	out, err := s.Client.GetObject(context.Background(), &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
 	})
@@ -96,7 +96,7 @@ func (s *S3SnapshotStore) readObject(key string) ([]byte, string, error) {
 }
 
 func (s *S3SnapshotStore) writeObject(key string, data []byte) (string, error) {
-	out, err := s.client.PutObject(context.Background(), &s3.PutObjectInput{
+	out, err := s.Client.PutObject(context.Background(), &s3.PutObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
 		Body:   bytes.NewReader(data),
@@ -180,7 +180,7 @@ func (s *S3SnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
 // TruncateDeltas deletes memory deltas for the instance from S3.
 func (s *S3SnapshotStore) TruncateDeltas(id string) error {
 	key := fmt.Sprintf("instances/%s/deltas.json", id)
-	_, err := s.client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
+	_, err := s.Client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
 	})
@@ -306,7 +306,7 @@ func (s *S3SnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 		input.IfMatch = aws.String(meta.ETag)
 	}
 
-	out, err := s.client.PutObject(context.Background(), input)
+	out, err := s.Client.PutObject(context.Background(), input)
 	if err != nil {
 		if isPreconditionFailed(err) {
 			return false, nil
@@ -375,7 +375,7 @@ func (s *S3SnapshotStore) Delete(id string) error {
 	}
 
 	for _, key := range keys {
-		_, err := s.client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
+		_, err := s.Client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
 			Bucket: aws.String(s.bucket),
 			Key:    aws.String(key),
 		})

@@ -228,7 +228,7 @@ func TestS3SnapshotStore(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create bucket if it doesn't exist
-	_, _ = store.client.CreateBucket(ctx, &s3.CreateBucketInput{
+	_, _ = store.Client.CreateBucket(ctx, &s3.CreateBucketInput{
 		Bucket: aws.String(bucket),
 	})
 
@@ -331,7 +331,7 @@ func TestS3SnapshotStore(t *testing.T) {
 	assert.Equal(t, wasmBytes, loadedWasm)
 
 	// Clean up WASM registry file too (since it is outside instanceID path)
-	_, err = store.client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
+	_, err = store.Client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
 		Bucket: aws.String(store.bucket),
 		Key:    aws.String("wasm/" + wasmHash + ".wasm"),
 	})
