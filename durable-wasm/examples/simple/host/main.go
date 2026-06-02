@@ -22,11 +22,6 @@ const (
 func main() {
 	fmt.Println("[HOST] Starting Reusable Durable WASM Execution Orchestrator...")
 
-	// 1. Clean up old database files
-	_ = os.Remove(dbFile)
-	_ = os.Remove(dbFile + "-wal")
-	_ = os.Remove(dbFile + "-shm")
-
 	// 2. Start local Mock HTTP Server to mock external REST calls
 	mockServer := startMockServer(serverAddr)
 	defer mockServer.Shutdown(context.Background())
@@ -45,6 +40,9 @@ func main() {
 		os.Exit(1)
 	}
 	defer store.Close()
+
+	// Clear any leftover snapshot from previous runs in the database
+	_ = store.Delete(instanceID)
 	
 	engine, err := durable.NewEngine(wasmPath, store)
 	if err != nil {
@@ -89,6 +87,7 @@ func main() {
 	// 6. Final Clean up
 	_ = store.Delete(instanceID)
 	fmt.Println("\n[HOST] Durable WASM Execution demonstration complete.")
+	time.Sleep(500 * time.Millisecond) // Give Litestream time to sync final WAL frames
 	os.Exit(0)
 }
 
