@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -10,22 +11,94 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nativebpm/connectors/durable-wasm"
-	_ "github.com/nativebpm/connectors/temporal"
+	localTemporal "github.com/nativebpm/connectors/temporal"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 )
 
 const (
-	instanceID   = "temporal-activity-tx"
-	serverAddr   = "localhost:18085"
 	sqliteDBFile = "snapshots.db"
 	dbFile       = "database_temporal.json"
+	serverAddr   = "localhost:18085"
 )
+
+// GreetWorkflow coordinates execution of the greeting process.
+func DurableWasmWorkflow(ctx workflow.Context, instanceID string, serverAddr string) (string, error) {
+	options := workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    1 * time.Second,
+			BackoffCoefficient: 1.0,
+			MaximumAttempts:    2, // Attempt 1 fails, Attempt 2 succeeds
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, options)
+
+	var result string
+	err := workflow.ExecuteActivity(ctx, ExecuteDurableWasmActivity, instanceID, serverAddr).Get(ctx, &result)
+	return result, err
+}
+
+func ExecuteDurableWasmActivity(ctx context.Context, instanceID string, serverAddr string) (string, error) {
+	info := activity.GetInfo(ctx)
+	attempt := info.Attempt
+
+	slog.Info("[HOST ACTIVITY] Executing Durable WASM Activity", "attempt", attempt, "instance_id", instanceID)
+
+	wasmPath := filepath.Join("..", "worker", "worker.wasm")
+	store, err := durable.NewSqliteSnapshotStore(sqliteDBFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to initialize SQLite store: %w", err)
+	}
+	defer store.Close()
+
+	engine, err := durable.NewEngine(wasmPath, store)
+	if err != nil {
+		return "", fmt.Errorf("failed to initialize engine: %w", err)
+	}
+
+	// First attempt will simulate crash, second attempt will recover
+	simulateCrash := (attempt == 1)
+	if simulateCrash {
+		slog.Info("[HOST ACTIVITY] Attempt 1: Running WASM worker with simulated crash")
+		// Clean up any old snapshots before starting first run
+		_ = store.Delete(instanceID)
+	} else {
+		slog.Info("[HOST ACTIVITY] Attempt 2: Resuming WASM worker from snapshot")
+	}
+
+	crashed, err := engine.Execute(instanceID, "run", serverAddr, simulateCrash)
+	if err != nil {
+		if crashed {
+			slog.Info("[HOST ACTIVITY] WASM worker suspended/crashed as expected", "error", err)
+			return "", fmt.Errorf("simulated crash: %w", err)
+		}
+		return "", fmt.Errorf("wasm execution failed: %w", err)
+	}
+
+	// Read persistence validation database output
+	dbBytes, err := os.ReadFile(dbFile)
+	if err != nil {
+		return "", fmt.Errorf("final database record not found: %w", err)
+	}
+
+	// Clean up database snapshot since transaction is completed
+	_ = store.Delete(instanceID)
+
+	return string(dbBytes), nil
+}
 
 func main() {
 	slog.Info("[HOST] Starting Temporal Durable Activity Execution Example")
 
 	// 1. Clean up old files
 	_ = os.Remove(dbFile)
+	_ = os.Remove(sqliteDBFile)
 
 	// 2. Start local Mock HTTP Server to mock external billing, CRM, and DB API endpoints
 	mockServer := startMockServer(serverAddr)
@@ -34,77 +107,60 @@ func main() {
 	// Give the server a small moment to bind to the port
 	time.Sleep(100 * time.Millisecond)
 
-	// 3. Initialize the Reusable Durable WASM Engine with SQLite store
-	wasmPath := filepath.Join("..", "worker", "worker.wasm")
-	store, err := durable.NewSqliteSnapshotStore(sqliteDBFile)
+	// 3. Connect to Temporal Server
+	cfg := localTemporal.LoadFromEnv()
+	cfg.TaskQueue = "durable-wasm-temporal-queue"
+
+	slog.Info("[HOST] Connecting to Temporal Server...", "host_port", cfg.HostPort, "namespace", cfg.Namespace)
+	c, err := localTemporal.NewClient(cfg)
 	if err != nil {
-		slog.Error("[HOST] Failed to initialize SQLite store", "error", err)
+		slog.Error("[HOST] Failed to create Temporal client", "error", err)
 		os.Exit(1)
 	}
-	defer store.Close()
-	
-	engine, err := durable.NewEngine(wasmPath, store)
-	if err != nil {
-		slog.Error("[HOST] Failed to initialize engine", "error", err)
+	defer c.Close()
+
+	// 4. Initialize and start Temporal Worker in background
+	w := worker.New(c.RawClient(), cfg.TaskQueue, worker.Options{})
+	w.RegisterWorkflow(DurableWasmWorkflow)
+	w.RegisterActivity(ExecuteDurableWasmActivity)
+
+	slog.Info("[HOST] Starting Temporal Worker...")
+	if err := w.Start(); err != nil {
+		slog.Error("[HOST] Failed to start Temporal worker", "error", err)
 		os.Exit(1)
 	}
+	defer w.Stop()
 
-	// Clear any leftover snapshot from previous runs in the database
-	_ = store.Delete(instanceID)
+	// 5. Run Temporal Workflow
+	workflowID := "durable-wasm-workflow-" + uuid.New().String()
+	instanceID := "temporal-activity-tx"
 
-	// 4. RUN 1: Execute with simulated crash on the first checkpoint (Step 0)
-	slog.Info("[HOST] RUN 1: Starting Temporal Activity with Simulated Crash")
-	crashed, err := engine.Execute(instanceID, "run", serverAddr, true)
+	slog.Info("[HOST] Starting Workflow execution", "workflow_id", workflowID)
+	run, err := c.ExecuteWorkflow(context.Background(), client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: cfg.TaskQueue,
+	}, DurableWasmWorkflow, instanceID, serverAddr)
 	if err != nil {
-		if crashed {
-			slog.Info("[HOST] Activity successfully suspended/crashed", "error", err)
-		} else {
-			slog.Error("[HOST] Execution failed", "error", err)
-			os.Exit(1)
-		}
-	}
-
-	// Verify snapshot exists in SQLite database
-	_, err = store.Load(instanceID)
-	if err != nil {
-		slog.Error("[HOST] Snapshot was not found in SQLite", "error", err)
-		os.Exit(1)
-	}
-	slog.Info("[HOST] Verified that snapshot was successfully written to SQLite database")
-
-	// 5. RUN 2: Restore from checkpoint and resume execution
-	slog.Info("[HOST] RUN 2: Restoring Activity State from Snapshot and Resuming execution")
-	crashed, err = engine.Execute(instanceID, "run", serverAddr, false)
-	if err != nil {
-		slog.Error("[HOST] Resumed execution failed", "error", err)
+		slog.Error("[HOST] Failed to start workflow", "error", err)
 		os.Exit(1)
 	}
 
-	if crashed {
-		slog.Error("[HOST] Resumed execution crashed unexpectedly!")
+	// 6. Wait for workflow to finish
+	var result string
+	err = run.Get(context.Background(), &result)
+	if err != nil {
+		slog.Error("[HOST] Workflow failed", "error", err)
 		os.Exit(1)
 	}
 
-	// 6. Verify Database Persistence (Hybrid approach validation)
 	slog.Info("[HOST] HYBRID APPROACH VALIDATION")
-	dbBytes, err := os.ReadFile(dbFile)
-	if err != nil {
-		slog.Error("[HOST] Final database record not found", "error", err)
-		os.Exit(1)
-	}
-	slog.Info("[HOST] Read from persistent DB", "file", dbFile, "content", string(dbBytes))
-
-	// Clean up snapshot since the transaction is completed (we no longer need workflow memory)
-	_ = store.Delete(instanceID)
-	if _, err := store.Load(instanceID); err != nil {
-		slog.Info("[HOST] Workflow memory snapshot successfully cleaned up from store (Transaction Completed)")
-	}
+	slog.Info("[HOST] Read from persistent DB (via Temporal Workflow)", "content", result)
 
 	// Clean up database_temporal.json
 	_ = os.Remove(dbFile)
-	
-	slog.Info("[HOST] Temporal Activity example completed successfully")
-	os.Exit(0)
+	_ = os.Remove(sqliteDBFile)
+
+	slog.Info("[HOST] Temporal Activity example completed successfully!")
 }
 
 func startMockServer(addr string) *http.Server {
