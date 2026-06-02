@@ -9,3 +9,5 @@ dbs:
         secret-access-key: admin123
         force-path-style: true
         sync-interval: 100ms
+        snapshot-interval: 24h
+        retention: 5d
