@@ -43,9 +43,23 @@ func TestCamundaWasmOrchestration_RealCamundaServer(t *testing.T) {
 
 	// 5. Initialize Durable Engine
 	wasmPath := "../worker/worker.wasm"
-	store, err := durable.NewSqliteSnapshotStore(sqliteDBFile)
+	var store durable.SnapshotStore
+	if os.Getenv("TEST_STORE_TYPE") == "postgres" {
+		connStr := os.Getenv("TEST_POSTGRES_CONN")
+		if connStr == "" {
+			connStr = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+		}
+		store, err = durable.NewPostgresSnapshotStore(connStr)
+	} else {
+		store, err = durable.NewSqliteSnapshotStore(sqliteDBFile)
+	}
 	require.NoError(t, err)
-	defer store.Close()
+	defer func() {
+		if closer, ok := store.(interface{ Close() error }); ok {
+			_ = closer.Close()
+		}
+	}()
+
 
 	engine, err := durable.NewEngine(wasmPath, store)
 	require.NoError(t, err)
