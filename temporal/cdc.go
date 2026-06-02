@@ -12,6 +12,7 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/nativebpm/connectors/temporal/queries"
 	"github.com/sequinstream/sequin-go"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/workflow"
@@ -70,8 +71,7 @@ func (a *CDCActivities) DelegateToSequin(ctx context.Context, taskType string, p
 	workflowID := info.WorkflowExecution.ID
 	runID := info.WorkflowExecution.RunID
 
-	query := `INSERT INTO custom_task_queue (task_type, payload, workflow_id, run_id) VALUES ($1, $2, $3, $4)`
-	_, err := a.db.ExecContext(ctx, query, taskType, payload, workflowID, runID)
+	_, err := a.db.ExecContext(ctx, queries.InsertTask, taskType, payload, workflowID, runID)
 	if err != nil {
 		activity.GetLogger(ctx).Error("Failed to insert task to custom_task_queue", "error", err)
 		return err
