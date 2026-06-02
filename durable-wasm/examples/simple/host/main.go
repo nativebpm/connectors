@@ -85,9 +85,10 @@ func main() {
 	}
 
 	// 6. Final Clean up
-	_ = store.Delete(instanceID)
+	// We keep the snapshot in the database to verify replication to S3 and restore capability
+	// _ = store.Delete(instanceID)
 	fmt.Println("\n[HOST] Durable WASM Execution demonstration complete.")
-	time.Sleep(500 * time.Millisecond) // Give Litestream time to sync final WAL frames
+	time.Sleep(5 * time.Second) // Give Litestream ample time to sync database and final WAL frames
 	os.Exit(0)
 }
 
