@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"sync"
@@ -139,7 +140,7 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 		s := activeSession
 		sessionMutex.Unlock()
 
-		fmt.Printf("[ENGINE] 'checkpoint' invoked for instance '%s'\n", s.instanceID)
+		slog.Info("[ENGINE] 'checkpoint' invoked", "instance_id", s.instanceID)
 
 		ext := caller.GetExport("memory")
 		if ext == nil {
@@ -161,14 +162,14 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 		// Save memory snapshot using the SnapshotStore interface
 		err := s.engine.store.Save(s.instanceID, snapshotCopy)
 		if err != nil {
-			fmt.Printf("[ENGINE ERROR] Failed to save snapshot: %v\n", err)
+			slog.Error("[ENGINE] Failed to save snapshot", "error", err)
 			return wasmtime.NewTrap("failed to write snapshot")
 		}
-		fmt.Printf("[ENGINE] Snapshot successfully saved (%d bytes)\n", len(snapshotCopy))
+		slog.Info("[ENGINE] Snapshot successfully saved", "bytes", len(snapshotCopy))
 
 		if s.shouldCrashOnCheckpoint {
 			s.crashed = true
-			fmt.Println("[ENGINE] Simulating host crash. Aborting WASM execution.")
+			slog.Warn("[ENGINE] Simulating host crash. Aborting WASM execution.")
 			return wasmtime.NewTrap("simulated_host_crash")
 		}
 
@@ -186,7 +187,7 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 
 		ext := caller.GetExport("memory")
 		if ext == nil {
-			fmt.Println("[ENGINE ERROR] stream_data: memory export not found")
+			slog.Error("[ENGINE] stream_data: memory export not found")
 			return -1
 		}
 		mem := ext.Memory()
@@ -198,7 +199,7 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 			return s.handleUpload(ptr, length)
 		}
 
-		fmt.Printf("[ENGINE ERROR] stream_data: invalid direction %d\n", direction)
+		slog.Error("[ENGINE] stream_data: invalid direction", "direction", direction)
 		return -1
 	})
 	if err != nil {
@@ -221,14 +222,14 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 	// RESTORE: Check if there is an existing snapshot to restore
 	snapshot, err := e.store.Load(instanceID)
 	if err == nil && len(snapshot) > 0 {
-		fmt.Printf("[ENGINE] Found saved snapshot for '%s'. Restoring memory...\n", instanceID)
+		slog.Info("[ENGINE] Found saved snapshot. Restoring memory...", "instance_id", instanceID)
 		
 		currentPages := session.memory.Size(store)
 		neededPages := uint64((len(snapshot) + 65535) / 65536)
 
 		if neededPages > currentPages {
 			growPages := neededPages - currentPages
-			fmt.Printf("[ENGINE] Growing memory by %d pages...\n", growPages)
+			slog.Info("[ENGINE] Growing memory", "pages", growPages)
 			_, err = session.memory.Grow(store, growPages)
 			if err != nil {
 				return false, fmt.Errorf("failed to grow memory for snapshot: %w", err)
@@ -239,7 +240,7 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 		size := session.memory.DataSize(store)
 		memoryBytes := unsafe.Slice((*byte)(ptr), size)
 		copy(memoryBytes, snapshot)
-		fmt.Println("[ENGINE] Memory snapshot successfully restored.")
+		slog.Info("[ENGINE] Memory snapshot successfully restored")
 	}
 
 	// Locate entrypoint
@@ -248,7 +249,7 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 		return false, fmt.Errorf("entrypoint function '%s' not found", entrypoint)
 	}
 
-	fmt.Printf("[ENGINE] Invoking entrypoint '%s'...\n", entrypoint)
+	slog.Info("[ENGINE] Invoking entrypoint", "entrypoint", entrypoint)
 	result, err := runFunc.Call(store)
 	if err != nil {
 		if session.crashed {
@@ -258,9 +259,9 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 	}
 
 	if result != nil {
-		fmt.Printf("[ENGINE] Execution completed. Result: %v\n", result)
+		slog.Info("[ENGINE] Execution completed", "result", result)
 	} else {
-		fmt.Println("[ENGINE] Execution completed successfully with no return value.")
+		slog.Info("[ENGINE] Execution completed successfully with no return value")
 	}
 
 	return false, nil
@@ -273,10 +274,10 @@ func (s *Session) handleDownload(ptr int32, length int32) int32 {
 
 	if s.downloadResp == nil {
 		url := fmt.Sprintf("http://%s/download", s.serverAddr)
-		fmt.Printf("[ENGINE] GET Request to %s (Stream-first)\n", url)
+		slog.Info("[ENGINE] GET Request (Stream-first)", "url", url)
 		resp, err := httpstream.NewRequest(context.Background(), *s.httpClient, "GET", url).Send()
 		if err != nil {
-			fmt.Printf("[ENGINE ERROR] GET failed: %v\n", err)
+			slog.Error("[ENGINE] GET failed", "error", err)
 			return -1
 		}
 		s.downloadResp = resp
@@ -292,7 +293,7 @@ func (s *Session) handleDownload(ptr int32, length int32) int32 {
 	}
 
 	if err == io.EOF {
-		fmt.Println("[ENGINE] GET Stream EOF. Closing response.")
+		slog.Info("[ENGINE] GET Stream EOF. Closing response")
 		s.downloadResp.Body.Close()
 		s.downloadResp = nil
 		s.downloadEOF = true
@@ -300,7 +301,7 @@ func (s *Session) handleDownload(ptr int32, length int32) int32 {
 	}
 
 	if err != nil {
-		fmt.Printf("[ENGINE ERROR] Read failed: %v\n", err)
+		slog.Error("[ENGINE] Read failed", "error", err)
 		s.downloadResp.Body.Close()
 		s.downloadResp = nil
 		return -1
@@ -312,7 +313,7 @@ func (s *Session) handleDownload(ptr int32, length int32) int32 {
 func (s *Session) handleUpload(ptr int32, length int32) int32 {
 	if s.uploadPipeW == nil {
 		url := fmt.Sprintf("http://%s/upload", s.serverAddr)
-		fmt.Printf("[ENGINE] POST Request to %s (Stream-first via io.Pipe)\n", url)
+		slog.Info("[ENGINE] POST Request (Stream-first via io.Pipe)", "url", url)
 
 		pipeReader, pipeWriter := io.Pipe()
 		s.uploadPipeW = pipeWriter
@@ -335,7 +336,7 @@ func (s *Session) handleUpload(ptr int32, length int32) int32 {
 	}
 
 	if length == 0 {
-		fmt.Println("[ENGINE] Closing upload stream (EOF). Waiting for response...")
+		slog.Info("[ENGINE] Closing upload stream (EOF). Waiting for response")
 		s.uploadPipeW.Close()
 		err := <-s.uploadErrChan
 		s.uploadPipeW = nil
@@ -345,10 +346,10 @@ func (s *Session) handleUpload(ptr int32, length int32) int32 {
 		s.downloadEOF = false
 
 		if err != nil {
-			fmt.Printf("[ENGINE ERROR] POST failed: %v\n", err)
+			slog.Error("[ENGINE] POST failed", "error", err)
 			return -1
 		}
-		fmt.Println("[ENGINE] POST completed successfully.")
+		slog.Info("[ENGINE] POST completed successfully")
 		return 0
 	}
 
@@ -359,7 +360,7 @@ func (s *Session) handleUpload(ptr int32, length int32) int32 {
 
 	n, err := s.uploadPipeW.Write(dataToWrite)
 	if err != nil {
-		fmt.Printf("[ENGINE ERROR] Write to pipe failed: %v\n", err)
+		slog.Error("[ENGINE] Write to pipe failed", "error", err)
 		return -1
 	}
 

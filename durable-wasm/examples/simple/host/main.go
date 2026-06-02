@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -20,7 +20,7 @@ const (
 )
 
 func main() {
-	fmt.Println("[HOST] Starting Reusable Durable WASM Execution Orchestrator...")
+	slog.Info("[HOST] Starting Reusable Durable WASM Execution Orchestrator")
 
 	// 2. Start local Mock HTTP Server to mock external REST calls
 	mockServer := startMockServer(serverAddr)
@@ -36,7 +36,7 @@ func main() {
 	}
 	store, err := durable.NewSqliteSnapshotStore(dbFile)
 	if err != nil {
-		fmt.Printf("[HOST ERROR] Failed to initialize SQLite store: %v\n", err)
+		slog.Error("[HOST] Failed to initialize SQLite store", "error", err)
 		os.Exit(1)
 	}
 	defer store.Close()
@@ -46,19 +46,19 @@ func main() {
 	
 	engine, err := durable.NewEngine(wasmPath, store)
 	if err != nil {
-		fmt.Printf("[HOST ERROR] Failed to initialize engine: %v\n", err)
-		fmt.Println("[HOST ERROR] Make sure worker.wasm is compiled by running 'make build-worker'")
+		slog.Error("[HOST] Failed to initialize engine", "error", err)
+		slog.Error("[HOST] Make sure worker.wasm is compiled by running 'make build-worker'")
 		os.Exit(1)
 	}
 
 	// 4. RUN 1: Execute with simulated crash on the first checkpoint
-	fmt.Println("\n--- RUN 1: Executing WASM from scratch with simulated crash ---")
+	slog.Info("[HOST] RUN 1: Executing WASM from scratch with simulated crash")
 	crashed, err := engine.Execute(instanceID, "run", serverAddr, true)
 	if err != nil {
 		if crashed {
-			fmt.Printf("[HOST] Execution successfully suspended/crashed: %v\n", err)
+			slog.Info("[HOST] Execution successfully suspended/crashed", "error", err)
 		} else {
-			fmt.Printf("[HOST ERROR] Execution failed: %v\n", err)
+			slog.Error("[HOST] Execution failed", "error", err)
 			os.Exit(1)
 		}
 	}
@@ -66,28 +66,28 @@ func main() {
 	// Verify snapshot exists in SQLite database
 	_, err = store.Load(instanceID)
 	if err != nil {
-		fmt.Printf("[HOST ERROR] Snapshot was not found in SQLite: %v\n", err)
+		slog.Error("[HOST] Snapshot was not found in SQLite", "error", err)
 		os.Exit(1)
 	}
-	fmt.Println("[HOST] Verified that snapshot was successfully written to SQLite database.")
+	slog.Info("[HOST] Verified that snapshot was successfully written to SQLite database")
 
 	// 5. RUN 2: Restore from checkpoint and resume execution
-	fmt.Println("\n--- RUN 2: Restoring from snapshot and completing execution ---")
+	slog.Info("[HOST] RUN 2: Restoring from snapshot and completing execution")
 	crashed, err = engine.Execute(instanceID, "run", serverAddr, false)
 	if err != nil {
-		fmt.Printf("[HOST ERROR] Resumed execution failed: %v\n", err)
+		slog.Error("[HOST] Resumed execution failed", "error", err)
 		os.Exit(1)
 	}
 
 	if crashed {
-		fmt.Println("[HOST ERROR] Resumed execution crashed unexpectedly!")
+		slog.Error("[HOST] Resumed execution crashed unexpectedly!")
 		os.Exit(1)
 	}
 
 	// 6. Final Clean up
 	// We keep the snapshot in the database to verify replication to S3 and restore capability
 	// _ = store.Delete(instanceID)
-	fmt.Println("\n[HOST] Durable WASM Execution demonstration complete.")
+	slog.Info("[HOST] Durable WASM Execution demonstration complete")
 	time.Sleep(5 * time.Second) // Give Litestream ample time to sync database and final WAL frames
 	os.Exit(0)
 }
@@ -130,7 +130,7 @@ func startMockServer(addr string) *http.Server {
 			}
 		}
 
-		fmt.Printf("[MOCK SERVER] Received total %d bytes. All Uppercase validation: %t\n", totalBytes, allUppercase)
+		slog.Info("[MOCK SERVER] Received payload", "bytes", totalBytes, "all_uppercase", allUppercase)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK"))
 	})
@@ -143,14 +143,14 @@ func startMockServer(addr string) *http.Server {
 	go func() {
 		l, err := net.Listen("tcp", addr)
 		if err != nil {
-			fmt.Printf("[MOCK SERVER ERROR] Failed to listen: %v\n", err)
+			slog.Error("[MOCK SERVER] Failed to listen", "error", err)
 			return
 		}
 		if err := server.Serve(l); err != nil && err != http.ErrServerClosed {
-			fmt.Printf("[MOCK SERVER ERROR] Serve error: %v\n", err)
+			slog.Error("[MOCK SERVER] Serve error", "error", err)
 		}
 	}()
 
-	fmt.Printf("[MOCK SERVER] Listening on http://%s\n", addr)
+	slog.Info("[MOCK SERVER] Listening", "addr", "http://"+addr)
 	return server
 }

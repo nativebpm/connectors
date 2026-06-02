@@ -1,0 +1,11 @@
+# Binaries and WASM builds
+host/host
+worker/worker.wasm
+
+# SQLite database files
+*.db
+*.db-wal
+*.db-shm
+
+# rclone local storage
+rclone_data/

@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -16,15 +16,14 @@ import (
 const (
 	instanceID   = "temporal-activity-tx"
 	serverAddr   = "localhost:18085"
-	snapshotFile = "temporal-activity-tx.bin"
+	sqliteDBFile = "snapshots.db"
 	dbFile       = "database_temporal.json"
 )
 
 func main() {
-	fmt.Println("[HOST] Starting Temporal Durable Activity Execution Example...")
+	slog.Info("[HOST] Starting Temporal Durable Activity Execution Example")
 
 	// 1. Clean up old files
-	_ = os.Remove(snapshotFile)
 	_ = os.Remove(dbFile)
 
 	// 2. Start local Mock HTTP Server to mock external billing, CRM, and DB API endpoints
@@ -34,67 +33,76 @@ func main() {
 	// Give the server a small moment to bind to the port
 	time.Sleep(100 * time.Millisecond)
 
-	// 3. Initialize the Reusable Durable WASM Engine
+	// 3. Initialize the Reusable Durable WASM Engine with SQLite store
 	wasmPath := filepath.Join("..", "worker", "worker.wasm")
-	store := &durable.FileSnapshotStore{Dir: "."}
+	store, err := durable.NewSqliteSnapshotStore(sqliteDBFile)
+	if err != nil {
+		slog.Error("[HOST] Failed to initialize SQLite store", "error", err)
+		os.Exit(1)
+	}
+	defer store.Close()
 	
 	engine, err := durable.NewEngine(wasmPath, store)
 	if err != nil {
-		fmt.Printf("[HOST ERROR] Failed to initialize engine: %v\n", err)
+		slog.Error("[HOST] Failed to initialize engine", "error", err)
 		os.Exit(1)
 	}
 
+	// Clear any leftover snapshot from previous runs in the database
+	_ = store.Delete(instanceID)
+
 	// 4. RUN 1: Execute with simulated crash on the first checkpoint (Step 0)
-	fmt.Println("\n--- RUN 1: Starting Temporal Activity with Simulated Crash ---")
+	slog.Info("[HOST] RUN 1: Starting Temporal Activity with Simulated Crash")
 	crashed, err := engine.Execute(instanceID, "run", serverAddr, true)
 	if err != nil {
 		if crashed {
-			fmt.Printf("[HOST] Activity successfully suspended/crashed: %v\n", err)
+			slog.Info("[HOST] Activity successfully suspended/crashed", "error", err)
 		} else {
-			fmt.Printf("[HOST ERROR] Execution failed: %v\n", err)
+			slog.Error("[HOST] Execution failed", "error", err)
 			os.Exit(1)
 		}
 	}
 
-	// Verify snapshot exists
-	if _, err := os.Stat(snapshotFile); os.IsNotExist(err) {
-		fmt.Println("[HOST ERROR] Snapshot was not created on checkpoint!")
+	// Verify snapshot exists in SQLite database
+	_, err = store.Load(instanceID)
+	if err != nil {
+		slog.Error("[HOST] Snapshot was not found in SQLite", "error", err)
 		os.Exit(1)
 	}
-	fmt.Println("[HOST] Verified that snapshot file was written to disk.")
+	slog.Info("[HOST] Verified that snapshot was successfully written to SQLite database")
 
 	// 5. RUN 2: Restore from checkpoint and resume execution
-	fmt.Println("\n--- RUN 2: Restoring Activity State from Snapshot and Resuming execution ---")
+	slog.Info("[HOST] RUN 2: Restoring Activity State from Snapshot and Resuming execution")
 	crashed, err = engine.Execute(instanceID, "run", serverAddr, false)
 	if err != nil {
-		fmt.Printf("[HOST ERROR] Resumed execution failed: %v\n", err)
+		slog.Error("[HOST] Resumed execution failed", "error", err)
 		os.Exit(1)
 	}
 
 	if crashed {
-		fmt.Println("[HOST ERROR] Resumed execution crashed unexpectedly!")
+		slog.Error("[HOST] Resumed execution crashed unexpectedly!")
 		os.Exit(1)
 	}
 
 	// 6. Verify Database Persistence (Hybrid approach validation)
-	fmt.Println("\n--- HYBRID APPROACH VALIDATION ---")
+	slog.Info("[HOST] HYBRID APPROACH VALIDATION")
 	dbBytes, err := os.ReadFile(dbFile)
 	if err != nil {
-		fmt.Printf("[HOST ERROR] Final database record not found: %v\n", err)
+		slog.Error("[HOST] Final database record not found", "error", err)
 		os.Exit(1)
 	}
-	fmt.Printf("[HOST] Read from persistent DB (%s): %s\n", dbFile, string(dbBytes))
+	slog.Info("[HOST] Read from persistent DB", "file", dbFile, "content", string(dbBytes))
 
 	// Clean up snapshot since the transaction is completed (we no longer need workflow memory)
-	_ = engine.store.Delete(instanceID)
-	if _, err := engine.store.Load(instanceID); err != nil {
-		fmt.Println("[HOST] Workflow memory snapshot successfully cleaned up from store (Transaction Completed).")
+	_ = store.Delete(instanceID)
+	if _, err := store.Load(instanceID); err != nil {
+		slog.Info("[HOST] Workflow memory snapshot successfully cleaned up from store (Transaction Completed)")
 	}
 
 	// Clean up database_temporal.json
 	_ = os.Remove(dbFile)
 	
-	fmt.Println("\n[HOST] Temporal Activity example completed successfully.")
+	slog.Info("[HOST] Temporal Activity example completed successfully")
 	os.Exit(0)
 }
 
@@ -119,14 +127,14 @@ func startMockServer(addr string) *http.Server {
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			fmt.Printf("[MOCK SERVICES ERROR] Failed to read upload: %v\n", err)
+			slog.Error("[MOCK SERVICES] Failed to read upload", "error", err)
 			return
 		}
 
 		if uploadCount == 1 {
-			fmt.Printf("[MOCK TEMPORAL SERVICE] Received param request query: %s\n", string(body))
+			slog.Info("[MOCK TEMPORAL SERVICE] Received param request query", "body", string(body))
 		} else if uploadCount == 2 {
-			fmt.Printf("[MOCK DATABASE API] Received final calculation result to persist: %s\n", string(body))
+			slog.Info("[MOCK DATABASE API] Received final calculation result to persist", "body", string(body))
 			_ = os.WriteFile(dbFile, body, 0644)
 		}
 	})
@@ -139,14 +147,14 @@ func startMockServer(addr string) *http.Server {
 	go func() {
 		l, err := net.Listen("tcp", addr)
 		if err != nil {
-			fmt.Printf("[MOCK SERVICES ERROR] Failed to listen: %v\n", err)
+			slog.Error("[MOCK SERVICES] Failed to listen", "error", err)
 			return
 		}
 		if err := server.Serve(l); err != nil && err != http.ErrServerClosed {
-			fmt.Printf("[MOCK SERVICES ERROR] Serve error: %v\n", err)
+			slog.Error("[MOCK SERVICES] Serve error", "error", err)
 		}
 	}()
 
-	fmt.Printf("[MOCK SERVICES] Listening on http://%s\n", addr)
+	slog.Info("[MOCK SERVICES] Listening", "addr", "http://"+addr)
 	return server
 }
