@@ -7,5 +7,5 @@ worker/worker.wasm
 *.db-wal
 *.db-shm
 
-# rclone local storage
-rclone_data/
+# SeaweedFS local storage
+seaweed_data/

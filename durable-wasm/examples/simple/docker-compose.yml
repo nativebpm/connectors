@@ -1,17 +1,18 @@
 version: "3.7"
 
-name: durable-wasm-simple-rclone
+name: durable-wasm-simple-seaweedfs
 
 services:
-  rclone:
-    image: rclone/rclone:latest
-    command: serve s3 --addr 0.0.0.0:8334 /data --auth-key admin,admin123
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    command: server -s3 -dir /data -s3.port 8333
     ports:
-      - "8334:8334"
+      - "8333:8333"
+      - "9333:9333"
     volumes:
-      - ./rclone_data:/data
+      - ./seaweed_data:/data
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "8334"]
+      test: ["CMD", "nc", "-z", "localhost", "8333"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -22,14 +23,14 @@ services:
       context: ../../../
       dockerfile: durable-wasm/examples/simple/host/Dockerfile
     depends_on:
-      rclone:
+      seaweedfs:
         condition: service_healthy
     environment:
       - LITESTREAM_ACCESS_KEY_ID=admin
       - LITESTREAM_SECRET_ACCESS_KEY=admin123
       - AWS_ACCESS_KEY_ID=admin
       - AWS_SECRET_ACCESS_KEY=admin123
-      - LITESTREAM_ENDPOINT=http://rclone:8334
+      - LITESTREAM_ENDPOINT=http://seaweedfs:8333
       - WASM_PATH=/app/worker/worker.wasm
     volumes:
       - shared-data:/app

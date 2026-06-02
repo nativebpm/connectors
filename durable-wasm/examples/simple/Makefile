@@ -13,13 +13,13 @@ run: build-worker
 	cd host && go run main.go
 
 run-docker: build-worker
-	@echo "Creating local rclone S3 bucket directory..."
-	mkdir -p rclone_data/snapshots-bucket
-	@echo "Running simple playground example with Litestream and rclone S3..."
+	@echo "Creating local seaweedfs data directory..."
+	mkdir -p seaweed_data
+	@echo "Running simple playground example with Litestream and SeaweedFS..."
 	docker compose up --build
 
 clean:
 	@echo "Cleaning simple playground example artifacts..."
 	rm -f worker/worker.wasm
-	rm -rf rclone_data
+	rm -rf seaweed_data
 
