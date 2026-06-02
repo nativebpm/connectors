@@ -15,6 +15,7 @@ A robust, highly-reusable, and lightweight Durable Execution Engine built on Go,
 - `engine.go`: Core execution engine managing execution lifecycles, memory recovery, host-call API triggers, and streaming.
 - `sqlite_store.go`: Implementation of `SnapshotStore` using SQLite (optimized with single-connection serialization and WAL mode).
 - `postgres_store.go`: Implementation of `SnapshotStore` using PostgreSQL.
+- `s3_store.go`: Implementation of `SnapshotStore` using S3-compatible object storage (utilizing native If-Match/If-None-Match ETag OCC).
 - `examples/`: Real-world orchestration use cases:
   - `camunda/`: Service task orchestration using Camunda 7 External Tasks with simulated crash recovery.
   - `temporal/`: Long-running Math/CRM activity run in a simulated Temporal execution environment with checkpointing.
@@ -87,9 +88,9 @@ import (
 
 	"github.com/nativebpm/connectors/durable-wasm"
 )
-
 func main() {
-	// 1. Initialize snapshot store (using SQLite database)
+	// 1. Initialize snapshot store (SQLite, Postgres, or S3-compatible store)
+	// store, err := durable.NewS3SnapshotStore(ctx, "my-bucket")
 	store, err := durable.NewSqliteSnapshotStore("snapshots.db")
 	if err != nil {
 		panic(err)

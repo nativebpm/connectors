@@ -15,6 +15,7 @@
 - `engine.go`: Ядро движка выполнения, управляющее жизненным циклом запусков, восстановлением памяти, вызовами хост-функций API и сетевым стримингом.
 - `sqlite_store.go`: Реализация интерфейса `SnapshotStore` на базе SQLite (оптимизирована с сериализацией соединений и WAL-режимом).
 - `postgres_store.go`: Реализация интерфейса `SnapshotStore` на базе PostgreSQL.
+- `s3_store.go`: Реализация интерфейса `SnapshotStore` на базе S3-совместимых объектных хранилищ (с поддержкой OCC через ETag).
 - `examples/`: Реальные примеры оркестрации бизнес-процессов:
   - `camunda/`: Оркестрация внешних задач (External Tasks) в Camunda 7 с симуляцией восстановления после сбоев.
   - `temporal/`: Долгоиграющая активность (Activity) в симулированном окружении Temporal.io с чекпоинтами.
@@ -87,9 +88,9 @@ import (
 
 	"github.com/nativebpm/connectors/durable-wasm"
 )
-
 func main() {
-	// 1. Инициализируем хранилище снимков (используем базу данных SQLite)
+	// 1. Инициализируем хранилище снимков (используем SQLite, Postgres или S3-совместимое хранилище)
+	// store, err := durable.NewS3SnapshotStore(ctx, "my-bucket")
 	store, err := durable.NewSqliteSnapshotStore("snapshots.db")
 	if err != nil {
 		panic(err)

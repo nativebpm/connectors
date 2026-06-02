@@ -30,6 +30,7 @@ type InstanceMeta struct {
 	InstanceID string `json:"instance_id"`
 	WasmHash   string `json:"wasm_hash"`
 	Version    int    `json:"version"`
+	ETag       string `json:"etag,omitempty"`
 }
 
 // OplogEntry represents a single external call log.

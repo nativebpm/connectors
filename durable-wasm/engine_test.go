@@ -13,7 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bytecodealliance/wasmtime-go/v20"
+	"github.com/google/uuid"
 	"github.com/nativebpm/connectors/durable-wasm/testdata"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -200,6 +203,139 @@ func TestPostgresSnapshotStore(t *testing.T) {
 	assert.Equal(t, "test_call", oplog[0].ApiName)
 	assert.Equal(t, "req", string(oplog[0].RequestPayload))
 	assert.Equal(t, "resp", string(oplog[0].ResponsePayload))
+}
+
+func TestS3SnapshotStore(t *testing.T) {
+	// Try to connect to a local MinIO/S3 using environment variables
+	bucket := os.Getenv("S3_BUCKET")
+	endpoint := os.Getenv("S3_ENDPOINT")
+	accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
+	secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+
+	if bucket == "" || endpoint == "" || accessKey == "" || secretKey == "" {
+		t.Skip("S3 environment variables not fully set (S3_BUCKET, S3_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY). Skipping S3 integration test.")
+		return
+	}
+
+	ctx := context.Background()
+
+	// Initialize S3 store with credentials and endpoint config
+	store, err := NewS3SnapshotStore(ctx, bucket, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(endpoint)
+		o.Region = "us-east-1"
+		o.UsePathStyle = true
+	})
+	require.NoError(t, err)
+
+	// Create bucket if it doesn't exist
+	_, _ = store.client.CreateBucket(ctx, &s3.CreateBucketInput{
+		Bucket: aws.String(bucket),
+	})
+
+	instanceID := "s3-test-instance-" + uuid.New().String()
+	defer store.Delete(instanceID)
+
+	// Test Save & Load Snapshot
+	err = store.Save(instanceID, []byte("s3-full-snapshot-data"))
+	require.NoError(t, err)
+
+	snapshot, err := store.Load(instanceID)
+	require.NoError(t, err)
+	assert.Equal(t, "s3-full-snapshot-data", string(snapshot))
+
+	// Test Save & Load Deltas
+	deltas := map[int][]byte{
+		0: []byte("s3-page-0-data"),
+		9: []byte("s3-page-9-data"),
+	}
+	err = store.SaveDeltas(instanceID, deltas)
+	require.NoError(t, err)
+
+	loadedDeltas, err := store.LoadDeltas(instanceID)
+	require.NoError(t, err)
+	assert.Len(t, loadedDeltas, 2)
+	assert.Equal(t, "s3-page-0-data", string(loadedDeltas[0]))
+	assert.Equal(t, "s3-page-9-data", string(loadedDeltas[9]))
+
+	// Test Save & Load Oplog
+	err = store.SaveOplog(instanceID, 1, "test_s3_call", []byte("s3-req"), []byte("s3-resp"))
+	require.NoError(t, err)
+
+	oplog, err := store.LoadOplog(instanceID)
+	require.NoError(t, err)
+	require.Len(t, oplog, 1)
+	assert.Equal(t, 1, oplog[0].CallIndex)
+	assert.Equal(t, "test_s3_call", oplog[0].ApiName)
+	assert.Equal(t, "s3-req", string(oplog[0].RequestPayload))
+	assert.Equal(t, "s3-resp", string(oplog[0].ResponsePayload))
+
+	// Test Metadata OCC (Optimistic Concurrency Control)
+	meta := &InstanceMeta{
+		InstanceID: instanceID,
+		WasmHash:   "wasm-hash-val",
+		Version:    0,
+	}
+
+	// First insert
+	ok, err := store.SaveMetadata(meta)
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, 1, meta.Version)
+	assert.NotEmpty(t, meta.ETag)
+
+	// Try to insert again with Version=0 (should fail OCC)
+	metaDup := &InstanceMeta{
+		InstanceID: instanceID,
+		WasmHash:   "wasm-hash-val-dup",
+		Version:    0,
+	}
+	ok, err = store.SaveMetadata(metaDup)
+	require.NoError(t, err)
+	assert.False(t, ok)
+
+	// Load metadata and check values
+	loadedMeta, err := store.LoadMetadata(instanceID)
+	require.NoError(t, err)
+	require.NotNil(t, loadedMeta)
+	assert.Equal(t, 1, loadedMeta.Version)
+	assert.Equal(t, "wasm-hash-val", loadedMeta.WasmHash)
+	assert.Equal(t, meta.ETag, loadedMeta.ETag)
+
+	// Normal update
+	loadedMeta.WasmHash = "wasm-hash-val-updated"
+	ok, err = store.SaveMetadata(loadedMeta)
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, 2, loadedMeta.Version)
+
+	// Stale update (using old meta ETag)
+	meta.WasmHash = "wasm-hash-stale"
+	ok, err = store.SaveMetadata(meta) // meta still has version 1 and old ETag
+	require.NoError(t, err)
+	assert.False(t, ok) // should fail OCC since ETag on S3 is already updated by loadedMeta
+
+	// Verify final metadata state
+	finalMeta, err := store.LoadMetadata(instanceID)
+	require.NoError(t, err)
+	assert.Equal(t, 2, finalMeta.Version)
+	assert.Equal(t, "wasm-hash-val-updated", finalMeta.WasmHash)
+
+	// Test WASM Registry
+	wasmHash := "wasm-sha256-hash-s3"
+	wasmBytes := []byte("wasm-dummy-binary-bytes")
+	err = store.SaveWasm(wasmHash, wasmBytes)
+	require.NoError(t, err)
+
+	loadedWasm, err := store.LoadWasm(wasmHash)
+	require.NoError(t, err)
+	assert.Equal(t, wasmBytes, loadedWasm)
+
+	// Clean up WASM registry file too (since it is outside instanceID path)
+	_, err = store.client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
+		Bucket: aws.String(store.bucket),
+		Key:    aws.String("wasm/" + wasmHash + ".wasm"),
+	})
+	require.NoError(t, err)
 }
 
 func TestHostGetTime(t *testing.T) {
