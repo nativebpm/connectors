@@ -13,6 +13,8 @@ run: build-worker
 	cd host && go run main.go
 
 run-docker: build-worker
+	@echo "Creating local rclone S3 bucket directory..."
+	mkdir -p rclone_data/snapshots-bucket
 	@echo "Running simple playground example with Litestream and rclone S3..."
 	docker compose up --build
 
