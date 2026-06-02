@@ -5,10 +5,12 @@ go 1.26
 require (
 	github.com/bytecodealliance/wasmtime-go/v20 v20.0.0
 	github.com/google/uuid v1.6.0
+	github.com/lib/pq v1.12.3
 	github.com/nativebpm/connectors/camunda v0.0.15
 	github.com/nativebpm/connectors/temporal v0.0.7
 	github.com/nativebpm/httpstream v0.0.3
 	github.com/stretchr/testify v1.11.1
+	go.temporal.io/sdk v1.33.0
 	modernc.org/sqlite v1.21.2
 )
 
@@ -23,7 +25,6 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
-	github.com/lib/pq v1.12.3 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/nexus-rpc/sdk-go v0.3.0 // indirect
 	github.com/pborman/uuid v1.2.1 // indirect
@@ -33,7 +34,6 @@ require (
 	github.com/sequinstream/sequin-go v0.2.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	go.temporal.io/api v1.44.1 // indirect
-	go.temporal.io/sdk v1.33.0 // indirect
 	golang.org/x/mod v0.18.0 // indirect
 	golang.org/x/net v0.28.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect

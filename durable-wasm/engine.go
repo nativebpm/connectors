@@ -399,9 +399,10 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 		mem := ext.Memory()
 		session.memory = mem
 
-		if direction == 0 {
+		switch direction {
+		case 0:
 			return session.handleDownload(ptr, length)
-		} else if direction == 1 {
+		case 1:
 			return session.handleUpload(ptr, length)
 		}
 

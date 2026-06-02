@@ -85,7 +85,7 @@ func (s *UnitTestSuite) Test_SubscriptionWorkflow() {
 	var finalResult string
 	err := env.GetWorkflowResult(&finalResult)
 	s.NoError(err)
-	s.Equal("Cancelled", finalResult)
+	s.Equal("Canceled", finalResult)
 }
 
 // Test_SagaReservation_Success verifies successful booking without compensation.

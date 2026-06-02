@@ -214,13 +214,13 @@ func (r *PDFEngines) AutoIndexBookmarks(v bool) *PDFEngines {
 
 // WatermarkFile adds a watermark source file (image or PDF) to the request.
 func (r *PDFEngines) WatermarkFile(filename string, content io.Reader) *PDFEngines {
-	r.Request.file("watermark", filename, content)
+	r.file("watermark", filename, content)
 	return r
 }
 
 // StampFile adds a stamp source file (image or PDF) to the request.
 func (r *PDFEngines) StampFile(filename string, content io.Reader) *PDFEngines {
-	r.Request.file("stamp", filename, content)
+	r.file("stamp", filename, content)
 	return r
 }
 

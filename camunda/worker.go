@@ -202,7 +202,7 @@ func (w *Worker) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			w.logger.Info("Context cancelled, waiting for active tasks to complete...")
+			w.logger.Info("Context canceled, waiting for active tasks to complete...")
 			w.activeTasksWg.Wait()
 			w.logger.Info("Worker stopped gracefully")
 			return

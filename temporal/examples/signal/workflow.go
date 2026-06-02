@@ -40,7 +40,7 @@ func SubscriptionWorkflow(ctx workflow.Context, duration time.Duration) (string,
 	cancelChan := workflow.GetSignalChannel(ctx, "CancelSubscription")
 	selector.AddReceive(cancelChan, func(c workflow.ReceiveChannel, more bool) {
 		c.Receive(ctx, nil)
-		status.State = "Cancelled"
+		status.State = "Canceled"
 		status.UpdatedTime = workflow.Now(ctx)
 		logger.Info("Received CancelSubscription signal")
 	})
@@ -58,7 +58,7 @@ func SubscriptionWorkflow(ctx workflow.Context, duration time.Duration) (string,
 
 	// Subscription timeout
 	selector.AddFuture(workflow.NewTimer(ctx, duration), func(f workflow.Future) {
-		if status.State != "Cancelled" {
+		if status.State != "Canceled" {
 			status.State = "Expired"
 			status.UpdatedTime = workflow.Now(ctx)
 			logger.Info("Subscription expired")

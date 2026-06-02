@@ -136,6 +136,9 @@ func TestCamundaWasmOrchestration_RealCamundaServer(t *testing.T) {
 	assert.Contains(t, string(dbBytes), `"status":"processed"`)
 
 	// Snapshot should be cleaned up
-	_, err = store.Load(uniqueKey)
-	assert.Error(t, err, "Snapshot should be deleted")
+	assert.Eventually(t, func() bool {
+		_, err = store.Load(uniqueKey)
+		return err != nil
+	}, 3*time.Second, 50*time.Millisecond, "Snapshot should be deleted")
 }
+

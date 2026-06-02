@@ -55,7 +55,12 @@ func NewClient(cfg *Config) (*Client, error) {
 }
 
 // ExecuteWorkflow starts Workflow execution asynchronously and returns run info.
-func (c *Client) ExecuteWorkflow(ctx context.Context, options client.StartWorkflowOptions, workflowFunc any, args ...any) (client.WorkflowRun, error) {
+func (c *Client) ExecuteWorkflow(
+	ctx context.Context,
+	options client.StartWorkflowOptions,
+	workflowFunc any,
+	args ...any,
+) (client.WorkflowRun, error) {
 	if options.TaskQueue == "" {
 		options.TaskQueue = c.config.TaskQueue
 	}

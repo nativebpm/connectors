@@ -107,7 +107,7 @@ func (r *Request) Header(k, v string) *Request { r.Request.Header.Set(k, v); ret
 
 // PathParam replaces a path variable placeholder in the URL.
 func (r *Request) PathParam(key, val string) *Request {
-	r.Request.URL.Path = strings.ReplaceAll(r.Request.URL.Path, "{"+key+"}", val)
+	r.URL.Path = strings.ReplaceAll(r.URL.Path, "{"+key+"}", val)
 	return r
 }
 func (r *Request) PathInt(k string, v int) *Request   { return r.PathParam(k, strconv.Itoa(v)) }
@@ -118,9 +118,9 @@ func (r *Request) PathFloat(k string, v float64) *Request {
 
 // Param adds a query parameter to the request.
 func (r *Request) Param(key, value string) *Request {
-	q := r.Request.URL.Query()
+	q := r.URL.Query()
 	q.Set(key, value)
-	r.Request.URL.RawQuery = q.Encode()
+	r.URL.RawQuery = q.Encode()
 	return r
 }
 func (r *Request) Int(k string, v int) *Request   { return r.Param(k, strconv.Itoa(v)) }
@@ -157,6 +157,6 @@ func (r *Request) Form(key, value string) *Request {
 
 // Cookie adds a cookie to the request.
 func (r *Request) Cookie(name, value string) *Request {
-	r.Request.AddCookie(&http.Cookie{Name: name, Value: value})
+	r.AddCookie(&http.Cookie{Name: name, Value: value})
 	return r
 }

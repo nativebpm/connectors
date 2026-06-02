@@ -686,15 +686,16 @@ func TestSequinWorker_AsyncDelegation(t *testing.T) {
 			}`))
 			// No more messages to return
 			sequinServer.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method == "POST" && strings.Contains(r.URL.Path, "/ack") {
+				switch {
+				case r.Method == "POST" && strings.Contains(r.URL.Path, "/ack"):
 					ackCalled = true
 					w.WriteHeader(http.StatusOK)
-				} else if r.Method == "POST" && strings.Contains(r.URL.Path, "/nack") {
+				case r.Method == "POST" && strings.Contains(r.URL.Path, "/nack"):
 					nackCalled = true
 					w.WriteHeader(http.StatusOK)
-				} else {
+				default:
 					w.WriteHeader(http.StatusOK)
-					w.Write([]byte(`{"data": []}`))
+					_, _ = w.Write([]byte(`{"data": []}`))
 				}
 			})
 		} else if r.Method == "POST" && strings.Contains(r.URL.Path, "/ack") {

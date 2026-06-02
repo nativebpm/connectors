@@ -89,9 +89,10 @@ func (r *Multipart) Send() (*http.Response, error) {
 			}
 
 			var err error
-			if f.contentType == multipartFormData {
+			switch f.contentType {
+			case multipartFormData:
 				err = mw.WriteField(f.key, f.value)
-			} else if f.contentType == applicationOctetStream {
+			case applicationOctetStream:
 				var part io.Writer
 				if part, err = mw.CreateFormFile(f.key, f.value); err == nil {
 					_, err = io.Copy(part, f.file)

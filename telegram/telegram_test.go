@@ -260,11 +260,12 @@ func TestAPIErrorHandling(t *testing.T) {
 func TestOtherMethods(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Path == "/botTEST_TOKEN/answerCallbackQuery" {
+		switch r.URL.Path {
+		case "/botTEST_TOKEN/answerCallbackQuery":
 			_, _ = w.Write([]byte(`{"ok": true, "result": true}`))
-		} else if r.URL.Path == "/botTEST_TOKEN/setWebhook" {
+		case "/botTEST_TOKEN/setWebhook":
 			_, _ = w.Write([]byte(`{"ok": true, "result": true}`))
-		} else if r.URL.Path == "/botTEST_TOKEN/getUpdates" {
+		case "/botTEST_TOKEN/getUpdates":
 			_, _ = w.Write([]byte(`{"ok": true, "result": [{"update_id": 100, "message": {"message_id": 1, "chat": {"id": 2, "type": "type"}, "date": 3, "text": "hello"}}]}`))
 		}
 	}))
@@ -292,11 +293,12 @@ func TestFluentBuilders(t *testing.T) {
 	photoContent := "fake_photo_data"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Path == "/botTEST_TOKEN/sendMessage" {
+		switch r.URL.Path {
+		case "/botTEST_TOKEN/sendMessage":
 			_, _ = w.Write([]byte(`{"ok": true, "result": {"message_id": 1, "chat": {"id": 123456, "type": "private"}, "date": 3, "text": "hello"}}`))
-		} else if r.URL.Path == "/botTEST_TOKEN/sendDocument" {
+		case "/botTEST_TOKEN/sendDocument":
 			_, _ = w.Write([]byte(`{"ok": true, "result": {"message_id": 2, "chat": {"id": 123456, "type": "private"}, "date": 3, "document": {"file_id": "doc123"}}}`))
-		} else if r.URL.Path == "/botTEST_TOKEN/sendPhoto" {
+		case "/botTEST_TOKEN/sendPhoto":
 			_, _ = w.Write([]byte(`{"ok": true, "result": {"message_id": 3, "chat": {"id": 123456, "type": "private"}, "date": 3, "photo": [{"file_id": "photo123"}]}}`))
 		}
 	}))

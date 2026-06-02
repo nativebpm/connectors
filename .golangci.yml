@@ -1,54 +1,60 @@
+version: "2"
 run:
-  timeout: 5m
-  tests: true
   modules-download-mode: readonly
-
-linters-settings:
-  gocyclo:
-    min-complexity: 20
-  lll:
-    line-length: 150
-  misspell:
-    locale: US
-  revive:
-    rules:
-      - name: exported
-        severity: warning
-        disabled: true
-
+  tests: true
 linters:
-  disable-all: true
+  default: none
   enable:
-    - govet
-    - staticcheck
     - errcheck
-    - unused
-    - gosimple
-    - ineffassign
-    - gofmt
-    - goimports
-    - misspell
-    - gocyclo
-    - lll
-    - revive
     - gocritic
-
+    - gocyclo
+    - govet
+    - ineffassign
+    - lll
+    - misspell
+    - revive
+    - staticcheck
+    - unused
+  settings:
+    gocyclo:
+      min-complexity: 20
+    lll:
+      line-length: 150
+    misspell:
+      locale: US
+    revive:
+      rules:
+        - name: exported
+          severity: warning
+          disabled: true
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - errcheck
+        text: Error return value of .*.Close.* is not checked
+      - linters:
+          - errcheck
+        text: Error return value of `io.Copy` is not checked
+      - linters:
+          - errcheck
+          - gocyclo
+          - lll
+        path: _test\.go
+    paths:
+      - "(.+/)?third_party/.*"
+      - "(.+/)?builtin/.*"
+      - "(.+/)?examples/.*"
 issues:
-  exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0
-  
-  exclude-rules:
-    # Exclude close and copy check warnings on specific functions
-    - text: "Error return value of .*.Close.* is not checked"
-      linters:
-        - errcheck
-    - text: "Error return value of `io.Copy` is not checked"
-      linters:
-        - errcheck
-    # Relax rules for test files
-    - path: _test\.go
-      linters:
-        - gocyclo
-        - errcheck
-        - lll
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - "(.+/)?third_party/.*"
+      - "(.+/)?builtin/.*"
+      - "(.+/)?examples/.*"

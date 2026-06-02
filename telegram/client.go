@@ -86,7 +86,13 @@ func decodeResponse[T any](resp *http.Response) (*T, error) {
 }
 
 // Helper function to apply parameters common to all media-sending requests.
-func applyCommonMultipartParams(req *httpstream.Multipart, caption, parseMode string, disableNotification bool, replyParams *ReplyParameters, replyMarkup any) error {
+func applyCommonMultipartParams(
+	req *httpstream.Multipart,
+	caption, parseMode string,
+	disableNotification bool,
+	replyParams *ReplyParameters,
+	replyMarkup any,
+) error {
 	if caption != "" {
 		req.Param("caption", caption)
 	}

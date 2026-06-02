@@ -109,7 +109,7 @@ func (sw *SequinWorker) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			sw.logger.Info("Context cancelled, waiting for active tasks to complete...")
+			sw.logger.Info("Context canceled, waiting for active tasks to complete...")
 			sw.wg.Wait()
 			return
 		default:
@@ -119,7 +119,7 @@ func (sw *SequinWorker) Start(ctx context.Context) {
 				// Semaphore is fully saturated. Block until at least one worker slot is freed.
 				select {
 				case <-ctx.Done():
-					sw.logger.Info("Context cancelled, waiting for active tasks to complete...")
+					sw.logger.Info("Context canceled, waiting for active tasks to complete...")
 					sw.wg.Wait()
 					return
 				case sw.taskSemaphore <- struct{}{}:
@@ -152,7 +152,7 @@ func (sw *SequinWorker) Start(ctx context.Context) {
 				// Acquire semaphore slot context-aware
 				select {
 				case <-ctx.Done():
-					sw.logger.Info("Context cancelled, waiting for active tasks to complete...")
+					sw.logger.Info("Context canceled, waiting for active tasks to complete...")
 					sw.wg.Wait()
 					return
 				case sw.taskSemaphore <- struct{}{}:

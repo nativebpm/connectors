@@ -1,4 +1,5 @@
 GO_VERSION ?= 1.21
+GOLANGCI_LINT := $(shell go env GOPATH)/bin/golangci-lint
 
 mod:
 	@read -p "Enter module name: " MODULE; \
@@ -13,17 +14,17 @@ tidy:
 	go work sync
 
 lint-install:
-	@if ! command -v golangci-lint >/dev/null 2>&1; then \
+	@if [ ! -f $(GOLANGCI_LINT) ]; then \
 		echo "Installing golangci-lint..."; \
-		go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8; \
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2; \
 	else \
-		echo "golangci-lint is already installed"; \
+		echo "golangci-lint is already installed at $(GOLANGCI_LINT)"; \
 	fi
 
 lint: tidy lint-install
-	golangci-lint version
-	golangci-lint cache clean
-	find . -name go.mod -execdir golangci-lint run \;
+	$(GOLANGCI_LINT) version
+	$(GOLANGCI_LINT) cache clean
+	find . -name go.mod -execdir $(GOLANGCI_LINT) run \;
 
 test: lint
 

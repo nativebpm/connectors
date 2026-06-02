@@ -59,7 +59,11 @@ func (c *Client) SendDocument(ctx context.Context, params *SendDocumentParams) (
 		Param("chat_id", fmt.Sprint(params.ChatID)).
 		File("document", params.Filename, params.Document)
 
-	if err := applyCommonMultipartParams(req, params.Caption, params.ParseMode, params.DisableNotification, params.ReplyParameters, params.ReplyMarkup); err != nil {
+	err := applyCommonMultipartParams(
+		req, params.Caption, params.ParseMode, params.DisableNotification,
+		params.ReplyParameters, params.ReplyMarkup,
+	)
+	if err != nil {
 		return nil, err
 	}
 
@@ -97,7 +101,11 @@ func (c *Client) SendPhoto(ctx context.Context, params *SendPhotoParams) (*Messa
 		Param("chat_id", fmt.Sprint(params.ChatID)).
 		File("photo", params.Filename, params.Photo)
 
-	if err := applyCommonMultipartParams(req, params.Caption, params.ParseMode, params.DisableNotification, params.ReplyParameters, params.ReplyMarkup); err != nil {
+	err := applyCommonMultipartParams(
+		req, params.Caption, params.ParseMode, params.DisableNotification,
+		params.ReplyParameters, params.ReplyMarkup,
+	)
+	if err != nil {
 		return nil, err
 	}
 
@@ -195,7 +203,7 @@ func (c *Client) GetUpdates(ctx context.Context, params *GetUpdatesParams) ([]Up
 	return *res, nil
 }
 
-// StartPolling starts a polling loop to receive updates. It blocks until the context is cancelled.
+// StartPolling starts a polling loop to receive updates. It blocks until the context is canceled.
 func (c *Client) StartPolling(ctx context.Context, handler func(ctx context.Context, update Update)) error {
 	var offset int64 = 0
 	for {
