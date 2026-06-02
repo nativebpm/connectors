@@ -5,62 +5,12 @@ import (
 	_ "embed"
 	"fmt"
 
+	"github.com/nativebpm/connectors/durable-wasm/queries/postgres"
 	_ "github.com/lib/pq"
 )
 
 //go:embed migrations/postgres/20260602191000_init_postgres.sql
 var postgresSchema string
-
-//go:embed queries/postgres/save_snapshot.sql
-var queryPostgresSaveSnapshot string
-
-//go:embed queries/postgres/load_snapshot.sql
-var queryPostgresLoadSnapshot string
-
-//go:embed queries/postgres/save_deltas.sql
-var queryPostgresSaveDeltas string
-
-//go:embed queries/postgres/load_deltas.sql
-var queryPostgresLoadDeltas string
-
-//go:embed queries/postgres/truncate_deltas.sql
-var queryPostgresTruncateDeltas string
-
-//go:embed queries/postgres/save_oplog.sql
-var queryPostgresSaveOplog string
-
-//go:embed queries/postgres/load_oplog.sql
-var queryPostgresLoadOplog string
-
-//go:embed queries/postgres/truncate_oplog.sql
-var queryPostgresTruncateOplog string
-
-//go:embed queries/postgres/load_metadata.sql
-var queryPostgresLoadMetadata string
-
-//go:embed queries/postgres/save_metadata_insert.sql
-var queryPostgresSaveMetadataInsert string
-
-//go:embed queries/postgres/save_metadata_update.sql
-var queryPostgresSaveMetadataUpdate string
-
-//go:embed queries/postgres/save_wasm.sql
-var queryPostgresSaveWasm string
-
-//go:embed queries/postgres/load_wasm.sql
-var queryPostgresLoadWasm string
-
-//go:embed queries/postgres/delete_snapshots.sql
-var queryPostgresDeleteSnapshots string
-
-//go:embed queries/postgres/delete_deltas.sql
-var queryPostgresDeleteDeltas string
-
-//go:embed queries/postgres/delete_oplog.sql
-var queryPostgresDeleteOplog string
-
-//go:embed queries/postgres/delete_meta.sql
-var queryPostgresDeleteMeta string
 
 // PostgresSnapshotStore implements SnapshotStore using a PostgreSQL database.
 type PostgresSnapshotStore struct {
@@ -91,7 +41,7 @@ func NewPostgresSnapshotStore(connStr string) (*PostgresSnapshotStore, error) {
 
 // Save inserts or updates a linear memory snapshot inside the database.
 func (s *PostgresSnapshotStore) Save(id string, snapshot []byte) error {
-	_, err := s.db.Exec(queryPostgresSaveSnapshot, id, snapshot)
+	_, err := s.db.Exec(postgres.SaveSnapshot, id, snapshot)
 	if err != nil {
 		return fmt.Errorf("failed to save snapshot for '%s': %w", id, err)
 	}
@@ -101,7 +51,7 @@ func (s *PostgresSnapshotStore) Save(id string, snapshot []byte) error {
 // Load retrieves a linear memory snapshot from the database.
 func (s *PostgresSnapshotStore) Load(id string) ([]byte, error) {
 	var snapshot []byte
-	err := s.db.QueryRow(queryPostgresLoadSnapshot, id).Scan(&snapshot)
+	err := s.db.QueryRow(postgres.LoadSnapshot, id).Scan(&snapshot)
 	if err == sql.ErrNoRows {
 		return nil, sql.ErrNoRows
 	} else if err != nil {
@@ -118,7 +68,7 @@ func (s *PostgresSnapshotStore) SaveDeltas(id string, deltas map[int][]byte) err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	stmt, err := tx.Prepare(queryPostgresSaveDeltas)
+	stmt, err := tx.Prepare(postgres.SaveDeltas)
 	if err != nil {
 		return fmt.Errorf("failed to prepare SaveDeltas query: %w", err)
 	}
@@ -136,7 +86,7 @@ func (s *PostgresSnapshotStore) SaveDeltas(id string, deltas map[int][]byte) err
 
 // LoadDeltas retrieves delta pages from the database
 func (s *PostgresSnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
-	rows, err := s.db.Query(queryPostgresLoadDeltas, id)
+	rows, err := s.db.Query(postgres.LoadDeltas, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query memory deltas: %w", err)
 	}
@@ -156,7 +106,7 @@ func (s *PostgresSnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
 
 // SaveOplog records API call in database
 func (s *PostgresSnapshotStore) SaveOplog(id string, callIndex int, apiName string, request []byte, response []byte) error {
-	_, err := s.db.Exec(queryPostgresSaveOplog, id, callIndex, apiName, request, response)
+	_, err := s.db.Exec(postgres.SaveOplog, id, callIndex, apiName, request, response)
 	if err != nil {
 		return fmt.Errorf("failed to save oplog: %w", err)
 	}
@@ -165,7 +115,7 @@ func (s *PostgresSnapshotStore) SaveOplog(id string, callIndex int, apiName stri
 
 // LoadOplog retrieves the execution log
 func (s *PostgresSnapshotStore) LoadOplog(id string) ([]OplogEntry, error) {
-	rows, err := s.db.Query(queryPostgresLoadOplog, id)
+	rows, err := s.db.Query(postgres.LoadOplog, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query oplog: %w", err)
 	}
@@ -190,17 +140,17 @@ func (s *PostgresSnapshotStore) Delete(id string) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	_, _ = tx.Exec(queryPostgresDeleteSnapshots, id)
-	_, _ = tx.Exec(queryPostgresDeleteDeltas, id)
-	_, _ = tx.Exec(queryPostgresDeleteOplog, id)
-	_, _ = tx.Exec(queryPostgresDeleteMeta, id)
+	_, _ = tx.Exec(postgres.DeleteSnapshots, id)
+	_, _ = tx.Exec(postgres.DeleteDeltas, id)
+	_, _ = tx.Exec(postgres.DeleteOplog, id)
+	_, _ = tx.Exec(postgres.DeleteMeta, id)
 
 	return tx.Commit()
 }
 
 // TruncateDeltas deletes all memory deltas for the instance.
 func (s *PostgresSnapshotStore) TruncateDeltas(id string) error {
-	_, err := s.db.Exec(queryPostgresTruncateDeltas, id)
+	_, err := s.db.Exec(postgres.TruncateDeltas, id)
 	if err != nil {
 		return fmt.Errorf("failed to truncate deltas in postgres: %w", err)
 	}
@@ -209,7 +159,7 @@ func (s *PostgresSnapshotStore) TruncateDeltas(id string) error {
 
 // TruncateOplog deletes all oplog entries for the instance at or below the given call index.
 func (s *PostgresSnapshotStore) TruncateOplog(id string, beforeCallIndex int) error {
-	_, err := s.db.Exec(queryPostgresTruncateOplog, id, beforeCallIndex)
+	_, err := s.db.Exec(postgres.TruncateOplog, id, beforeCallIndex)
 	if err != nil {
 		return fmt.Errorf("failed to truncate oplog in postgres: %w", err)
 	}
@@ -219,7 +169,7 @@ func (s *PostgresSnapshotStore) TruncateOplog(id string, beforeCallIndex int) er
 // LoadMetadata retrieves the instance metadata from Postgres.
 func (s *PostgresSnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
 	var meta InstanceMeta
-	err := s.db.QueryRow(queryPostgresLoadMetadata, id).Scan(&meta.InstanceID, &meta.WasmHash, &meta.Version)
+	err := s.db.QueryRow(postgres.LoadMetadata, id).Scan(&meta.InstanceID, &meta.WasmHash, &meta.Version)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
@@ -231,7 +181,7 @@ func (s *PostgresSnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
 // SaveMetadata saves metadata or atomically updates version via CAS in Postgres.
 func (s *PostgresSnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 	if meta.Version == 0 {
-		_, err := s.db.Exec(queryPostgresSaveMetadataInsert, meta.InstanceID, meta.WasmHash)
+		_, err := s.db.Exec(postgres.SaveMetadataInsert, meta.InstanceID, meta.WasmHash)
 		if err != nil {
 			return false, nil
 		}
@@ -239,7 +189,7 @@ func (s *PostgresSnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 		return true, nil
 	}
 
-	res, err := s.db.Exec(queryPostgresSaveMetadataUpdate, meta.Version+1, meta.WasmHash, meta.InstanceID, meta.Version)
+	res, err := s.db.Exec(postgres.SaveMetadataUpdate, meta.Version+1, meta.WasmHash, meta.InstanceID, meta.Version)
 	if err != nil {
 		return false, fmt.Errorf("failed to update metadata in postgres: %w", err)
 	}
@@ -256,7 +206,7 @@ func (s *PostgresSnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 
 // SaveWasm saves a WASM module binary by its SHA256 hash in Postgres.
 func (s *PostgresSnapshotStore) SaveWasm(hash string, wasmBytes []byte) error {
-	_, err := s.db.Exec(queryPostgresSaveWasm, hash, wasmBytes)
+	_, err := s.db.Exec(postgres.SaveWasm, hash, wasmBytes)
 	if err != nil {
 		return fmt.Errorf("failed to save WASM module to postgres %s: %w", hash, err)
 	}
@@ -266,7 +216,7 @@ func (s *PostgresSnapshotStore) SaveWasm(hash string, wasmBytes []byte) error {
 // LoadWasm loads a WASM module binary by its SHA256 hash from Postgres.
 func (s *PostgresSnapshotStore) LoadWasm(hash string) ([]byte, error) {
 	var wasmBytes []byte
-	err := s.db.QueryRow(queryPostgresLoadWasm, hash).Scan(&wasmBytes)
+	err := s.db.QueryRow(postgres.LoadWasm, hash).Scan(&wasmBytes)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("wasm module not found in postgres: %s", hash)
 	} else if err != nil {
