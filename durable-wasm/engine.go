@@ -70,6 +70,30 @@ type FileSnapshotStore struct {
 	Dir string
 }
 
+var _ SnapshotStore = (*FileSnapshotStore)(nil)
+
+// Save writes a full memory snapshot to a file.
+func (f *FileSnapshotStore) Save(id string, snapshot []byte) error {
+	path := fmt.Sprintf("%s.bin", id)
+	if f.Dir != "" {
+		path = fmt.Sprintf("%s/%s.bin", f.Dir, id)
+	}
+	return os.WriteFile(path, snapshot, 0644)
+}
+
+// Load reads a full memory snapshot from a file.
+func (f *FileSnapshotStore) Load(id string) ([]byte, error) {
+	path := fmt.Sprintf("%s.bin", id)
+	if f.Dir != "" {
+		path = fmt.Sprintf("%s/%s.bin", f.Dir, id)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 func (f *FileSnapshotStore) SaveDeltas(id string, deltas map[int][]byte) error {
 	path := fmt.Sprintf("%s_deltas.json", id)
 	if f.Dir != "" {

@@ -17,6 +17,8 @@ type SqliteSnapshotStore struct {
 	db *sql.DB
 }
 
+var _ SnapshotStore = (*SqliteSnapshotStore)(nil)
+
 // NewSqliteSnapshotStore initializes a new SQLite snapshot store and creates all required tables.
 func NewSqliteSnapshotStore(dbPath string) (*SqliteSnapshotStore, error) {
 	db, err := sql.Open("sqlite", dbPath)
