@@ -6,23 +6,23 @@ build: build-worker build-host
 
 build-worker:
 	@echo "Building WASM worker using TinyGo..."
-	tinygo build -o worker/worker.wasm -target=wasi worker/main.go
+	tinygo build -o examples/simple/worker/worker.wasm -target=wasi examples/simple/worker/main.go
 
 build-host:
 	@echo "Building Go host orchestrator..."
-	cd host && go build -o host main.go
+	cd examples/simple/host && go build -o host main.go
 
-run: build-worker
-	@echo "Running Go host (which will execute WASM)..."
-	cd host && go run main.go
+run:
+	make -C examples/simple run
 
 test: build-worker
 	@echo "Running tests..."
-	cd host && go test -v ./...
+	go test -v ./...
 
 clean:
 	@echo "Cleaning artifacts..."
-	rm -f worker/worker.wasm host/host
+	rm -f examples/simple/worker/worker.wasm examples/simple/host/host
+	make -C examples/simple clean
 	make -C examples/process-csv clean
 	make -C examples/temporal clean
 	make -C examples/camunda clean
@@ -42,4 +42,5 @@ run-gotenberg-telegram-example:
 
 docker-build:
 	@echo "Building scratch-based Docker image..."
-	docker build -t wasm-durable-host -f host/Dockerfile .
+	docker build -t wasm-durable-host -f examples/simple/host/Dockerfile .
+

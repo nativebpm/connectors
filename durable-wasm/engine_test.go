@@ -59,7 +59,7 @@ func TestDurableExecutionLifecycle(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// 3. Initialize engine
-	wasmPath := filepath.Join("..", "..", "worker", "worker.wasm")
+	wasmPath := filepath.Join("examples", "simple", "worker", "worker.wasm")
 	store := &FileSnapshotStore{Dir: "."}
 	
 	engine, err := NewEngine(wasmPath, store)

@@ -9,6 +9,8 @@ use (
 	./durable-wasm/examples/gotenberg-telegram/worker
 	./durable-wasm/examples/process-csv/host
 	./durable-wasm/examples/process-csv/worker
+	./durable-wasm/examples/simple/host
+	./durable-wasm/examples/simple/worker
 	./durable-wasm/examples/temporal/host
 	./durable-wasm/examples/temporal/worker
 	./gotenberg
