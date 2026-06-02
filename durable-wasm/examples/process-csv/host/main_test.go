@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -72,7 +73,7 @@ func TestCSVProcessPipeline_Success_With_Retry(t *testing.T) {
 	require.NoError(t, err)
 
 	// 5. RUN 1: Execute with simulated crash
-	crashed, err := engine.Execute(instanceID, "run", srvAddr, true)
+	crashed, err := engine.Execute(context.Background(), instanceID, "run", srvAddr, true)
 	require.Error(t, err)
 	assert.True(t, crashed, "First run should crash")
 
@@ -82,7 +83,7 @@ func TestCSVProcessPipeline_Success_With_Retry(t *testing.T) {
 	assert.NotEmpty(t, snapshot)
 
 	// 6. RUN 2: Restore from snapshot
-	crashed, err = engine.Execute(instanceID, "run", srvAddr, false)
+	crashed, err = engine.Execute(context.Background(), instanceID, "run", srvAddr, false)
 	require.NoError(t, err)
 	assert.False(t, crashed)
 

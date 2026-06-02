@@ -53,7 +53,7 @@ func main() {
 
 	// 4. RUN 1: Execute with simulated crash on the first checkpoint
 	slog.Info("[HOST] RUN 1: Executing WASM from scratch with simulated crash")
-	crashed, err := engine.Execute(instanceID, "run", serverAddr, true)
+	crashed, err := engine.Execute(context.Background(), instanceID, "run", serverAddr, true)
 	if err != nil {
 		if crashed {
 			slog.Info("[HOST] Execution successfully suspended/crashed", "error", err)
@@ -73,7 +73,7 @@ func main() {
 
 	// 5. RUN 2: Restore from checkpoint and resume execution
 	slog.Info("[HOST] RUN 2: Restoring from snapshot and completing execution")
-	crashed, err = engine.Execute(instanceID, "run", serverAddr, false)
+	crashed, err = engine.Execute(context.Background(), instanceID, "run", serverAddr, false)
 	if err != nil {
 		slog.Error("[HOST] Resumed execution failed", "error", err)
 		os.Exit(1)
