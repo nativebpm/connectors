@@ -5,8 +5,12 @@ all: build
 build: build-worker build-host
 
 build-worker:
-	@echo "Building WASM worker using TinyGo..."
+	@echo "Building WASM workers for all examples..."
 	tinygo build -o examples/durable-s3/worker/worker.wasm -target=wasi examples/durable-s3/worker/main.go
+	tinygo build -o examples/process-csv/worker/worker.wasm -target=wasi examples/process-csv/worker/main.go
+	tinygo build -o examples/temporal/worker/worker.wasm -target=wasi examples/temporal/worker/main.go
+	tinygo build -o examples/camunda/worker/worker.wasm -target=wasi examples/camunda/worker/main.go
+	tinygo build -o examples/gotenberg-telegram/worker/worker.wasm -target=wasi examples/gotenberg-telegram/worker/main.go
 
 build-host:
 	@echo "Building Go host orchestrator..."
@@ -22,6 +26,10 @@ test: build-worker
 clean:
 	@echo "Cleaning artifacts..."
 	rm -f examples/durable-s3/worker/worker.wasm examples/durable-s3/host/host
+	rm -f examples/process-csv/worker/worker.wasm
+	rm -f examples/temporal/worker/worker.wasm
+	rm -f examples/camunda/worker/worker.wasm
+	rm -f examples/gotenberg-telegram/worker/worker.wasm
 	make -C examples/durable-s3 clean
 	make -C examples/process-csv clean
 	make -C examples/temporal clean
