@@ -53,7 +53,7 @@ func TestDurableExecutionLifecycle(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// 3. Initialize engine
-	wasmPath := filepath.Join("examples", "simple", "worker", "worker.wasm")
+	wasmPath := filepath.Join("examples", "durable-s3", "worker", "worker.wasm")
 	
 	// Use an in-memory SQLite store for maximum speed and zero disk cleanup
 	store, err := NewSqliteSnapshotStore(":memory:")

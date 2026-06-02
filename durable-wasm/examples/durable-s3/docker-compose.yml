@@ -1,6 +1,6 @@
 version: "3.7"
 
-name: durable-wasm-simple-seaweedfs
+name: durable-wasm-s3-seaweedfs
 
 services:
   seaweedfs:
@@ -16,7 +16,7 @@ services:
   host-app:
     build:
       context: ../../../
-      dockerfile: durable-wasm/examples/simple/host/Dockerfile
+      dockerfile: durable-wasm/examples/durable-s3/host/Dockerfile
     depends_on:
       - seaweedfs
     environment:

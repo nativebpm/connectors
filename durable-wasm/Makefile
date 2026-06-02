@@ -6,14 +6,14 @@ build: build-worker build-host
 
 build-worker:
 	@echo "Building WASM worker using TinyGo..."
-	tinygo build -o examples/simple/worker/worker.wasm -target=wasi examples/simple/worker/main.go
+	tinygo build -o examples/durable-s3/worker/worker.wasm -target=wasi examples/durable-s3/worker/main.go
 
 build-host:
 	@echo "Building Go host orchestrator..."
-	cd examples/simple/host && go build -o host main.go
+	cd examples/durable-s3/host && go build -o host main.go
 
 run:
-	make -C examples/simple run
+	make -C examples/durable-s3 run
 
 test: build-worker
 	@echo "Running tests..."
@@ -21,8 +21,8 @@ test: build-worker
 
 clean:
 	@echo "Cleaning artifacts..."
-	rm -f examples/simple/worker/worker.wasm examples/simple/host/host
-	make -C examples/simple clean
+	rm -f examples/durable-s3/worker/worker.wasm examples/durable-s3/host/host
+	make -C examples/durable-s3 clean
 	make -C examples/process-csv clean
 	make -C examples/temporal clean
 	make -C examples/camunda clean
@@ -40,11 +40,11 @@ run-camunda-example:
 run-gotenberg-telegram-example:
 	make -C examples/gotenberg-telegram run
 
-run-simple-docker:
-	make -C examples/simple run-docker
+run-durable-s3-docker:
+	make -C examples/durable-s3 run-docker
 
 docker-build:
 
 	@echo "Building scratch-based Docker image..."
-	docker build -t wasm-durable-host -f examples/simple/host/Dockerfile .
+	docker build -t wasm-durable-host -f examples/durable-s3/host/Dockerfile .
 

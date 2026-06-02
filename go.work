@@ -5,12 +5,12 @@ use (
 	./durable-wasm
 	./durable-wasm/examples/camunda/host
 	./durable-wasm/examples/camunda/worker
+	./durable-wasm/examples/durable-s3/host
+	./durable-wasm/examples/durable-s3/worker
 	./durable-wasm/examples/gotenberg-telegram/host
 	./durable-wasm/examples/gotenberg-telegram/worker
 	./durable-wasm/examples/process-csv/host
 	./durable-wasm/examples/process-csv/worker
-	./durable-wasm/examples/simple/host
-	./durable-wasm/examples/simple/worker
 	./durable-wasm/examples/temporal/host
 	./durable-wasm/examples/temporal/worker
 	./gotenberg

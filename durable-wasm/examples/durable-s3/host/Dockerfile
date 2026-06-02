@@ -16,7 +16,7 @@ COPY telegram telegram
 COPY temporal temporal
 
 # Build the host application
-WORKDIR /app/durable-wasm/examples/simple/host
+WORKDIR /app/durable-wasm/examples/durable-s3/host
 RUN CGO_ENABLED=1 GOOS=linux go build -ldflags '-extldflags "-static"' -o host main.go
 
 # Stage 2: Setup execution environment with Litestream
@@ -31,12 +31,12 @@ WORKDIR /app
 COPY --from=litestream-bin /usr/local/bin/litestream /usr/local/bin/litestream
 
 # Copy application binary and WASM worker
-COPY --from=builder /app/durable-wasm/examples/simple/host/host /app/host
-COPY durable-wasm/examples/simple/worker/worker.wasm /app/worker/worker.wasm
+COPY --from=builder /app/durable-wasm/examples/durable-s3/host/host /app/host
+COPY durable-wasm/examples/durable-s3/worker/worker.wasm /app/worker/worker.wasm
 
 # Copy litestream configuration and entrypoint
-COPY durable-wasm/examples/simple/litestream.yml /etc/litestream.yml
-COPY durable-wasm/examples/simple/entrypoint.sh /app/entrypoint.sh
+COPY durable-wasm/examples/durable-s3/litestream.yml /etc/litestream.yml
+COPY durable-wasm/examples/durable-s3/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 ENTRYPOINT ["/app/entrypoint.sh"]
