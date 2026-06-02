@@ -1,34 +1,34 @@
 # Sequin Outbox CDC to Temporal Example
 
-Этот пример демонстрирует реализацию паттерна **Transactional Outbox** с использованием **Sequin (CDC)** и **Temporal** на языке Go.
+This example demonstrates the implementation of the **Transactional Outbox** pattern using **Sequin (CDC)** and **Temporal** in Go.
 
-## Архитектура
+## Architecture
 
-При удалении пользователя из базы данных (`DELETE` в таблице `users`), Sequin захватывает изменения из Postgres WAL и надежно отправляет POST вебхук на HTTP-сервер. HTTP-сервер принимает вебхук и запускает воркфлоу `DeleteUserWorkflow` в Temporal, который гарантирует полное удаление пользователя во внешних системах и отправку письма.
+When a user is deleted from the database (`DELETE` in the `users` table), Sequin captures the change from the Postgres WAL and reliably sends a POST webhook to the HTTP server. The HTTP server receives the webhook and triggers the `DeleteUserWorkflow` in Temporal, which guarantees the complete removal of the user from external systems and sends a confirmation email.
 
 ```
-[Удаление пользователя из БД] -> [Postgres WAL] -> [Sequin CDC] -> [HTTP-вебхук /delete-user] -> [Temporal Workflow] -> [Worker]
+[Delete User in DB] -> [Postgres WAL] -> [Sequin CDC] -> [HTTP Webhook /delete-user] -> [Temporal Workflow] -> [Worker]
 ```
 
-## Структура проекта
+## Project Structure
 
-- `workflow.go` — Определение Temporal Workflow `DeleteUserWorkflow`.
-- `activities.go` — Шаги воркфлоу (очистка внешних систем, отправка писем).
-- `handler.go` — HTTP-обработчик для вебхуков от Sequin.
-- `server/main.go` — Запуск HTTP-сервера.
-- `worker/main.go` — Запуск Temporal Worker.
-- `integration_test.go` — Тесты воркфлоу и HTTP-обработчика вебхуков.
+- `workflow.go` — Definition of the Temporal Workflow `DeleteUserWorkflow`.
+- `activities.go` — Steps of the workflow (cleanup external systems, send emails).
+- `handler.go` — HTTP handler for webhooks from Sequin.
+- `server/main.go` — Execution of the HTTP server.
+- `worker/main.go` — Execution of the Temporal Worker.
+- `integration_test.go` — Tests for the workflow and the HTTP webhook handler.
 
-## Локальный запуск
+## Local Setup
 
-### 1. Запуск Temporal Server
-Запустите локальный сервер Temporal:
+### 1. Start Temporal Server
+Run the local Temporal server:
 ```bash
 temporal server start-dev
 ```
 
-### 2. Настройка Postgres и Sequin
-1. Создайте таблицу `users` и включите репликацию:
+### 2. Configure Postgres and Sequin
+1. Create the `users` table and enable full replica identity:
    ```sql
    create table users (
      id uuid primary key default gen_random_uuid (),
@@ -41,32 +41,32 @@ temporal server start-dev
 
    alter table users replica identity full;
    ```
-2. Подключите вашу базу данных к Sequin.
-3. Создайте в Sequin новый **Webhook Sink**:
+2. Connect your database to Sequin.
+3. Create a new **Webhook Sink** in Sequin:
    - **Source Table**: `users`
-   - **Filters**: Только `Delete` (Insert и Update выключить)
+   - **Filters**: `Delete` only (disable `Insert` and `Update`)
    - **Endpoint URL**: `http://localhost:3333/delete-user`
 
-### 3. Запуск Worker и HTTP-сервера
-В каталоге `temporal` выполните:
+### 3. Run Worker and HTTP Server
+From the `temporal` directory:
 ```bash
-# Запуск воркера Temporal
+# Start the Temporal Worker
 go run examples/sequin-outbox/worker/main.go
 
-# В другом терминале запустите HTTP-сервер вебхуков
+# Start the webhook HTTP server in another terminal
 go run examples/sequin-outbox/server/main.go
 ```
 
-### 4. Тестирование вручную
-Удалите пользователя из Postgres:
+### 4. Manual Verification
+Delete a user from Postgres:
 ```sql
 delete from users where email = 'user@example.com';
 ```
-Вы увидите, что в консоли HTTP-сервера зафиксирован входящий вебхук от Sequin, запущен воркфлоу в Temporal, а воркер успешно выполнил активности по удалению данных и отправке подтверждения на почту.
+You will see that the HTTP server logs a webhook payload received from Sequin, starts the `DeleteUserWorkflow` in Temporal, and the worker executes activities to remove data and send a confirmation email.
 
-## Запуск автоматических тестов
+## Running Tests
 
-Для запуска тестов примера выполните:
+To run the automated tests for this example, execute:
 ```bash
 go test -v ./examples/sequin-outbox/...
 ```
