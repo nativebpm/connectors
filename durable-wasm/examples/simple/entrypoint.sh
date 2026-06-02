@@ -32,7 +32,27 @@ if [ ! -f "$DB_PATH" ]; then
     litestream restore -config "$CONFIG_PATH" -if-replica-exists "$DB_PATH"
 fi
 
-# 2. Run the host application wrapped in litestream replicate.
+# 2. Start a background helper to immediately create a database snapshot in S3 if none exists.
+# This ensures we don't have to wait 24 hours for the first base snapshot.
+(
+    echo "[ENTRYPOINT-HELPER] Waiting for database file to be initialized..."
+    until [ -f "$DB_PATH" ]; do
+        sleep 0.5
+    done
+    # Give the host application a brief moment to initialize tables and write first checkpoints
+    sleep 2
+    
+    echo "[ENTRYPOINT-HELPER] Checking for existing snapshots in S3..."
+    if [ -z "$(litestream snapshots -config "$CONFIG_PATH" "$DB_PATH" 2>/dev/null)" ]; then
+        echo "[ENTRYPOINT-HELPER] No database snapshot found in S3. Creating initial snapshot immediately..."
+        litestream snapshot -config "$CONFIG_PATH" "$DB_PATH"
+        echo "[ENTRYPOINT-HELPER] Initial database snapshot uploaded successfully."
+    else
+        echo "[ENTRYPOINT-HELPER] Existing database snapshots found in S3. Skipping initial snapshot creation."
+    fi
+) &
+
+# 3. Run the host application wrapped in litestream replicate.
 # This replicates WAL frames to S3 in real-time and gracefully exits when the host finishes.
 echo "[ENTRYPOINT] Starting application with Litestream replication..."
 exec litestream replicate -config "$CONFIG_PATH" -exec "/app/host"
