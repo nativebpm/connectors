@@ -6,6 +6,7 @@ worker/worker.wasm
 *.db
 *.db-wal
 *.db-shm
+host/snapshots.db*
 
 # SeaweedFS local storage
 seaweed_data/

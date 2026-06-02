@@ -11,11 +11,6 @@ services:
       - "9333:9333"
     volumes:
       - ./seaweed_data:/data
-    healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "8333"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
     restart: unless-stopped
 
   host-app:
@@ -23,8 +18,7 @@ services:
       context: ../../../
       dockerfile: durable-wasm/examples/simple/host/Dockerfile
     depends_on:
-      seaweedfs:
-        condition: service_healthy
+      - seaweedfs
     environment:
       - LITESTREAM_ACCESS_KEY_ID=admin
       - LITESTREAM_SECRET_ACCESS_KEY=admin123

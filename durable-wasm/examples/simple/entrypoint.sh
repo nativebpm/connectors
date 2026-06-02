@@ -4,7 +4,15 @@ set -e
 DB_PATH="/app/snapshots.db"
 CONFIG_PATH="/etc/litestream.yml"
 
-# 1. Attempt to restore the SQLite database from S3 (rclone) if it doesn't exist locally
+# Wait for SeaweedFS to spin up
+sleep 3
+
+# Create the bucket in SeaweedFS if it doesn't exist.
+# Creating a directory under /buckets/ in SeaweedFS Filer automatically exposes it as an S3 bucket.
+echo "[ENTRYPOINT] Creating snapshots-bucket in SeaweedFS..."
+curl -s -f -X POST http://seaweedfs:8888/buckets/snapshots-bucket/ || true
+
+# 1. Attempt to restore the SQLite database from S3 (seaweedfs) if it doesn't exist locally
 if [ ! -f "$DB_PATH" ]; then
     echo "[ENTRYPOINT] Local database not found. Attempting to restore from S3..."
     # We use -if-replica-exists so it doesn't fail on the very first run when the bucket is empty
