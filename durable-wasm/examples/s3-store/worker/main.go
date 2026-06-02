@@ -9,29 +9,34 @@ import (
 	"github.com/nativebpm/connectors/durable-wasm"
 )
 
-// Global state variables are automatically preserved by memory snapshotting.
-var (
-	processedBytes int32 = 0
-)
+// State holds the workflow state.
+// All fields are automatically preserved during checkpoints by memory snapshotting.
+type State struct {
+	ProcessedBytes int32
+}
+
+var state = &State{
+	ProcessedBytes: 0,
+}
 
 //export run
 func run() int32 {
 	return durable.NewWorkflow().
-		Step(initialize).
-		Step(processStream).
-		Step(finalizeWorkflow).
+		Step(state.initialize).
+		Step(state.processStream).
+		Step(state.finalizeWorkflow).
 		Run()
 }
 
 func main() {}
 
-func initialize() error {
+func (s *State) initialize() error {
 	println("[WASM WORKER] Step 0: Starting initialization...")
 	println("[WASM WORKER] Step 0 completed.")
 	return nil
 }
 
-func processStream() error {
+func (s *State) processStream() error {
 	println("[WASM WORKER] Step 1: Processing data stream...")
 
 	// Allocate a 4KB buffer for streaming.
@@ -64,15 +69,15 @@ func processStream() error {
 			return fmt.Errorf("mismatch in bytes written: expected %d, got %d", n, wn)
 		}
 
-		processedBytes += int32(n)
+		s.ProcessedBytes += int32(n)
 	}
 
 	// Signal EOF on output stream
 	return durable.Writer.Close()
 }
 
-func finalizeWorkflow() error {
+func (s *State) finalizeWorkflow() error {
 	println("[WASM WORKER] Step 2: Finalizing business process...")
-	fmt.Printf("[WASM WORKER] Total bytes processed and transformed: %d\n", processedBytes)
+	fmt.Printf("[WASM WORKER] Total bytes processed and transformed: %d\n", s.ProcessedBytes)
 	return nil
 }
