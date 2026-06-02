@@ -2,10 +2,14 @@ package durable
 
 import (
 	"database/sql"
+	"embed"
 	"fmt"
 
 	_ "github.com/lib/pq"
 )
+
+//go:embed schema/postgres.sql
+var postgresSchema embed.FS
 
 // PostgresSnapshotStore implements SnapshotStore using a PostgreSQL database.
 type PostgresSnapshotStore struct {
@@ -25,48 +29,17 @@ func NewPostgresSnapshotStore(connStr string) (*PostgresSnapshotStore, error) {
 		return nil, fmt.Errorf("failed to ping postgres database: %w", err)
 	}
 
-	// Create tables to hold data
-	createTablesQueries := []string{
-		`CREATE TABLE IF NOT EXISTS snapshots (
-			id TEXT PRIMARY KEY,
-			snapshot BYTEA NOT NULL,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);`,
-		`CREATE TABLE IF NOT EXISTS memory_deltas (
-			instance_id TEXT,
-			page_index INTEGER,
-			data BYTEA NOT NULL,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			PRIMARY KEY (instance_id, page_index)
-		);`,
-		`CREATE TABLE IF NOT EXISTS oplog (
-			instance_id TEXT,
-			call_index INTEGER,
-			api_name TEXT NOT NULL,
-			request_payload BYTEA,
-			response_payload BYTEA,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			PRIMARY KEY (instance_id, call_index)
-		);`,
-		`CREATE TABLE IF NOT EXISTS instance_meta (
-			instance_id TEXT PRIMARY KEY,
-			wasm_hash TEXT NOT NULL,
-			version INTEGER NOT NULL,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);`,
-		`CREATE TABLE IF NOT EXISTS wasm_modules (
-			hash TEXT PRIMARY KEY,
-			wasm_bytes BYTEA NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);`,
+	// Load and execute embedded schema
+	schemaSQL, err := postgresSchema.ReadFile("schema/postgres.sql")
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to read embedded postgres schema: %w", err)
 	}
 
-	for _, query := range createTablesQueries {
-		_, err := db.Exec(query)
-		if err != nil {
-			db.Close()
-			return nil, fmt.Errorf("failed to create postgres schema: %w", err)
-		}
+	_, err = db.Exec(string(schemaSQL))
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to execute postgres schema: %w", err)
 	}
 
 	return &PostgresSnapshotStore{db: db}, nil

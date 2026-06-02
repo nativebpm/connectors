@@ -2,10 +2,14 @@ package durable
 
 import (
 	"database/sql"
+	"embed"
 	"fmt"
 
 	_ "modernc.org/sqlite"
 )
+
+//go:embed schema/sqlite.sql
+var sqliteSchema embed.FS
 
 // SqliteSnapshotStore implements SnapshotStore using a local SQLite database.
 type SqliteSnapshotStore struct {
@@ -33,76 +37,17 @@ func NewSqliteSnapshotStore(dbPath string) (*SqliteSnapshotStore, error) {
 		return nil, fmt.Errorf("failed to configure sqlite pragmas: %w", err)
 	}
 
-	// Create table to hold full memory snapshots
-	createTableSQL := `
-	CREATE TABLE IF NOT EXISTS snapshots (
-		id TEXT PRIMARY KEY,
-		snapshot BLOB NOT NULL,
-		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	);`
-	_, err = db.Exec(createTableSQL)
+	// Load and execute embedded schema
+	schemaSQL, err := sqliteSchema.ReadFile("schema/sqlite.sql")
 	if err != nil {
 		db.Close()
-		return nil, fmt.Errorf("failed to create snapshots table: %w", err)
+		return nil, fmt.Errorf("failed to read embedded sqlite schema: %w", err)
 	}
 
-	// Create table to hold memory deltas (Dirty-Pages)
-	createDeltasTableSQL := `
-	CREATE TABLE IF NOT EXISTS memory_deltas (
-		instance_id TEXT,
-		page_index INTEGER,
-		data BLOB NOT NULL,
-		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		PRIMARY KEY (instance_id, page_index)
-	);`
-	_, err = db.Exec(createDeltasTableSQL)
+	_, err = db.Exec(string(schemaSQL))
 	if err != nil {
 		db.Close()
-		return nil, fmt.Errorf("failed to create memory_deltas table: %w", err)
-	}
-
-	// Create table to hold operation logs (Oplog)
-	createOplogTableSQL := `
-	CREATE TABLE IF NOT EXISTS oplog (
-		instance_id TEXT,
-		call_index INTEGER,
-		api_name TEXT NOT NULL,
-		request_payload BLOB,
-		response_payload BLOB,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		PRIMARY KEY (instance_id, call_index)
-	);`
-	_, err = db.Exec(createOplogTableSQL)
-	if err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to create oplog table: %w", err)
-	}
-
-	// Create table to hold instance metadata (OCC & WASM hash verification)
-	createMetaTableSQL := `
-	CREATE TABLE IF NOT EXISTS instance_meta (
-		instance_id TEXT PRIMARY KEY,
-		wasm_hash TEXT NOT NULL,
-		version INTEGER NOT NULL,
-		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	);`
-	_, err = db.Exec(createMetaTableSQL)
-	if err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to create instance_meta table: %w", err)
-	}
-
-	// Create table to hold WASM modules (Multi-version Execution)
-	createWasmTableSQL := `
-	CREATE TABLE IF NOT EXISTS wasm_modules (
-		hash TEXT PRIMARY KEY,
-		wasm_bytes BLOB NOT NULL,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	);`
-	_, err = db.Exec(createWasmTableSQL)
-	if err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to create wasm_modules table: %w", err)
+		return nil, fmt.Errorf("failed to execute sqlite schema: %w", err)
 	}
 
 	return &SqliteSnapshotStore{db: db}, nil
