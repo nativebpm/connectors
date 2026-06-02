@@ -35,7 +35,10 @@ func main() {
 	time.Sleep(100 * time.Millisecond)
 
 	// 3. Initialize the Reusable Durable WASM Engine with SQLite store
-	wasmPath := filepath.Join("..", "worker", "worker.wasm")
+	wasmPath := os.Getenv("WASM_PATH")
+	if wasmPath == "" {
+		wasmPath = filepath.Join("..", "worker", "worker.wasm")
+	}
 	store, err := durable.NewSqliteSnapshotStore(dbFile)
 	if err != nil {
 		fmt.Printf("[HOST ERROR] Failed to initialize SQLite store: %v\n", err)

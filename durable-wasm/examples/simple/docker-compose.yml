@@ -30,6 +30,7 @@ services:
       - AWS_ACCESS_KEY_ID=admin
       - AWS_SECRET_ACCESS_KEY=admin123
       - LITESTREAM_ENDPOINT=http://rclone:8334
+      - WASM_PATH=/app/worker/worker.wasm
     volumes:
       - shared-data:/app
     restart: "no"
