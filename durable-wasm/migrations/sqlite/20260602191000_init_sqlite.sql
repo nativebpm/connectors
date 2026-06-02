@@ -1,13 +1,14 @@
+-- atlas:txmode none
 CREATE TABLE IF NOT EXISTS snapshots (
     id TEXT PRIMARY KEY,
-    snapshot BYTEA NOT NULL,
+    snapshot BLOB NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS memory_deltas (
     instance_id TEXT,
     page_index INTEGER,
-    data BYTEA NOT NULL,
+    data BLOB NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (instance_id, page_index)
 );
@@ -16,8 +17,8 @@ CREATE TABLE IF NOT EXISTS oplog (
     instance_id TEXT,
     call_index INTEGER,
     api_name TEXT NOT NULL,
-    request_payload BYTEA,
-    response_payload BYTEA,
+    request_payload BLOB,
+    response_payload BLOB,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (instance_id, call_index)
 );
@@ -31,6 +32,6 @@ CREATE TABLE IF NOT EXISTS instance_meta (
 
 CREATE TABLE IF NOT EXISTS wasm_modules (
     hash TEXT PRIMARY KEY,
-    wasm_bytes BYTEA NOT NULL,
+    wasm_bytes BLOB NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -2,14 +2,14 @@ package durable
 
 import (
 	"database/sql"
-	"embed"
+	_ "embed"
 	"fmt"
 
 	_ "github.com/lib/pq"
 )
 
-//go:embed schema/postgres.sql
-var postgresSchema embed.FS
+//go:embed migrations/postgres/20260602191000_init_postgres.sql
+var postgresSchema string
 
 // PostgresSnapshotStore implements SnapshotStore using a PostgreSQL database.
 type PostgresSnapshotStore struct {
@@ -29,14 +29,7 @@ func NewPostgresSnapshotStore(connStr string) (*PostgresSnapshotStore, error) {
 		return nil, fmt.Errorf("failed to ping postgres database: %w", err)
 	}
 
-	// Load and execute embedded schema
-	schemaSQL, err := postgresSchema.ReadFile("schema/postgres.sql")
-	if err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to read embedded postgres schema: %w", err)
-	}
-
-	_, err = db.Exec(string(schemaSQL))
+	_, err = db.Exec(postgresSchema)
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to execute postgres schema: %w", err)

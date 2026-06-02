@@ -2,14 +2,14 @@ package durable
 
 import (
 	"database/sql"
-	"embed"
+	_ "embed"
 	"fmt"
 
 	_ "modernc.org/sqlite"
 )
 
-//go:embed schema/sqlite.sql
-var sqliteSchema embed.FS
+//go:embed migrations/sqlite/20260602191000_init_sqlite.sql
+var sqliteSchema string
 
 // SqliteSnapshotStore implements SnapshotStore using a local SQLite database.
 type SqliteSnapshotStore struct {
@@ -37,14 +37,7 @@ func NewSqliteSnapshotStore(dbPath string) (*SqliteSnapshotStore, error) {
 		return nil, fmt.Errorf("failed to configure sqlite pragmas: %w", err)
 	}
 
-	// Load and execute embedded schema
-	schemaSQL, err := sqliteSchema.ReadFile("schema/sqlite.sql")
-	if err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to read embedded sqlite schema: %w", err)
-	}
-
-	_, err = db.Exec(string(schemaSQL))
+	_, err = db.Exec(sqliteSchema)
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to execute sqlite schema: %w", err)
