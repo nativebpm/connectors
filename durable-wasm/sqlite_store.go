@@ -11,14 +11,56 @@ import (
 //go:embed migrations/sqlite/20260602191000_init_sqlite.sql
 var sqliteSchema string
 
-//go:embed queries/sqlite.sql
-var sqliteQueriesFile string
+//go:embed queries/sqlite/save_snapshot.sql
+var querySqliteSaveSnapshot string
 
-var sqliteQueries map[string]string
+//go:embed queries/sqlite/load_snapshot.sql
+var querySqliteLoadSnapshot string
 
-func init() {
-	sqliteQueries = parseQueries(sqliteQueriesFile)
-}
+//go:embed queries/sqlite/save_deltas.sql
+var querySqliteSaveDeltas string
+
+//go:embed queries/sqlite/load_deltas.sql
+var querySqliteLoadDeltas string
+
+//go:embed queries/sqlite/truncate_deltas.sql
+var querySqliteTruncateDeltas string
+
+//go:embed queries/sqlite/save_oplog.sql
+var querySqliteSaveOplog string
+
+//go:embed queries/sqlite/load_oplog.sql
+var querySqliteLoadOplog string
+
+//go:embed queries/sqlite/truncate_oplog.sql
+var querySqliteTruncateOplog string
+
+//go:embed queries/sqlite/load_metadata.sql
+var querySqliteLoadMetadata string
+
+//go:embed queries/sqlite/save_metadata_insert.sql
+var querySqliteSaveMetadataInsert string
+
+//go:embed queries/sqlite/save_metadata_update.sql
+var querySqliteSaveMetadataUpdate string
+
+//go:embed queries/sqlite/save_wasm.sql
+var querySqliteSaveWasm string
+
+//go:embed queries/sqlite/load_wasm.sql
+var querySqliteLoadWasm string
+
+//go:embed queries/sqlite/delete_snapshots.sql
+var querySqliteDeleteSnapshots string
+
+//go:embed queries/sqlite/delete_deltas.sql
+var querySqliteDeleteDeltas string
+
+//go:embed queries/sqlite/delete_oplog.sql
+var querySqliteDeleteOplog string
+
+//go:embed queries/sqlite/delete_meta.sql
+var querySqliteDeleteMeta string
 
 // SqliteSnapshotStore implements SnapshotStore using a local SQLite database.
 type SqliteSnapshotStore struct {
@@ -57,7 +99,7 @@ func NewSqliteSnapshotStore(dbPath string) (*SqliteSnapshotStore, error) {
 
 // Save inserts or updates a linear memory snapshot inside the database.
 func (s *SqliteSnapshotStore) Save(id string, snapshot []byte) error {
-	_, err := s.db.Exec(sqliteQueries["SaveSnapshot"], id, snapshot)
+	_, err := s.db.Exec(querySqliteSaveSnapshot, id, snapshot)
 	if err != nil {
 		return fmt.Errorf("failed to save snapshot for '%s': %w", id, err)
 	}
@@ -67,7 +109,7 @@ func (s *SqliteSnapshotStore) Save(id string, snapshot []byte) error {
 // Load retrieves a linear memory snapshot from the database.
 func (s *SqliteSnapshotStore) Load(id string) ([]byte, error) {
 	var snapshot []byte
-	err := s.db.QueryRow(sqliteQueries["LoadSnapshot"], id).Scan(&snapshot)
+	err := s.db.QueryRow(querySqliteLoadSnapshot, id).Scan(&snapshot)
 	if err == sql.ErrNoRows {
 		return nil, sql.ErrNoRows
 	} else if err != nil {
@@ -84,7 +126,7 @@ func (s *SqliteSnapshotStore) SaveDeltas(id string, deltas map[int][]byte) error
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	stmt, err := tx.Prepare(sqliteQueries["SaveDeltas"])
+	stmt, err := tx.Prepare(querySqliteSaveDeltas)
 	if err != nil {
 		return fmt.Errorf("failed to prepare SaveDeltas query: %w", err)
 	}
@@ -102,7 +144,7 @@ func (s *SqliteSnapshotStore) SaveDeltas(id string, deltas map[int][]byte) error
 
 // LoadDeltas retrieves delta pages from the database
 func (s *SqliteSnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
-	rows, err := s.db.Query(sqliteQueries["LoadDeltas"], id)
+	rows, err := s.db.Query(querySqliteLoadDeltas, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query memory deltas: %w", err)
 	}
@@ -122,7 +164,7 @@ func (s *SqliteSnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
 
 // SaveOplog records API call in database
 func (s *SqliteSnapshotStore) SaveOplog(id string, callIndex int, apiName string, request []byte, response []byte) error {
-	_, err := s.db.Exec(sqliteQueries["SaveOplog"], id, callIndex, apiName, request, response)
+	_, err := s.db.Exec(querySqliteSaveOplog, id, callIndex, apiName, request, response)
 	if err != nil {
 		return fmt.Errorf("failed to save oplog: %w", err)
 	}
@@ -131,7 +173,7 @@ func (s *SqliteSnapshotStore) SaveOplog(id string, callIndex int, apiName string
 
 // LoadOplog retrieves the execution log
 func (s *SqliteSnapshotStore) LoadOplog(id string) ([]OplogEntry, error) {
-	rows, err := s.db.Query(sqliteQueries["LoadOplog"], id)
+	rows, err := s.db.Query(querySqliteLoadOplog, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query oplog: %w", err)
 	}
@@ -156,17 +198,17 @@ func (s *SqliteSnapshotStore) Delete(id string) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	_, _ = tx.Exec(sqliteQueries["DeleteSnapshots"], id)
-	_, _ = tx.Exec(sqliteQueries["DeleteDeltas"], id)
-	_, _ = tx.Exec(sqliteQueries["DeleteOplog"], id)
-	_, _ = tx.Exec(sqliteQueries["DeleteMeta"], id)
+	_, _ = tx.Exec(querySqliteDeleteSnapshots, id)
+	_, _ = tx.Exec(querySqliteDeleteDeltas, id)
+	_, _ = tx.Exec(querySqliteDeleteOplog, id)
+	_, _ = tx.Exec(querySqliteDeleteMeta, id)
 
 	return tx.Commit()
 }
 
 // TruncateDeltas deletes all memory deltas for the instance.
 func (s *SqliteSnapshotStore) TruncateDeltas(id string) error {
-	_, err := s.db.Exec(sqliteQueries["TruncateDeltas"], id)
+	_, err := s.db.Exec(querySqliteTruncateDeltas, id)
 	if err != nil {
 		return fmt.Errorf("failed to truncate deltas: %w", err)
 	}
@@ -175,7 +217,7 @@ func (s *SqliteSnapshotStore) TruncateDeltas(id string) error {
 
 // TruncateOplog deletes all oplog entries for the instance at or below the given call index.
 func (s *SqliteSnapshotStore) TruncateOplog(id string, beforeCallIndex int) error {
-	_, err := s.db.Exec(sqliteQueries["TruncateOplog"], id, beforeCallIndex)
+	_, err := s.db.Exec(querySqliteTruncateOplog, id, beforeCallIndex)
 	if err != nil {
 		return fmt.Errorf("failed to truncate oplog: %w", err)
 	}
@@ -185,7 +227,7 @@ func (s *SqliteSnapshotStore) TruncateOplog(id string, beforeCallIndex int) erro
 // LoadMetadata retrieves the instance metadata from SQLite.
 func (s *SqliteSnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
 	var meta InstanceMeta
-	err := s.db.QueryRow(sqliteQueries["LoadMetadata"], id).Scan(&meta.InstanceID, &meta.WasmHash, &meta.Version)
+	err := s.db.QueryRow(querySqliteLoadMetadata, id).Scan(&meta.InstanceID, &meta.WasmHash, &meta.Version)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
@@ -197,7 +239,7 @@ func (s *SqliteSnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
 // SaveMetadata saves metadata or atomically updates version via CAS.
 func (s *SqliteSnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 	if meta.Version == 0 {
-		_, err := s.db.Exec(sqliteQueries["SaveMetadataInsert"], meta.InstanceID, meta.WasmHash)
+		_, err := s.db.Exec(querySqliteSaveMetadataInsert, meta.InstanceID, meta.WasmHash)
 		if err != nil {
 			return false, nil
 		}
@@ -205,7 +247,7 @@ func (s *SqliteSnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 		return true, nil
 	}
 
-	res, err := s.db.Exec(sqliteQueries["SaveMetadataUpdate"], meta.Version+1, meta.WasmHash, meta.InstanceID, meta.Version)
+	res, err := s.db.Exec(querySqliteSaveMetadataUpdate, meta.Version+1, meta.WasmHash, meta.InstanceID, meta.Version)
 	if err != nil {
 		return false, fmt.Errorf("failed to update metadata: %w", err)
 	}
@@ -222,7 +264,7 @@ func (s *SqliteSnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 
 // SaveWasm saves a WASM module binary by its SHA256 hash.
 func (s *SqliteSnapshotStore) SaveWasm(hash string, wasmBytes []byte) error {
-	_, err := s.db.Exec(sqliteQueries["SaveWasm"], hash, wasmBytes)
+	_, err := s.db.Exec(querySqliteSaveWasm, hash, wasmBytes)
 	if err != nil {
 		return fmt.Errorf("failed to save WASM module %s: %w", hash, err)
 	}
@@ -232,7 +274,7 @@ func (s *SqliteSnapshotStore) SaveWasm(hash string, wasmBytes []byte) error {
 // LoadWasm loads a WASM module binary by its SHA256 hash.
 func (s *SqliteSnapshotStore) LoadWasm(hash string) ([]byte, error) {
 	var wasmBytes []byte
-	err := s.db.QueryRow(sqliteQueries["LoadWasm"], hash).Scan(&wasmBytes)
+	err := s.db.QueryRow(querySqliteLoadWasm, hash).Scan(&wasmBytes)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("wasm module not found: %s", hash)
 	} else if err != nil {

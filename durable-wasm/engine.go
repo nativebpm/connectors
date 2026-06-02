@@ -885,28 +885,3 @@ func (s *Session) handleUpload(ptr int32, length int32) int32 {
 
 	return int32(n)
 }
-
-func parseQueries(fileContent string) map[string]string {
-	queries := make(map[string]string)
-	lines := strings.Split(fileContent, "\n")
-	var currentName string
-	var currentSQL strings.Builder
-
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "-- name:") {
-			if currentName != "" {
-				queries[currentName] = strings.TrimSpace(currentSQL.String())
-				currentSQL.Reset()
-			}
-			currentName = strings.TrimSpace(strings.TrimPrefix(trimmed, "-- name:"))
-		} else if currentName != "" {
-			currentSQL.WriteString(line)
-			currentSQL.WriteString("\n")
-		}
-	}
-	if currentName != "" {
-		queries[currentName] = strings.TrimSpace(currentSQL.String())
-	}
-	return queries
-}
