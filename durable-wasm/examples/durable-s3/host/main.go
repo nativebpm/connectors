@@ -13,10 +13,11 @@ import (
 	"github.com/nativebpm/connectors/durable-wasm"
 )
 
+
 const (
-	instanceID = "worker-instance-42"
-	serverAddr = "localhost:18080"
-	dbFile     = "snapshots.db"
+	instanceID   = "worker-instance-42"
+	serverAddr   = "localhost:18080"
+	snapshotsDir = "snapshots"
 )
 
 func main() {
@@ -34,19 +35,12 @@ func main() {
 	if wasmPath == "" {
 		wasmPath = filepath.Join("..", "worker", "worker.wasm")
 	}
-	store, err := durable.NewSqliteSnapshotStore(dbFile)
-	if err != nil {
-		slog.Error("[HOST] Failed to initialize SQLite store", "error", err)
+	_ = os.RemoveAll(snapshotsDir)
+	if err := os.MkdirAll(snapshotsDir, 0755); err != nil {
+		slog.Error("[HOST] Failed to create snapshots directory", "error", err)
 		os.Exit(1)
 	}
-	if initiator, ok := interface{}(store).(interface{ InitSchema() error }); ok {
-		err = initiator.InitSchema()
-		if err != nil {
-			slog.Error("[HOST] Failed to apply SQLite schema", "error", err)
-			os.Exit(1)
-		}
-	}
-	defer store.Close()
+	store := &durable.FileSnapshotStore{Dir: snapshotsDir}
 
 	// Clear any leftover snapshot from previous runs in the database
 	_ = store.Delete(instanceID)

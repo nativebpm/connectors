@@ -13,12 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+
 func TestCSVProcessPipeline_Success_With_Retry(t *testing.T) {
-	// 1. Cleanup files
-	_ = os.Remove(dbFile)
-	defer func() {
-		_ = os.Remove(dbFile)
-	}()
+
 
 	// 2. Start mock REST API services using httptest
 	var receivedBytes []byte
@@ -62,14 +59,12 @@ func TestCSVProcessPipeline_Success_With_Retry(t *testing.T) {
 	// E.g., http://127.0.0.1:51234 -> 127.0.0.1:51234
 	srvAddr := testServer.Listener.Addr().String()
 
-	// 3. Initialize SQLite Snapshot Store in-memory
-	store, err := durable.NewSqliteSnapshotStore(":memory:")
+	// 3. Initialize File Snapshot Store
+	_ = os.RemoveAll("snapshots_test")
+	err := os.MkdirAll("snapshots_test", 0755)
 	require.NoError(t, err)
-	if initiator, ok := interface{}(store).(interface{ InitSchema() error }); ok {
-		err = initiator.InitSchema()
-		require.NoError(t, err)
-	}
-	defer store.Close()
+	store := &durable.FileSnapshotStore{Dir: "snapshots_test"}
+	defer os.RemoveAll("snapshots_test")
 
 	// 4. Initialize Durable WASM Engine
 	wasmPath := "../worker/worker.wasm"

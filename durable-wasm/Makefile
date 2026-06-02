@@ -61,19 +61,3 @@ docker-build:
 	@echo "Building scratch-based Docker image..."
 	docker build -t wasm-durable-host -f examples/durable-s3/host/Dockerfile .
 
-
-# --- Declarative Atlas Migrations ---
-.PHONY: atlas-inspect-sqlite atlas-apply-sqlite atlas-inspect-postgres atlas-apply-postgres
-
-atlas-inspect-sqlite:
-	atlas schema inspect --env sqlite --format '{{ sql . }}' | sed 's/CREATE TABLE/CREATE TABLE IF NOT EXISTS/g' > schema/sqlite.sql
-
-atlas-apply-sqlite:
-	atlas schema apply --env sqlite --auto-approve
-
-atlas-inspect-postgres:
-	atlas schema inspect --env postgres --format '{{ sql . }}' | sed 's/CREATE TABLE/CREATE TABLE IF NOT EXISTS/g' > schema/postgres.sql
-
-atlas-apply-postgres:
-	atlas schema apply --env postgres --auto-approve
-

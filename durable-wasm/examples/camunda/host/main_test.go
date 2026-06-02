@@ -17,10 +17,10 @@ import (
 func TestCamundaWasmOrchestration_RealCamundaServer(t *testing.T) {
 	// 1. Cleanup files
 	_ = os.Remove(dbFile)
-	_ = os.Remove(sqliteDBFile)
+	_ = os.RemoveAll("snapshots_test")
 	defer func() {
 		_ = os.Remove(dbFile)
-		_ = os.Remove(sqliteDBFile)
+		_ = os.RemoveAll("snapshots_test")
 	}()
 
 	// 2. Start mock REST API services
@@ -43,26 +43,11 @@ func TestCamundaWasmOrchestration_RealCamundaServer(t *testing.T) {
 
 	// 5. Initialize Durable Engine
 	wasmPath := "../worker/worker.wasm"
-	var store durable.SnapshotStore
-	if os.Getenv("TEST_STORE_TYPE") == "postgres" {
-		connStr := os.Getenv("TEST_POSTGRES_CONN")
-		if connStr == "" {
-			connStr = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
-		}
-		store, err = durable.NewPostgresSnapshotStore(connStr)
-	} else {
-		store, err = durable.NewSqliteSnapshotStore(sqliteDBFile)
-	}
+	_ = os.RemoveAll("snapshots_test")
+	err = os.MkdirAll("snapshots_test", 0755)
 	require.NoError(t, err)
-	if initiator, ok := store.(interface{ InitSchema() error }); ok {
-		err = initiator.InitSchema()
-		require.NoError(t, err)
-	}
-	defer func() {
-		if closer, ok := store.(interface{ Close() error }); ok {
-			_ = closer.Close()
-		}
-	}()
+	store := &durable.FileSnapshotStore{Dir: "snapshots_test"}
+	defer os.RemoveAll("snapshots_test")
 
 	engine, err := durable.NewEngine(wasmPath, store)
 	require.NoError(t, err)

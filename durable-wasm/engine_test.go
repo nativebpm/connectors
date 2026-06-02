@@ -22,6 +22,186 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type inMemorySnapshotStore struct {
+	mu        sync.RWMutex
+	snapshots map[string][]byte
+	deltas    map[string]map[int][]byte
+	oplogs    map[string][]OplogEntry
+	meta      map[string]*InstanceMeta
+	wasm      map[string][]byte
+}
+
+func newInMemorySnapshotStore() *inMemorySnapshotStore {
+	return &inMemorySnapshotStore{
+		snapshots: make(map[string][]byte),
+		deltas:    make(map[string]map[int][]byte),
+		oplogs:    make(map[string][]OplogEntry),
+		meta:      make(map[string]*InstanceMeta),
+		wasm:      make(map[string][]byte),
+	}
+}
+
+func (s *inMemorySnapshotStore) Save(id string, snapshot []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	copied := make([]byte, len(snapshot))
+	copy(copied, snapshot)
+	s.snapshots[id] = copied
+	return nil
+}
+
+func (s *inMemorySnapshotStore) Load(id string) ([]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	snap, ok := s.snapshots[id]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	return snap, nil
+}
+
+func (s *inMemorySnapshotStore) Delete(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.snapshots, id)
+	delete(s.deltas, id)
+	delete(s.oplogs, id)
+	delete(s.meta, id)
+	return nil
+}
+
+func (s *inMemorySnapshotStore) SaveDeltas(id string, deltas map[int][]byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	current, ok := s.deltas[id]
+	if !ok {
+		current = make(map[int][]byte)
+		s.deltas[id] = current
+	}
+	for k, v := range deltas {
+		copiedVal := make([]byte, len(v))
+		copy(copiedVal, v)
+		current[k] = copiedVal
+	}
+	return nil
+}
+
+func (s *inMemorySnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	current, ok := s.deltas[id]
+	if !ok {
+		return nil, nil
+	}
+	copied := make(map[int][]byte)
+	for k, v := range current {
+		copied[k] = v
+	}
+	return copied, nil
+}
+
+func (s *inMemorySnapshotStore) TruncateDeltas(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.deltas, id)
+	return nil
+}
+
+func (s *inMemorySnapshotStore) SaveOplog(id string, callIndex int, apiName string, request []byte, response []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	reqCopied := make([]byte, len(request))
+	copy(reqCopied, request)
+	respCopied := make([]byte, len(response))
+	copy(respCopied, response)
+
+	s.oplogs[id] = append(s.oplogs[id], OplogEntry{
+		CallIndex:       callIndex,
+		ApiName:         apiName,
+		RequestPayload:  reqCopied,
+		ResponsePayload: respCopied,
+	})
+	return nil
+}
+
+func (s *inMemorySnapshotStore) LoadOplog(id string) ([]OplogEntry, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	list, ok := s.oplogs[id]
+	if !ok {
+		return nil, nil
+	}
+	return list, nil
+}
+
+func (s *inMemorySnapshotStore) TruncateOplog(id string, beforeCallIndex int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list := s.oplogs[id]
+	var filtered []OplogEntry
+	for _, entry := range list {
+		if entry.CallIndex > beforeCallIndex {
+			filtered = append(filtered, entry)
+		}
+	}
+	s.oplogs[id] = filtered
+	return nil
+}
+
+func (s *inMemorySnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	existing, ok := s.meta[meta.InstanceID]
+	if ok {
+		if meta.Version == 0 {
+			return false, nil
+		}
+		if existing.Version != meta.Version {
+			return false, nil
+		}
+	} else if meta.Version > 0 {
+		return false, nil
+	}
+
+	meta.Version++
+	copied := *meta
+	s.meta[meta.InstanceID] = &copied
+	return true, nil
+}
+
+func (s *inMemorySnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	meta, ok := s.meta[id]
+	if !ok {
+		return nil, nil
+	}
+	copied := *meta
+	return &copied, nil
+}
+
+func (s *inMemorySnapshotStore) SaveWasm(hash string, wasmBytes []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	copied := make([]byte, len(wasmBytes))
+	copy(copied, wasmBytes)
+	s.wasm[hash] = copied
+	return nil
+}
+
+func (s *inMemorySnapshotStore) LoadWasm(hash string) ([]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	w, ok := s.wasm[hash]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	return w, nil
+}
+
+var _ SnapshotStore = (*inMemorySnapshotStore)(nil)
+
 func TestDurableExecutionLifecycle(t *testing.T) {
 	instanceID := "test-worker-instance"
 	serverAddr := "localhost:18081"
@@ -64,11 +244,7 @@ func TestDurableExecutionLifecycle(t *testing.T) {
 	// 3. Initialize engine
 	wasmPath := filepath.Join("examples", "durable-s3", "worker", "worker.wasm")
 
-	// Use an in-memory SQLite store for maximum speed and zero disk cleanup
-	store, err := NewSqliteSnapshotStore(":memory:")
-	require.NoError(t, err)
-	initSqliteStore(store)
-	defer store.Close()
+	store := newInMemorySnapshotStore()
 
 	engine, err := NewEngine(wasmPath, store)
 	require.NoError(t, err, "Failed to compile WASM module. Make sure worker.wasm is built.")
@@ -78,7 +254,7 @@ func TestDurableExecutionLifecycle(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, crashed, "Expected run 1 to crash at checkpoint")
 
-	// Verify snapshot exists in SQLite database
+	// Verify snapshot exists in in-memory database
 	snapshot, err := store.Load(instanceID)
 	require.NoError(t, err, "Snapshot should exist in SQLite database")
 	assert.NotEmpty(t, snapshot, "Snapshot data should not be empty")
@@ -104,10 +280,7 @@ func TestDirtyPageAndOplog(t *testing.T) {
 	err = os.WriteFile(wasmPath, wasmBytes, 0644)
 	require.NoError(t, err)
 
-	store, err := NewSqliteSnapshotStore(":memory:")
-	require.NoError(t, err)
-	initSqliteStore(store)
-	defer store.Close()
+	store := newInMemorySnapshotStore()
 
 	engine, err := NewEngine(wasmPath, store)
 	require.NoError(t, err)
@@ -147,66 +320,6 @@ func TestDirtyPageAndOplog(t *testing.T) {
 	assert.Equal(t, "world", string(oplog2[1].RequestPayload))
 }
 
-func TestPostgresSnapshotStore(t *testing.T) {
-	// Try to connect to a local PostgreSQL instance (default credentials or env)
-	connStr := os.Getenv("POSTGRES_CONN")
-	if connStr == "" {
-		connStr = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
-	}
-
-	// Ping PG to see if it is available
-	db, err := net.DialTimeout("tcp", "localhost:5432", 1*time.Second)
-	if err != nil {
-		t.Skip("PostgreSQL is not running on localhost:5432. Skipping Postgres integration test.")
-		return
-	}
-	db.Close()
-
-	store, err := NewPostgresSnapshotStore(connStr)
-	if err != nil {
-		t.Skipf("PostgreSQL connection failed (credentials or DB might not be configured): %v. Skipping Postgres integration test.", err)
-		return
-	}
-	initPostgresStore(store)
-	defer store.Close()
-
-	instanceID := "postgres-test-instance"
-	defer store.Delete(instanceID)
-
-	// Test basic save/load
-	err = store.Save(instanceID, []byte("postgres-full-snapshot"))
-	require.NoError(t, err)
-
-	snapshot, err := store.Load(instanceID)
-	require.NoError(t, err)
-	assert.Equal(t, "postgres-full-snapshot", string(snapshot))
-
-	// Test deltas
-	deltas := map[int][]byte{
-		0: []byte("page-0-data"),
-		5: []byte("page-5-data"),
-	}
-	err = store.SaveDeltas(instanceID, deltas)
-	require.NoError(t, err)
-
-	loadedDeltas, err := store.LoadDeltas(instanceID)
-	require.NoError(t, err)
-	assert.Len(t, loadedDeltas, 2)
-	assert.Equal(t, "page-0-data", string(loadedDeltas[0]))
-	assert.Equal(t, "page-5-data", string(loadedDeltas[5]))
-
-	// Test oplog
-	err = store.SaveOplog(instanceID, 1, "test_call", []byte("req"), []byte("resp"))
-	require.NoError(t, err)
-
-	oplog, err := store.LoadOplog(instanceID)
-	require.NoError(t, err)
-	require.Len(t, oplog, 1)
-	assert.Equal(t, 1, oplog[0].CallIndex)
-	assert.Equal(t, "test_call", oplog[0].ApiName)
-	assert.Equal(t, "req", string(oplog[0].RequestPayload))
-	assert.Equal(t, "resp", string(oplog[0].ResponsePayload))
-}
 
 func TestS3SnapshotStore(t *testing.T) {
 	// Try to connect to a local MinIO/S3 using environment variables
@@ -352,10 +465,7 @@ func TestHostGetTime(t *testing.T) {
 	err = os.WriteFile(wasmPath, wasmBytes, 0644)
 	require.NoError(t, err)
 
-	store, err := NewSqliteSnapshotStore(":memory:")
-	require.NoError(t, err)
-	initSqliteStore(store)
-	defer store.Close()
+	store := newInMemorySnapshotStore()
 
 	engine, err := NewEngine(wasmPath, store)
 	require.NoError(t, err)
@@ -407,10 +517,7 @@ func TestMultiCheckpointRecovery(t *testing.T) {
 	err = os.WriteFile(wasmPath, wasmBytes, 0644)
 	require.NoError(t, err)
 
-	store, err := NewSqliteSnapshotStore(":memory:")
-	require.NoError(t, err)
-	initSqliteStore(store)
-	defer store.Close()
+	store := newInMemorySnapshotStore()
 
 	engine, err := NewEngine(wasmPath, store)
 	require.NoError(t, err)
@@ -464,10 +571,7 @@ func TestWasmModuleHashMismatch(t *testing.T) {
 	err = os.WriteFile(wasmPath2, wasmBytes2, 0644)
 	require.NoError(t, err)
 
-	store, err := NewSqliteSnapshotStore(":memory:")
-	require.NoError(t, err)
-	initSqliteStore(store)
-	defer store.Close()
+	store := newInMemorySnapshotStore()
 
 	// 1. Run with module 1
 	engine1, err := NewEngine(wasmPath1, store)
@@ -482,9 +586,10 @@ func TestWasmModuleHashMismatch(t *testing.T) {
 	require.NoError(t, err)
 	meta.WasmHash = "non-existent-wasm-hash"
 	
-	// Bypass OCC for test setup by updating metadata directly in DB
-	_, queryErr := store.db.Exec("UPDATE instance_meta SET wasm_hash = ? WHERE instance_id = ?;", meta.WasmHash, instanceID)
-	require.NoError(t, queryErr)
+	// Bypass OCC for test setup by updating metadata directly in store
+	store.mu.Lock()
+	store.meta[instanceID].WasmHash = meta.WasmHash
+	store.mu.Unlock()
 
 	// 3. Try to run with module 2 -> should return ErrWasmVersionMismatch because the required hash is not in the registry
 	engine2, err := NewEngine(wasmPath2, store)
@@ -506,10 +611,7 @@ func TestConcurrentExecution(t *testing.T) {
 	err = os.WriteFile(wasmPath, wasmBytes, 0644)
 	require.NoError(t, err)
 
-	store, err := NewSqliteSnapshotStore(":memory:")
-	require.NoError(t, err)
-	initSqliteStore(store)
-	defer store.Close()
+	store := newInMemorySnapshotStore()
 
 	engine, err := NewEngine(wasmPath, store)
 	require.NoError(t, err)
@@ -518,9 +620,9 @@ func TestConcurrentExecution(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/trigger_race", func(w http.ResponseWriter, r *http.Request) {
 		// Increment version in DB to simulate another process taking over (split-brain)
-		// We execute a direct SQL query to bypass CAS checks
-		_, queryErr := store.db.Exec("UPDATE instance_meta SET version = 10 WHERE instance_id = ?;", instanceID)
-		require.NoError(t, queryErr)
+		store.mu.Lock()
+		store.meta[instanceID].Version = 10
+		store.mu.Unlock()
 
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
@@ -563,10 +665,7 @@ func TestOplogTruncation(t *testing.T) {
 	err = os.WriteFile(wasmPath, wasmBytes, 0644)
 	require.NoError(t, err)
 
-	store, err := NewSqliteSnapshotStore(":memory:")
-	require.NoError(t, err)
-	initSqliteStore(store)
-	defer store.Close()
+	store := newInMemorySnapshotStore()
 
 	engine, err := NewEngine(wasmPath, store)
 	require.NoError(t, err)
@@ -623,10 +722,7 @@ func TestMultiVersionWasmExecution(t *testing.T) {
 	err = os.WriteFile(wasmPath2, wasmBytes2, 0644)
 	require.NoError(t, err)
 
-	store, err := NewSqliteSnapshotStore(":memory:")
-	require.NoError(t, err)
-	initSqliteStore(store)
-	defer store.Close()
+	store := newInMemorySnapshotStore()
 
 	// 1. Initialize engine 1 (wat1) and crash
 	engine1, err := NewEngine(wasmPath1, store)
@@ -669,10 +765,7 @@ func TestExecuteCancellation(t *testing.T) {
 	err = os.WriteFile(wasmPath, wasmBytes, 0644)
 	require.NoError(t, err)
 
-	store, err := NewSqliteSnapshotStore(":memory:")
-	require.NoError(t, err)
-	initSqliteStore(store)
-	defer store.Close()
+	store := newInMemorySnapshotStore()
 
 	engine, err := NewEngine(wasmPath, store)
 	require.NoError(t, err)
@@ -756,10 +849,7 @@ func TestStorageErrorInjection(t *testing.T) {
 	err = os.WriteFile(wasmPath, wasmBytes, 0644)
 	require.NoError(t, err)
 
-	sqliteStore, err := NewSqliteSnapshotStore(":memory:")
-	require.NoError(t, err)
-	initSqliteStore(sqliteStore)
-	defer sqliteStore.Close()
+	sqliteStore := newInMemorySnapshotStore()
 
 	store := &ErrorInjectingStore{
 		SnapshotStore: sqliteStore,
@@ -791,11 +881,7 @@ func TestSoakStressTesting(t *testing.T) {
 	err = os.WriteFile(wasmPath, wasmBytes, 0644)
 	require.NoError(t, err)
 
-	dbPath := filepath.Join(tempDir, "stress_test.db")
-	store, err := NewSqliteSnapshotStore(dbPath)
-	require.NoError(t, err)
-	initSqliteStore(store)
-	defer store.Close()
+	store := newInMemorySnapshotStore()
 
 	engine, err := NewEngine(wasmPath, store)
 	require.NoError(t, err)
@@ -820,18 +906,4 @@ func TestSoakStressTesting(t *testing.T) {
 	}
 
 	wg.Wait()
-}
-
-func initSqliteStore(store *SqliteSnapshotStore) {
-	err := store.InitSchema()
-	if err != nil {
-		panic(err)
-	}
-}
-
-func initPostgresStore(store *PostgresSnapshotStore) {
-	err := store.InitSchema()
-	if err != nil {
-		panic(err)
-	}
 }
