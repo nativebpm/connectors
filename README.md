@@ -14,7 +14,7 @@ Monorepository containing Go client libraries and integration connectors used ac
 
 ### Platform
 *   **[camunda](camunda/)** — Client library for Camunda BPMN workflow engine with highly optimized task locking and Postgres CDC integration.
-*   **[durable-wasm](durable-wasm/)** — Reusable Durable Execution Engine for running fault-tolerant Go/TinyGo business logic in an isolated WASM sandbox with O(1) memory consumption and transparent checkpointing.
+*   **[wasman](wasman/)** — Reusable Durable Execution Engine for running fault-tolerant Go/TinyGo business logic in an isolated WASM sandbox with O(1) memory consumption and transparent checkpointing.
 *   **[temporal](temporal/)** — Wrapper client, worker setup configurations, and orchestration utilities for Temporal.io.
 
 ## Development

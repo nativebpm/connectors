@@ -2,10 +2,10 @@ go 1.26
 
 use (
 	./camunda
-	./durable-wasm
 	./gotenberg
 	./httpstream
 	./sequin
 	./telegram
 	./temporal
+	./wasman
 )
