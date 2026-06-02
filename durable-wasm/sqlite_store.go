@@ -9,7 +9,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-//go:embed migrations/sqlite/20260602191000_init_sqlite.sql
+//go:embed schema/sqlite.sql
 var sqliteSchema string
 
 // SqliteSnapshotStore implements SnapshotStore using a local SQLite database.

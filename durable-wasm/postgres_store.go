@@ -9,7 +9,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-//go:embed migrations/postgres/20260602191000_init_postgres.sql
+//go:embed schema/postgres.sql
 var postgresSchema string
 
 // PostgresSnapshotStore implements SnapshotStore using a PostgreSQL database.

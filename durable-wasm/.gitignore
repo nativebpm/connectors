@@ -2,6 +2,9 @@
 *.wasm
 **/worker.wasm
 
+# Local SQLite databases
+*.db
+
 # Compiled binaries
 host
 **/host

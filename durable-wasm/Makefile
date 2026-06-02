@@ -56,3 +56,24 @@ docker-build:
 	@echo "Building scratch-based Docker image..."
 	docker build -t wasm-durable-host -f examples/durable-s3/host/Dockerfile .
 
+
+# --- Declarative Atlas Migrations ---
+POSTGRES_URL ?= postgres://postgres:postgres@localhost:5432/durable_wasm?sslmode=disable
+SQLITE_DB_PATH ?= durable_wasm.db
+DEV_POSTGRES_URL ?= docker://postgres/15/dev
+DEV_SQLITE_URL ?= sqlite://dev.db
+
+.PHONY: atlas-inspect-sqlite atlas-apply-sqlite atlas-inspect-postgres atlas-apply-postgres
+
+atlas-inspect-sqlite:
+	atlas schema inspect --url "sqlite://$(SQLITE_DB_PATH)" --format '{{ sql . }}' | sed 's/CREATE TABLE/CREATE TABLE IF NOT EXISTS/g' > schema/sqlite.sql
+
+atlas-apply-sqlite:
+	atlas schema apply --url "sqlite://$(SQLITE_DB_PATH)" --to "file://schema/sqlite.sql" --dev-url "$(DEV_SQLITE_URL)" --auto-approve
+
+atlas-inspect-postgres:
+	atlas schema inspect --url "$(POSTGRES_URL)" --format '{{ sql . }}' | sed 's/CREATE TABLE/CREATE TABLE IF NOT EXISTS/g' > schema/postgres.sql
+
+atlas-apply-postgres:
+	atlas schema apply --url "$(POSTGRES_URL)" --to "file://schema/postgres.sql" --dev-url "$(DEV_POSTGRES_URL)" --auto-approve
+
