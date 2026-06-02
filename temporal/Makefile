@@ -48,6 +48,14 @@ run-loadtest:
 run-loadtest-cdc:
 	LOAD_CONCURRENCY=150 LOAD_PROCESSES_COUNT=3000 go run examples/loadtest_cdc/main.go
 
+# Запуск воркера интеграции Gotenberg-Telegram
+run-worker-gotenberg-telegram:
+	go run examples/gotenberg-telegram/worker/main.go
+
+# Запуск стартера интеграции Gotenberg-Telegram
+run-starter-gotenberg-telegram:
+	go run examples/gotenberg-telegram/starter/main.go
+
 # Запуск тестов модуля в виртуальной тестовой среде
 test:
 	go test -v ./...

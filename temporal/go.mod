@@ -6,6 +6,8 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.12.3
+	github.com/nativebpm/connectors/gotenberg v1.1.1
+	github.com/nativebpm/connectors/telegram v0.1.0
 	github.com/sequinstream/sequin-go v0.2.0
 	github.com/stretchr/testify v1.11.1
 	go.temporal.io/api v1.44.1
@@ -19,6 +21,8 @@ require (
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0 // indirect
+	github.com/nativebpm/connectors/httpstream v0.0.2 // indirect
+	github.com/nativebpm/httpstream v0.0.3 // indirect
 	github.com/nexus-rpc/sdk-go v0.3.0 // indirect
 	github.com/pborman/uuid v1.2.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
