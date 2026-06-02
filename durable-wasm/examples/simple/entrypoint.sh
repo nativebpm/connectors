@@ -21,8 +21,9 @@ echo "[ENTRYPOINT] SeaweedFS S3 API is ready."
 # 3. Create the bucket in SeaweedFS Filer.
 # Creating a directory under /buckets/ in SeaweedFS Filer automatically exposes it as an S3 bucket.
 echo "[ENTRYPOINT] Creating snapshots-bucket in SeaweedFS..."
-curl -s -f -X POST http://seaweedfs:8888/buckets/snapshots-bucket/
-echo "[ENTRYPOINT] snapshots-bucket created successfully."
+# We don't use -f because if the bucket already exists, it returns 409, which is fine.
+curl -s -X POST http://seaweedfs:8888/buckets/snapshots-bucket/ > /dev/null
+echo "[ENTRYPOINT] snapshots-bucket created or already exists."
 
 # 1. Attempt to restore the SQLite database from S3 (seaweedfs) if it doesn't exist locally
 if [ ! -f "$DB_PATH" ]; then
