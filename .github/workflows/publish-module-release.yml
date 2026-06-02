@@ -57,29 +57,15 @@ jobs:
             exit 1
           fi
           
-          # Get the type of the tag directly
-          DIRECT_TYPE=$(git cat-file -t "$FULL_TAG" 2>/dev/null || echo "unknown")
-          echo "DEBUG: DIRECT_TYPE = '$DIRECT_TYPE'"
-          
-          # Try to get tag annotation - if successful, it's annotated
+          # Try to get tag annotation (if it's an annotated tag)
           ANNOTATION=$(git cat-file tag "$FULL_TAG" 2>/dev/null | sed '1,/^$/d' || echo "")
-          echo "DEBUG: ANNOTATION length = ${#ANNOTATION}"
-          
-          # If we can't read it as a tag object, it's lightweight
-          if ! git cat-file tag "$FULL_TAG" >/dev/null 2>&1; then
-            echo "⚠️ Tag '$FULL_TAG' is lightweight (no tag object). Skipping."
-            echo "DEBUG: git cat-file tag failed"
-            echo "has_annotation=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
           
           if [[ -z "$ANNOTATION" ]]; then
-            echo "⚠️ Tag has no annotation message. Skipping."
-            echo "has_annotation=false" >> $GITHUB_OUTPUT
-            exit 0
+            echo "ℹ️ Tag '$FULL_TAG' is lightweight or has no annotation message. Using fallback description."
+            ANNOTATION="Release $TAG_NAME of $MODULE_NAME module"
           fi
           
-          echo "✅ Found annotated tag"
+          echo "✅ Tag processed successfully"
           echo "Module: $MODULE_NAME"
           echo "Version: $TAG_NAME"
           echo "Annotation: $ANNOTATION"
