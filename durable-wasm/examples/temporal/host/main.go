@@ -66,6 +66,12 @@ func ExecuteDurableWasmActivity(ctx context.Context, instanceID string, serverAd
 	if err != nil {
 		return "", fmt.Errorf("failed to initialize snapshot store: %w", err)
 	}
+	if initiator, ok := store.(interface{ InitSchema() error }); ok {
+		err = initiator.InitSchema()
+		if err != nil {
+			return "", fmt.Errorf("failed to apply database schema: %w", err)
+		}
+	}
 	defer func() {
 		if closer, ok := store.(interface{ Close() error }); ok {
 			_ = closer.Close()

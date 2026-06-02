@@ -39,6 +39,13 @@ func main() {
 		slog.Error("[HOST] Failed to initialize SQLite store", "error", err)
 		os.Exit(1)
 	}
+	if initiator, ok := interface{}(store).(interface{ InitSchema() error }); ok {
+		err = initiator.InitSchema()
+		if err != nil {
+			slog.Error("[HOST] Failed to apply SQLite schema", "error", err)
+			os.Exit(1)
+		}
+	}
 	defer store.Close()
 
 	// Clear any leftover snapshot from previous runs in the database

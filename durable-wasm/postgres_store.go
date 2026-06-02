@@ -19,7 +19,7 @@ type PostgresSnapshotStore struct {
 
 var _ SnapshotStore = (*PostgresSnapshotStore)(nil)
 
-// NewPostgresSnapshotStore initializes a new Postgres snapshot store and creates all required tables.
+// NewPostgresSnapshotStore initializes a new Postgres snapshot store.
 func NewPostgresSnapshotStore(connStr string) (*PostgresSnapshotStore, error) {
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
@@ -32,13 +32,16 @@ func NewPostgresSnapshotStore(connStr string) (*PostgresSnapshotStore, error) {
 		return nil, fmt.Errorf("failed to ping postgres database: %w", err)
 	}
 
-	_, err = db.Exec(postgresSchema)
-	if err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to execute postgres schema: %w", err)
-	}
-
 	return &PostgresSnapshotStore{db: db}, nil
+}
+
+// InitSchema applies the PostgreSQL schema to the database (useful for testing).
+func (s *PostgresSnapshotStore) InitSchema() error {
+	_, err := s.db.Exec(postgresSchema)
+	if err != nil {
+		return fmt.Errorf("failed to apply postgres schema: %w", err)
+	}
+	return nil
 }
 
 // Save inserts or updates a linear memory snapshot inside the database.

@@ -54,6 +54,10 @@ func TestCamundaWasmOrchestration_RealCamundaServer(t *testing.T) {
 		store, err = durable.NewSqliteSnapshotStore(sqliteDBFile)
 	}
 	require.NoError(t, err)
+	if initiator, ok := store.(interface{ InitSchema() error }); ok {
+		err = initiator.InitSchema()
+		require.NoError(t, err)
+	}
 	defer func() {
 		if closer, ok := store.(interface{ Close() error }); ok {
 			_ = closer.Close()

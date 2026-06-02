@@ -19,7 +19,7 @@ type SqliteSnapshotStore struct {
 
 var _ SnapshotStore = (*SqliteSnapshotStore)(nil)
 
-// NewSqliteSnapshotStore initializes a new SQLite snapshot store and creates all required tables.
+// NewSqliteSnapshotStore initializes a new SQLite snapshot store.
 func NewSqliteSnapshotStore(dbPath string) (*SqliteSnapshotStore, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
@@ -50,13 +50,16 @@ func NewSqliteSnapshotStore(dbPath string) (*SqliteSnapshotStore, error) {
 		return nil, fmt.Errorf("failed to configure sqlite synchronous pragma: %w", err)
 	}
 
-	_, err = db.Exec(sqliteSchema)
-	if err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to execute sqlite schema: %w", err)
-	}
-
 	return &SqliteSnapshotStore{db: db}, nil
+}
+
+// InitSchema applies the SQLite schema to the database (useful for in-memory DBs and tests).
+func (s *SqliteSnapshotStore) InitSchema() error {
+	_, err := s.db.Exec(sqliteSchema)
+	if err != nil {
+		return fmt.Errorf("failed to apply sqlite schema: %w", err)
+	}
+	return nil
 }
 
 // Save inserts or updates a linear memory snapshot inside the database.

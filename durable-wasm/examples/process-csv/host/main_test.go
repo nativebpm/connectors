@@ -65,6 +65,10 @@ func TestCSVProcessPipeline_Success_With_Retry(t *testing.T) {
 	// 3. Initialize SQLite Snapshot Store in-memory
 	store, err := durable.NewSqliteSnapshotStore(":memory:")
 	require.NoError(t, err)
+	if initiator, ok := interface{}(store).(interface{ InitSchema() error }); ok {
+		err = initiator.InitSchema()
+		require.NoError(t, err)
+	}
 	defer store.Close()
 
 	// 4. Initialize Durable WASM Engine

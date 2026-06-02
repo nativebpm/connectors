@@ -67,6 +67,7 @@ func TestDurableExecutionLifecycle(t *testing.T) {
 	// Use an in-memory SQLite store for maximum speed and zero disk cleanup
 	store, err := NewSqliteSnapshotStore(":memory:")
 	require.NoError(t, err)
+	initSqliteStore(store)
 	defer store.Close()
 
 	engine, err := NewEngine(wasmPath, store)
@@ -105,6 +106,7 @@ func TestDirtyPageAndOplog(t *testing.T) {
 
 	store, err := NewSqliteSnapshotStore(":memory:")
 	require.NoError(t, err)
+	initSqliteStore(store)
 	defer store.Close()
 
 	engine, err := NewEngine(wasmPath, store)
@@ -165,6 +167,7 @@ func TestPostgresSnapshotStore(t *testing.T) {
 		t.Skipf("PostgreSQL connection failed (credentials or DB might not be configured): %v. Skipping Postgres integration test.", err)
 		return
 	}
+	initPostgresStore(store)
 	defer store.Close()
 
 	instanceID := "postgres-test-instance"
@@ -351,6 +354,7 @@ func TestHostGetTime(t *testing.T) {
 
 	store, err := NewSqliteSnapshotStore(":memory:")
 	require.NoError(t, err)
+	initSqliteStore(store)
 	defer store.Close()
 
 	engine, err := NewEngine(wasmPath, store)
@@ -405,6 +409,7 @@ func TestMultiCheckpointRecovery(t *testing.T) {
 
 	store, err := NewSqliteSnapshotStore(":memory:")
 	require.NoError(t, err)
+	initSqliteStore(store)
 	defer store.Close()
 
 	engine, err := NewEngine(wasmPath, store)
@@ -461,6 +466,7 @@ func TestWasmModuleHashMismatch(t *testing.T) {
 
 	store, err := NewSqliteSnapshotStore(":memory:")
 	require.NoError(t, err)
+	initSqliteStore(store)
 	defer store.Close()
 
 	// 1. Run with module 1
@@ -502,6 +508,7 @@ func TestConcurrentExecution(t *testing.T) {
 
 	store, err := NewSqliteSnapshotStore(":memory:")
 	require.NoError(t, err)
+	initSqliteStore(store)
 	defer store.Close()
 
 	engine, err := NewEngine(wasmPath, store)
@@ -558,6 +565,7 @@ func TestOplogTruncation(t *testing.T) {
 
 	store, err := NewSqliteSnapshotStore(":memory:")
 	require.NoError(t, err)
+	initSqliteStore(store)
 	defer store.Close()
 
 	engine, err := NewEngine(wasmPath, store)
@@ -617,6 +625,7 @@ func TestMultiVersionWasmExecution(t *testing.T) {
 
 	store, err := NewSqliteSnapshotStore(":memory:")
 	require.NoError(t, err)
+	initSqliteStore(store)
 	defer store.Close()
 
 	// 1. Initialize engine 1 (wat1) and crash
@@ -662,6 +671,7 @@ func TestExecuteCancellation(t *testing.T) {
 
 	store, err := NewSqliteSnapshotStore(":memory:")
 	require.NoError(t, err)
+	initSqliteStore(store)
 	defer store.Close()
 
 	engine, err := NewEngine(wasmPath, store)
@@ -748,6 +758,7 @@ func TestStorageErrorInjection(t *testing.T) {
 
 	sqliteStore, err := NewSqliteSnapshotStore(":memory:")
 	require.NoError(t, err)
+	initSqliteStore(sqliteStore)
 	defer sqliteStore.Close()
 
 	store := &ErrorInjectingStore{
@@ -783,6 +794,7 @@ func TestSoakStressTesting(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "stress_test.db")
 	store, err := NewSqliteSnapshotStore(dbPath)
 	require.NoError(t, err)
+	initSqliteStore(store)
 	defer store.Close()
 
 	engine, err := NewEngine(wasmPath, store)
@@ -810,3 +822,16 @@ func TestSoakStressTesting(t *testing.T) {
 	wg.Wait()
 }
 
+func initSqliteStore(store *SqliteSnapshotStore) {
+	err := store.InitSchema()
+	if err != nil {
+		panic(err)
+	}
+}
+
+func initPostgresStore(store *PostgresSnapshotStore) {
+	err := store.InitSchema()
+	if err != nil {
+		panic(err)
+	}
+}
