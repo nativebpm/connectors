@@ -5,7 +5,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -16,12 +15,7 @@ import (
 
 func TestDurableExecutionLifecycle(t *testing.T) {
 	instanceID := "test-worker-instance"
-	snapshotFile := "./test-worker-instance.bin"
 	serverAddr := "localhost:18081"
-
-	// 1. Clean up old snapshots
-	_ = os.Remove(snapshotFile)
-	defer os.Remove(snapshotFile)
 
 	// 2. Start mock HTTP server
 	mux := http.NewServeMux()
@@ -60,7 +54,11 @@ func TestDurableExecutionLifecycle(t *testing.T) {
 
 	// 3. Initialize engine
 	wasmPath := filepath.Join("examples", "simple", "worker", "worker.wasm")
-	store := &FileSnapshotStore{Dir: "."}
+	
+	// Use an in-memory SQLite store for maximum speed and zero disk cleanup
+	store, err := NewSqliteSnapshotStore(":memory:")
+	require.NoError(t, err)
+	defer store.Close()
 	
 	engine, err := NewEngine(wasmPath, store)
 	require.NoError(t, err, "Failed to compile WASM module. Make sure worker.wasm is built.")
@@ -70,9 +68,10 @@ func TestDurableExecutionLifecycle(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, crashed, "Expected run 1 to crash at checkpoint")
 
-	// Verify snapshot exists
-	_, err = os.Stat(snapshotFile)
-	require.NoError(t, err, "Snapshot bin file should have been written to disk")
+	// Verify snapshot exists in SQLite database
+	snapshot, err := store.Load(instanceID)
+	require.NoError(t, err, "Snapshot should exist in SQLite database")
+	assert.NotEmpty(t, snapshot, "Snapshot data should not be empty")
 
 	// 5. RUN 2: Restore from checkpoint and run to completion
 	crashed, err = engine.Execute(instanceID, "run", serverAddr, false)
