@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 	"unsafe"
 
@@ -55,12 +54,12 @@ func (f *FileSnapshotStore) Delete(id string) error {
 	return err
 }
 
-
 // Engine coordinates execution, compilation, and snapshotting of WASM modules.
 type Engine struct {
 	wasmEngine *wasmtime.Engine
 	module     *wasmtime.Module
 	store      SnapshotStore
+	httpClient *http.Client
 }
 
 // Session tracks the dynamic execution state of a running WASM instance.
@@ -72,7 +71,6 @@ type Session struct {
 	serverAddr              string
 	shouldCrashOnCheckpoint bool
 	crashed                 bool
-	httpClient              *http.Client
 
 	// Upload Stream-first context
 	uploadPipeW   *io.PipeWriter
@@ -82,12 +80,6 @@ type Session struct {
 	downloadResp *http.Response
 	downloadEOF  bool
 }
-
-// Active session registry for Wasmtime host callbacks.
-var (
-	activeSession *Session
-	sessionMutex  sync.Mutex
-)
 
 // NewEngine creates a new reusable WASM Durable Execution Engine.
 func NewEngine(wasmPath string, store SnapshotStore) (*Engine, error) {
@@ -101,22 +93,36 @@ func NewEngine(wasmPath string, store SnapshotStore) (*Engine, error) {
 		wasmEngine: wasmEngine,
 		module:     module,
 		store:      store,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+			},
+		},
 	}, nil
 }
 
 // Execute runs the WASM instance with a given entrypoint and session context.
 // If it finds a saved snapshot, it automatically restores the linear memory.
 func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string, shouldCrash bool) (bool, error) {
-	sessionMutex.Lock()
 	session := &Session{
 		engine:                  e,
 		instanceID:              instanceID,
 		serverAddr:              serverAddr,
 		shouldCrashOnCheckpoint: shouldCrash,
-		httpClient:              &http.Client{Timeout: 30 * time.Second},
 	}
-	activeSession = session
-	sessionMutex.Unlock()
+
+	// Guarantee cleanup of HTTP connections and pipes on return
+	defer func() {
+		if session.downloadResp != nil {
+			session.downloadResp.Body.Close()
+		}
+		if session.uploadPipeW != nil {
+			session.uploadPipeW.Close()
+		}
+	}()
 
 	store := wasmtime.NewStore(e.wasmEngine)
 	session.store = store
@@ -134,13 +140,9 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 		return false, fmt.Errorf("failed to link WASI: %w", err)
 	}
 
-	// Register Host Function: checkpoint
+	// Register Host Function: checkpoint (using local closure)
 	err = linker.DefineFunc(store, "env", "checkpoint", func(caller *wasmtime.Caller) *wasmtime.Trap {
-		sessionMutex.Lock()
-		s := activeSession
-		sessionMutex.Unlock()
-
-		slog.Info("[ENGINE] 'checkpoint' invoked", "instance_id", s.instanceID)
+		slog.Info("[ENGINE] 'checkpoint' invoked", "instance_id", session.instanceID)
 
 		ext := caller.GetExport("memory")
 		if ext == nil {
@@ -160,15 +162,15 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 		copy(snapshotCopy, memoryBytes)
 
 		// Save memory snapshot using the SnapshotStore interface
-		err := s.engine.store.Save(s.instanceID, snapshotCopy)
+		err := e.store.Save(session.instanceID, snapshotCopy)
 		if err != nil {
 			slog.Error("[ENGINE] Failed to save snapshot", "error", err)
 			return wasmtime.NewTrap("failed to write snapshot")
 		}
 		slog.Info("[ENGINE] Snapshot successfully saved", "bytes", len(snapshotCopy))
 
-		if s.shouldCrashOnCheckpoint {
-			s.crashed = true
+		if session.shouldCrashOnCheckpoint {
+			session.crashed = true
 			slog.Warn("[ENGINE] Simulating host crash. Aborting WASM execution.")
 			return wasmtime.NewTrap("simulated_host_crash")
 		}
@@ -179,24 +181,20 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 		return false, fmt.Errorf("failed to register 'checkpoint': %w", err)
 	}
 
-	// Register Host Function: stream_data
+	// Register Host Function: stream_data (using local closure)
 	err = linker.DefineFunc(store, "env", "stream_data", func(caller *wasmtime.Caller, direction int32, ptr int32, length int32) int32 {
-		sessionMutex.Lock()
-		s := activeSession
-		sessionMutex.Unlock()
-
 		ext := caller.GetExport("memory")
 		if ext == nil {
 			slog.Error("[ENGINE] stream_data: memory export not found")
 			return -1
 		}
 		mem := ext.Memory()
-		s.memory = mem
+		session.memory = mem
 
 		if direction == 0 {
-			return s.handleDownload(ptr, length)
+			return session.handleDownload(ptr, length)
 		} else if direction == 1 {
-			return s.handleUpload(ptr, length)
+			return session.handleUpload(ptr, length)
 		}
 
 		slog.Error("[ENGINE] stream_data: invalid direction", "direction", direction)
@@ -223,9 +221,9 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 	snapshot, err := e.store.Load(instanceID)
 	if err == nil && len(snapshot) > 0 {
 		slog.Info("[ENGINE] Found saved snapshot. Restoring memory...", "instance_id", instanceID)
-		
+
 		currentPages := session.memory.Size(store)
-		neededPages := uint64((len(snapshot) + 65535) / 65536)
+		neededPages := (uint64(len(snapshot)) + 65535) / 65536
 
 		if neededPages > currentPages {
 			growPages := neededPages - currentPages
@@ -272,10 +270,20 @@ func (s *Session) handleDownload(ptr int32, length int32) int32 {
 		return 0
 	}
 
+	mPtr := s.memory.Data(s.store)
+	mSize := s.memory.DataSize(s.store)
+	memoryBytes := unsafe.Slice((*byte)(mPtr), mSize)
+
+	// Validate bounds before copy
+	if ptr < 0 || length < 0 || int(ptr)+int(length) > len(memoryBytes) {
+		slog.Error("[ENGINE] Memory access out of bounds in handleDownload", "ptr", ptr, "length", length, "mem_size", len(memoryBytes))
+		return -1
+	}
+
 	if s.downloadResp == nil {
 		url := fmt.Sprintf("http://%s/download", s.serverAddr)
 		slog.Info("[ENGINE] GET Request (Stream-first)", "url", url)
-		resp, err := httpstream.NewRequest(context.Background(), *s.httpClient, "GET", url).Send()
+		resp, err := httpstream.NewRequest(context.Background(), *s.engine.httpClient, "GET", url).Send()
 		if err != nil {
 			slog.Error("[ENGINE] GET failed", "error", err)
 			return -1
@@ -286,9 +294,6 @@ func (s *Session) handleDownload(ptr int32, length int32) int32 {
 	buf := make([]byte, length)
 	n, err := s.downloadResp.Body.Read(buf)
 	if n > 0 {
-		mPtr := s.memory.Data(s.store)
-		mSize := s.memory.DataSize(s.store)
-		memoryBytes := unsafe.Slice((*byte)(mPtr), mSize)
 		copy(memoryBytes[ptr:ptr+int32(n)], buf[:n])
 	}
 
@@ -311,6 +316,16 @@ func (s *Session) handleDownload(ptr int32, length int32) int32 {
 }
 
 func (s *Session) handleUpload(ptr int32, length int32) int32 {
+	mPtr := s.memory.Data(s.store)
+	mSize := s.memory.DataSize(s.store)
+	memoryBytes := unsafe.Slice((*byte)(mPtr), mSize)
+
+	// Validate bounds before access
+	if ptr < 0 || length < 0 || int(ptr)+int(length) > len(memoryBytes) {
+		slog.Error("[ENGINE] Memory access out of bounds in handleUpload", "ptr", ptr, "length", length, "mem_size", len(memoryBytes))
+		return -1
+	}
+
 	if s.uploadPipeW == nil {
 		url := fmt.Sprintf("http://%s/upload", s.serverAddr)
 		slog.Info("[ENGINE] POST Request (Stream-first via io.Pipe)", "url", url)
@@ -320,7 +335,7 @@ func (s *Session) handleUpload(ptr int32, length int32) int32 {
 		s.uploadErrChan = make(chan error, 1)
 
 		go func() {
-			resp, err := httpstream.NewRequest(context.Background(), *s.httpClient, "POST", url).
+			resp, err := httpstream.NewRequest(context.Background(), *s.engine.httpClient, "POST", url).
 				Body(pipeReader, "application/octet-stream").
 				Send()
 			if err != nil {
@@ -353,11 +368,7 @@ func (s *Session) handleUpload(ptr int32, length int32) int32 {
 		return 0
 	}
 
-	mPtr := s.memory.Data(s.store)
-	mSize := s.memory.DataSize(s.store)
-	memoryBytes := unsafe.Slice((*byte)(mPtr), mSize)
 	dataToWrite := memoryBytes[ptr : ptr+length]
-
 	n, err := s.uploadPipeW.Write(dataToWrite)
 	if err != nil {
 		slog.Error("[ENGINE] Write to pipe failed", "error", err)
