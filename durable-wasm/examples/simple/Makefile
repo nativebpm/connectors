@@ -12,6 +12,12 @@ run: build-worker
 	@echo "Running simple playground example host..."
 	cd host && go run main.go
 
+run-docker: build-worker
+	@echo "Running simple playground example with Litestream and rclone S3..."
+	docker compose up --build
+
 clean:
 	@echo "Cleaning simple playground example artifacts..."
 	rm -f worker/worker.wasm
+	rm -rf rclone_data
+

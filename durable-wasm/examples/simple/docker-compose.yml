@@ -1,0 +1,38 @@
+version: "3.7"
+
+name: durable-wasm-simple-rclone
+
+services:
+  rclone:
+    image: rclone/rclone:latest
+    command: serve s3 --addr 0.0.0.0:8334 /data --auth-key admin,admin123
+    ports:
+      - "8334:8334"
+    volumes:
+      - ./rclone_data:/data
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8334"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  host-app:
+    build:
+      context: ../../../
+      dockerfile: durable-wasm/examples/simple/host/Dockerfile
+    depends_on:
+      rclone:
+        condition: service_healthy
+    environment:
+      - LITESTREAM_ACCESS_KEY_ID=admin
+      - LITESTREAM_SECRET_ACCESS_KEY=admin123
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=admin123
+      - LITESTREAM_ENDPOINT=http://rclone:8334
+    volumes:
+      - shared-data:/app
+    restart: "no"
+
+volumes:
+  shared-data:

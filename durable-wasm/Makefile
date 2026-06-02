@@ -40,7 +40,11 @@ run-camunda-example:
 run-gotenberg-telegram-example:
 	make -C examples/gotenberg-telegram run
 
+run-simple-docker:
+	make -C examples/simple run-docker
+
 docker-build:
+
 	@echo "Building scratch-based Docker image..."
 	docker build -t wasm-durable-host -f examples/simple/host/Dockerfile .
 

@@ -86,9 +86,9 @@ func main() {
 	fmt.Printf("[HOST] Read from persistent DB (%s): %s\n", dbFile, string(dbBytes))
 
 	// Clean up snapshot since the transaction is completed (we no longer need workflow memory)
-	_ = os.Remove(snapshotFile)
-	if _, err := os.Stat(snapshotFile); os.IsNotExist(err) {
-		fmt.Println("[HOST] Workflow memory snapshot successfully cleaned up from disk (Transaction Completed).")
+	_ = engine.store.Delete(instanceID)
+	if _, err := engine.store.Load(instanceID); err != nil {
+		fmt.Println("[HOST] Workflow memory snapshot successfully cleaned up from store (Transaction Completed).")
 	}
 
 	// Clean up database_temporal.json

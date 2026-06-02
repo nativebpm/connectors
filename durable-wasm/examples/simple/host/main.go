@@ -14,16 +14,18 @@ import (
 )
 
 const (
-	instanceID   = "worker-instance-42"
-	serverAddr   = "localhost:18080"
-	snapshotFile = "worker-instance-42.bin"
+	instanceID = "worker-instance-42"
+	serverAddr = "localhost:18080"
+	dbFile     = "snapshots.db"
 )
 
 func main() {
 	fmt.Println("[HOST] Starting Reusable Durable WASM Execution Orchestrator...")
 
-	// 1. Clean up old snapshots
-	_ = os.Remove(snapshotFile)
+	// 1. Clean up old database files
+	_ = os.Remove(dbFile)
+	_ = os.Remove(dbFile + "-wal")
+	_ = os.Remove(dbFile + "-shm")
 
 	// 2. Start local Mock HTTP Server to mock external REST calls
 	mockServer := startMockServer(serverAddr)
@@ -32,9 +34,14 @@ func main() {
 	// Give the server a small moment to bind to the port
 	time.Sleep(100 * time.Millisecond)
 
-	// 3. Initialize the Reusable Durable WASM Engine
+	// 3. Initialize the Reusable Durable WASM Engine with SQLite store
 	wasmPath := filepath.Join("..", "worker", "worker.wasm")
-	store := &durable.FileSnapshotStore{Dir: "."}
+	store, err := durable.NewSqliteSnapshotStore(dbFile)
+	if err != nil {
+		fmt.Printf("[HOST ERROR] Failed to initialize SQLite store: %v\n", err)
+		os.Exit(1)
+	}
+	defer store.Close()
 	
 	engine, err := durable.NewEngine(wasmPath, store)
 	if err != nil {
@@ -55,12 +62,13 @@ func main() {
 		}
 	}
 
-	// Verify snapshot exists
-	if _, err := os.Stat(snapshotFile); os.IsNotExist(err) {
-		fmt.Println("[HOST ERROR] Snapshot was not created on checkpoint!")
+	// Verify snapshot exists in SQLite database
+	_, err = store.Load(instanceID)
+	if err != nil {
+		fmt.Printf("[HOST ERROR] Snapshot was not found in SQLite: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("[HOST] Verified that snapshot file was written to disk.")
+	fmt.Println("[HOST] Verified that snapshot was successfully written to SQLite database.")
 
 	// 5. RUN 2: Restore from checkpoint and resume execution
 	fmt.Println("\n--- RUN 2: Restoring from snapshot and completing execution ---")
@@ -76,7 +84,7 @@ func main() {
 	}
 
 	// 6. Final Clean up
-	_ = os.Remove(snapshotFile)
+	_ = store.Delete(instanceID)
 	fmt.Println("\n[HOST] Durable WASM Execution demonstration complete.")
 	os.Exit(0)
 }

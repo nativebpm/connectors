@@ -1,0 +1,11 @@
+dbs:
+  - path: /app/snapshots.db
+    replicas:
+      - type: s3
+        name: rclone
+        endpoint: http://rclone:8334
+        bucket: snapshots-bucket
+        access-key-id: admin
+        secret-access-key: admin123
+        force-path-style: true
+        sync-interval: 100ms

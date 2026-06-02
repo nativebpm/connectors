@@ -112,9 +112,9 @@ func main() {
 				return err
 			}
 
-			// Clean up snapshot file
-			_ = os.Remove(snapshotPath)
-			fmt.Println("[WORKER HANDLER] Cleaned up temporary WASM snapshot from disk.")
+			// Clean up snapshot using the store interface
+			_ = engine.store.Delete(businessKey)
+			fmt.Println("[WORKER HANDLER] Cleaned up temporary WASM snapshot from store.")
 			return nil
 		},
 	), 60000, []string{})

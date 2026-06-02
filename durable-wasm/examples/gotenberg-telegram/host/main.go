@@ -75,7 +75,7 @@ func main() {
 	}
 
 	// 6. Final Clean up
-	_ = os.Remove(snapshotFile)
+	_ = engine.store.Delete(instanceID)
 	fmt.Println("\n[HOST] Gotenberg-Telegram example completed successfully.")
 	os.Exit(0)
 }

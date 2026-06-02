@@ -18,6 +18,7 @@ import (
 type SnapshotStore interface {
 	Save(id string, snapshot []byte) error
 	Load(id string) ([]byte, error)
+	Delete(id string) error
 }
 
 // FileSnapshotStore implements SnapshotStore using the local file system.
@@ -40,6 +41,19 @@ func (f *FileSnapshotStore) Load(id string) ([]byte, error) {
 	}
 	return os.ReadFile(path)
 }
+
+func (f *FileSnapshotStore) Delete(id string) error {
+	path := fmt.Sprintf("%s.bin", id)
+	if f.Dir != "" {
+		path = fmt.Sprintf("%s/%s.bin", f.Dir, id)
+	}
+	err := os.Remove(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
 
 // Engine coordinates execution, compilation, and snapshotting of WASM modules.
 type Engine struct {
