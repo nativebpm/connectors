@@ -1,6 +1,7 @@
 package durable
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"unsafe"
 
 	"github.com/bytecodealliance/wasmtime-go/v20"
+	"github.com/nativebpm/httpstream"
 )
 
 // SnapshotStore abstracts the storage backend for linear memory snapshots.
@@ -258,7 +260,7 @@ func (s *Session) handleDownload(ptr int32, length int32) int32 {
 	if s.downloadResp == nil {
 		url := fmt.Sprintf("http://%s/download", s.serverAddr)
 		fmt.Printf("[ENGINE] GET Request to %s (Stream-first)\n", url)
-		resp, err := s.httpClient.Get(url)
+		resp, err := httpstream.NewRequest(context.Background(), *s.httpClient, "GET", url).Send()
 		if err != nil {
 			fmt.Printf("[ENGINE ERROR] GET failed: %v\n", err)
 			return -1
@@ -303,15 +305,9 @@ func (s *Session) handleUpload(ptr int32, length int32) int32 {
 		s.uploadErrChan = make(chan error, 1)
 
 		go func() {
-			req, err := http.NewRequest("POST", url, pipeReader)
-			if err != nil {
-				pipeReader.CloseWithError(err)
-				s.uploadErrChan <- err
-				return
-			}
-			req.Header.Set("Content-Type", "application/octet-stream")
-
-			resp, err := s.httpClient.Do(req)
+			resp, err := httpstream.NewRequest(context.Background(), *s.httpClient, "POST", url).
+				Body(pipeReader, "application/octet-stream").
+				Send()
 			if err != nil {
 				pipeReader.CloseWithError(err)
 				s.uploadErrChan <- err

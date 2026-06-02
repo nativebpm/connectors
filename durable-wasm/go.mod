@@ -4,6 +4,7 @@ go 1.26
 
 require (
 	github.com/bytecodealliance/wasmtime-go/v20 v20.0.0
+	github.com/nativebpm/httpstream v0.0.3
 	github.com/stretchr/testify v1.11.1
 )
 
