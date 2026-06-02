@@ -110,9 +110,11 @@ func (r *Request) PathParam(key, val string) *Request {
 	r.Request.URL.Path = strings.ReplaceAll(r.Request.URL.Path, "{"+key+"}", val)
 	return r
 }
-func (r *Request) PathInt(k string, v int) *Request     { return r.PathParam(k, strconv.Itoa(v)) }
-func (r *Request) PathBool(k string, v bool) *Request   { return r.PathParam(k, strconv.FormatBool(v)) }
-func (r *Request) PathFloat(k string, v float64) *Request { return r.PathParam(k, strconv.FormatFloat(v, 'f', -1, 64)) }
+func (r *Request) PathInt(k string, v int) *Request   { return r.PathParam(k, strconv.Itoa(v)) }
+func (r *Request) PathBool(k string, v bool) *Request { return r.PathParam(k, strconv.FormatBool(v)) }
+func (r *Request) PathFloat(k string, v float64) *Request {
+	return r.PathParam(k, strconv.FormatFloat(v, 'f', -1, 64))
+}
 
 // Param adds a query parameter to the request.
 func (r *Request) Param(key, value string) *Request {
@@ -121,9 +123,11 @@ func (r *Request) Param(key, value string) *Request {
 	r.Request.URL.RawQuery = q.Encode()
 	return r
 }
-func (r *Request) Int(k string, v int) *Request     { return r.Param(k, strconv.Itoa(v)) }
-func (r *Request) Bool(k string, v bool) *Request   { return r.Param(k, strconv.FormatBool(v)) }
-func (r *Request) Float(k string, v float64) *Request { return r.Param(k, strconv.FormatFloat(v, 'f', -1, 64)) }
+func (r *Request) Int(k string, v int) *Request   { return r.Param(k, strconv.Itoa(v)) }
+func (r *Request) Bool(k string, v bool) *Request { return r.Param(k, strconv.FormatBool(v)) }
+func (r *Request) Float(k string, v float64) *Request {
+	return r.Param(k, strconv.FormatFloat(v, 'f', -1, 64))
+}
 
 // Body sets the request body and Content-Type header.
 func (r *Request) Body(body io.ReadCloser, contentType string) *Request {

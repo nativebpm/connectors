@@ -111,7 +111,7 @@ func startMockServer(addr string) *http.Server {
 		w.WriteHeader(http.StatusOK)
 
 		slog.Info("[MOCK SERVER] Received transformed JSON stream")
-		
+
 		// Copy upload request body to host standard output to see the streamed JSON records
 		_, err := io.Copy(os.Stdout, r.Body)
 		if err != nil {

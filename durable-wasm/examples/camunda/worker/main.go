@@ -17,6 +17,7 @@ var (
 )
 
 // Host function imports
+//
 //go:wasmimport env checkpoint
 func checkpoint()
 

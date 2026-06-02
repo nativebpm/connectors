@@ -26,7 +26,7 @@ func main() {
 	w.RegisterActivity(heartbeat.HeartbeatActivity)
 
 	log.Printf("Worker heartbeat successfully started for Task Queue: %s", cfg.TaskQueue)
-	
+
 	// Run worker in blocking mode until interrupted
 	err = w.Run(nil)
 	if err != nil {

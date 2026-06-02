@@ -72,7 +72,6 @@ func ExecuteDurableWasmActivity(ctx context.Context, instanceID string, serverAd
 		}
 	}()
 
-
 	engine, err := durable.NewEngine(wasmPath, store)
 	if err != nil {
 		return "", fmt.Errorf("failed to initialize engine: %w", err)

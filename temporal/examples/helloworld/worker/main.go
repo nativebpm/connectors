@@ -26,7 +26,7 @@ func main() {
 	w.RegisterActivity(helloworld.GreetActivity)
 
 	log.Printf("Worker helloworld started successfully for Task Queue: %s", cfg.TaskQueue)
-	
+
 	// Run worker in blocking mode until interrupted
 	err = w.Run(nil)
 	if err != nil {

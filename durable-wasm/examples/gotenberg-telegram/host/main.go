@@ -37,7 +37,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer store.Close()
-	
+
 	engine, err := durable.NewEngine(wasmPath, store)
 	if err != nil {
 		slog.Error("[HOST] Failed to initialize engine", "error", err)

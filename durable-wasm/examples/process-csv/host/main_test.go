@@ -88,13 +88,13 @@ func TestCSVProcessPipeline_Success_With_Retry(t *testing.T) {
 
 	// Verify upload was called and received correct transformed records
 	assert.True(t, uploadCalled)
-	
+
 	resultStr := string(receivedBytes)
 	// Alice and David and Eve are valid. Bob (invalid email) and Charlie (invalid amount) should be skipped/marked invalid
 	assert.Contains(t, resultStr, `"name":"Alice Johnson"`)
 	assert.Contains(t, resultStr, `"name":"David Miller"`)
 	assert.Contains(t, resultStr, `"name":"Eve Adams"`)
-	
+
 	// Check that snapshot was deleted in final main.go logic?
 	// The host/main.go deletes it manually at the end. Let's do it too
 	_ = store.Delete(instanceID)

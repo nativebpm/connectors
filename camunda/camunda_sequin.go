@@ -253,14 +253,14 @@ func (sw *SequinWorker) processMessage(ctx context.Context, msg sequin.Message) 
 
 	// 3. Construct ExternalTask
 	task := ExternalTask{
-		ID:                  record.ID,
-		TopicName:           record.TopicName,
-		WorkerID:            sw.workerID,
-		ProcessInstanceID:   record.ProcInstID,
-		ExecutionID:         record.ExecutionID,
-		BusinessKey:         record.BusinessKey,
-		Variables:           variables,
-		LockExpirationTime:  &lockExpiration,
+		ID:                 record.ID,
+		TopicName:          record.TopicName,
+		WorkerID:           sw.workerID,
+		ProcessInstanceID:  record.ProcInstID,
+		ExecutionID:        record.ExecutionID,
+		BusinessKey:        record.BusinessKey,
+		Variables:          variables,
+		LockExpirationTime: &lockExpiration,
 	}
 
 	// 4. Create complete and fail builders
@@ -292,10 +292,10 @@ func (sw *SequinWorker) processMessage(ctx context.Context, msg sequin.Message) 
 		if strings.Contains(err.Error(), "OptimisticLockingException") {
 			backoff := time.Duration(500+rnd.Intn(1000)) * time.Millisecond
 			sw.logger.Warn("Optimistic locking collision, backing off, unlocking and nacking in Sequin", "task_id", record.ID, "backoff", backoff)
-			
+
 			// Explicitly unlock task in Camunda before nacking in Sequin so that subsequent attempts can lock it instantly.
 			_ = sw.client.Unlock(record.ID).Context(context.Background()).Execute()
-			
+
 			time.Sleep(backoff)
 			sw.nackMessage(context.Background(), msg.AckID)
 		} else {

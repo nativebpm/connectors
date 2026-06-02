@@ -16,7 +16,7 @@ type HeartbeatProgress struct {
 // HeartbeatActivity executes a long-running task step-by-step, sending Heartbeats.
 func HeartbeatActivity(ctx context.Context, totalSteps int) (string, error) {
 	info := activity.GetInfo(ctx)
-	
+
 	// Start from step 0
 	progress := HeartbeatProgress{
 		CompletedStep: 0,
@@ -55,7 +55,7 @@ func HeartbeatActivity(ctx context.Context, totalSteps int) (string, error) {
 		if info.Attempt == 1 && step == 4 {
 			activity.GetLogger(ctx).Warn("[SIMULATION] Freezing worker on Attempt 1 at step 4 (sleeping 4s without heartbeating)...")
 			time.Sleep(4 * time.Second)
-			
+
 			// After long sleep, check if server cancelled the context
 			select {
 			case <-ctx.Done():

@@ -13,7 +13,6 @@ import (
 	"time"
 	"unsafe"
 
-
 	"github.com/bytecodealliance/wasmtime-go/v20"
 	"github.com/nativebpm/httpstream"
 )
@@ -192,6 +191,7 @@ func NewEngine(wasmPath string, store SnapshotStore) (*Engine, error) {
 	}, nil
 }
 
+// nolint:gocyclo
 // Execute runs the WASM instance with a given entrypoint and session context.
 // If it finds a saved snapshot, it automatically restores the linear memory.
 func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string, shouldCrash bool) (bool, error) {
@@ -301,7 +301,13 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 	}
 
 	// Register Host Function: host_call_api
-	err = linker.DefineFunc(store, "env", "host_call_api", func(caller *wasmtime.Caller, apiNamePtr int32, apiNameLen int32, reqPtr int32, reqLen int32, respPtr int32, respMaxLen int32) int32 {
+	err = linker.DefineFunc(store, "env", "host_call_api", func(
+		caller *wasmtime.Caller,
+		apiNamePtr int32, apiNameLen int32,
+		reqPtr int32, reqLen int32,
+		respPtr int32, respMaxLen int32,
+	) int32 {
+
 		ext := caller.GetExport("memory")
 		if ext == nil {
 			slog.Error("[ENGINE] host_call_api: memory export not found")

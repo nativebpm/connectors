@@ -435,5 +435,3 @@ func TestKeyboardBuilders(t *testing.T) {
 	assert.True(t, rk.ResizeKeyboard)
 	assert.True(t, rk.OneTimeKeyboard)
 }
-
-

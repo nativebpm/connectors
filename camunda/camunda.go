@@ -245,5 +245,3 @@ type TaskHandlerFunc func(ctx context.Context, client *Client, task ExternalTask
 func (f TaskHandlerFunc) Handle(ctx context.Context, client *Client, task ExternalTask, complete CompleteFunc, fail FailFunc) error {
 	return f(ctx, client, task, complete, fail)
 }
-
-

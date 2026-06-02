@@ -160,7 +160,7 @@ func (s *UnitTestSuite) Test_CDCWorkflow() {
 
 	// Register Workflow and Activity
 	env.RegisterWorkflow(temporal.GreetCDCWorkflow)
-	
+
 	// Mock delegation activity (returns nil, i.e. DB write succeeded)
 	env.OnActivity(a.DelegateToSequin, mock.Anything, "greet-cdc", "Temporal CDC User").Return(nil)
 

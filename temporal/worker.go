@@ -20,10 +20,10 @@ func NewWorker(client *Client, taskQueue string) *Worker {
 	}
 
 	w := worker.New(client.RawClient(), taskQueue, worker.Options{
-		MaxConcurrentActivityExecutionSize:      1000,
-		MaxConcurrentWorkflowTaskExecutionSize:  1000,
-		MaxConcurrentActivityTaskPollers:        16,
-		MaxConcurrentWorkflowTaskPollers:        16,
+		MaxConcurrentActivityExecutionSize:     1000,
+		MaxConcurrentWorkflowTaskExecutionSize: 1000,
+		MaxConcurrentActivityTaskPollers:       16,
+		MaxConcurrentWorkflowTaskPollers:       16,
 	})
 	return &Worker{
 		rawWorker: w,

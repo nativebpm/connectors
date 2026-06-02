@@ -34,7 +34,7 @@ func main() {
 			w.Header().Set("Access-Control-Allow-Origin", "*") // In prod it is recommended to restrict to admin domain
 			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Namespace, Authorization")
-			
+
 			if r.Method == "OPTIONS" {
 				w.WriteHeader(http.StatusOK)
 				return

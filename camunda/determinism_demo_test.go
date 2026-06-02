@@ -12,10 +12,10 @@ import (
 // but the logic shows the real overhead.
 func TestRealTimeDemo(t *testing.T) {
 	start := time.Now()
-	
+
 	// Simulate 100 milliseconds of real-time delay
 	time.Sleep(100 * time.Millisecond)
-	
+
 	elapsed := time.Since(start)
 	t.Logf("[Real Time] Real time elapsed: %v", elapsed)
 }

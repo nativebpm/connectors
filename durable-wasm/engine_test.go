@@ -56,12 +56,12 @@ func TestDurableExecutionLifecycle(t *testing.T) {
 
 	// 3. Initialize engine
 	wasmPath := filepath.Join("examples", "durable-s3", "worker", "worker.wasm")
-	
+
 	// Use an in-memory SQLite store for maximum speed and zero disk cleanup
 	store, err := NewSqliteSnapshotStore(":memory:")
 	require.NoError(t, err)
 	defer store.Close()
-	
+
 	engine, err := NewEngine(wasmPath, store)
 	require.NoError(t, err, "Failed to compile WASM module. Make sure worker.wasm is built.")
 
@@ -202,7 +202,6 @@ func TestPostgresSnapshotStore(t *testing.T) {
 		return
 	}
 	defer store.Close()
-
 
 	instanceID := "postgres-test-instance"
 	defer store.Delete(instanceID)

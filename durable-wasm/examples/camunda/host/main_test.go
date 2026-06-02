@@ -60,7 +60,6 @@ func TestCamundaWasmOrchestration_RealCamundaServer(t *testing.T) {
 		}
 	}()
 
-
 	engine, err := durable.NewEngine(wasmPath, store)
 	require.NoError(t, err)
 
@@ -69,7 +68,6 @@ func TestCamundaWasmOrchestration_RealCamundaServer(t *testing.T) {
 	w.SetMaxTasks(1)
 	w.SetPollInterval(100 * time.Millisecond)
 	w.SetAsyncResponseTimeout(0) // Disable long polling for fast test execution
-
 
 	// Register Task Handler for topic "durable-wasm-task"
 	uniqueKey := "order-test-" + uuid.NewString()
@@ -116,7 +114,6 @@ func TestCamundaWasmOrchestration_RealCamundaServer(t *testing.T) {
 			return nil
 		},
 	), 60000, []string{})
-
 
 	// Start worker in background
 	go func() {

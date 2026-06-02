@@ -17,10 +17,10 @@ import (
 )
 
 const (
-	serverAddr    = "localhost:18086"
-	dbFile        = "database_camunda.json"
-	sqliteDBFile  = "snapshots.db"
-	camundaURL    = "http://localhost:8080"
+	serverAddr   = "localhost:18086"
+	dbFile       = "database_camunda.json"
+	sqliteDBFile = "snapshots.db"
+	camundaURL   = "http://localhost:8080"
 )
 
 func main() {
@@ -60,7 +60,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer store.Close()
-	
+
 	engine, err := durable.NewEngine(wasmPath, store)
 	if err != nil {
 		slog.Error("[HOST] Failed to initialize WASM engine", "error", err)
@@ -109,7 +109,7 @@ func main() {
 			}
 
 			slog.Info("[WORKER HANDLER] WASM Engine execution completed successfully. Completing Camunda task...")
-			
+
 			// Complete task in Camunda
 			err = complete().Execute()
 			if err != nil {
@@ -142,7 +142,7 @@ func main() {
 
 	// 9. Wait and verify database output
 	slog.Info("[HOST] Waiting for the database file to be written...")
-	
+
 	// Wait up to 30 seconds
 	for i := 0; i < 300; i++ {
 		time.Sleep(100 * time.Millisecond)
@@ -162,7 +162,7 @@ func main() {
 
 	// Clean up database_camunda.json
 	_ = os.Remove(dbFile)
-	
+
 	slog.Info("[HOST] Camunda-WASM Real Orchestration example completed successfully")
 	cancel()
 	time.Sleep(500 * time.Millisecond) // Give worker a moment to shut down
@@ -205,7 +205,7 @@ func startMockServer(addr string) *http.Server {
 			// Second download request corresponds to Payment Capture response
 			responseBody = `{"status":"success"}`
 		}
-		
+
 		_, _ = w.Write([]byte(responseBody))
 	})
 

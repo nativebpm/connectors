@@ -568,7 +568,7 @@ func TestLifecycleBPMNAndDMNWithoutState(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		
+
 		if r.Method == "POST" && r.URL.Path == "/deployment/create" {
 			deployed = true
 			w.WriteHeader(http.StatusOK)
@@ -588,7 +588,7 @@ func TestLifecycleBPMNAndDMNWithoutState(t *testing.T) {
 				return
 			}
 		}
-		
+
 		http.Error(w, "not found", http.StatusNotFound)
 	}))
 	defer server.Close()

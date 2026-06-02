@@ -89,7 +89,7 @@ func (s *SqliteSnapshotStore) Save(id string, snapshot []byte) error {
 	ON CONFLICT(id) DO UPDATE SET
 		snapshot = excluded.snapshot,
 		updated_at = CURRENT_TIMESTAMP;`
-	
+
 	_, err := s.db.Exec(query, id, snapshot)
 	if err != nil {
 		return fmt.Errorf("failed to save snapshot for '%s': %w", id, err)
@@ -100,7 +100,7 @@ func (s *SqliteSnapshotStore) Save(id string, snapshot []byte) error {
 // Load retrieves a linear memory snapshot from the database.
 func (s *SqliteSnapshotStore) Load(id string) ([]byte, error) {
 	query := `SELECT snapshot FROM snapshots WHERE id = ?;`
-	
+
 	var snapshot []byte
 	err := s.db.QueryRow(query, id).Scan(&snapshot)
 	if err == sql.ErrNoRows {
@@ -117,7 +117,7 @@ func (s *SqliteSnapshotStore) SaveDeltas(id string, deltas map[int][]byte) error
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction for SaveDeltas: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	query := `
 	INSERT INTO memory_deltas (instance_id, page_index, data, updated_at)
@@ -206,7 +206,7 @@ func (s *SqliteSnapshotStore) Delete(id string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	_, _ = tx.Exec("DELETE FROM snapshots WHERE id = ?;", id)
 	_, _ = tx.Exec("DELETE FROM memory_deltas WHERE instance_id = ?;", id)

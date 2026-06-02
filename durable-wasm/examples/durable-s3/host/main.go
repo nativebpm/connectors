@@ -43,7 +43,7 @@ func main() {
 
 	// Clear any leftover snapshot from previous runs in the database
 	_ = store.Delete(instanceID)
-	
+
 	engine, err := durable.NewEngine(wasmPath, store)
 	if err != nil {
 		slog.Error("[HOST] Failed to initialize engine", "error", err)

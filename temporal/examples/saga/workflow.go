@@ -21,7 +21,7 @@ func TripReservationWorkflow(ctx workflow.Context, params TripReservationParams)
 
 	var activities *TripReservationActivities
 	logger := workflow.GetLogger(ctx)
-	
+
 	// List of compensations to execute in case of failure (LIFO)
 	var compensations []func(ctx workflow.Context) error
 
@@ -72,7 +72,7 @@ func TripReservationWorkflow(ctx workflow.Context, params TripReservationParams)
 
 // executeCompensations runs compensations in reverse order (LIFO)
 func executeCompensations(ctx workflow.Context, compensations []func(workflow.Context) error) {
-	// Create disconnected context to execute compensations, 
+	// Create disconnected context to execute compensations,
 	// so they won't be aborted if the main context was cancelled.
 	disconnectedCtx, _ := workflow.NewDisconnectedContext(ctx)
 	logger := workflow.GetLogger(ctx)

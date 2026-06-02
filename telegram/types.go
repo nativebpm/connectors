@@ -151,4 +151,3 @@ func (u Update) CallbackID() string {
 	}
 	return u.CallbackQuery.ID
 }
-

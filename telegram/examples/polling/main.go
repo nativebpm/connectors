@@ -26,9 +26,9 @@ func main() {
 	err = client.StartPolling(ctx, func(ctx context.Context, update telegram.Update) {
 		// 1. Handle incoming text message
 		if text := update.MessageText(); text != "" {
-			fmt.Printf("Received message from %s (%d): %s\n", 
-				update.SenderFirstName(), 
-				update.ChatID(), 
+			fmt.Printf("Received message from %s (%d): %s\n",
+				update.SenderFirstName(),
+				update.ChatID(),
 				text,
 			)
 
@@ -42,8 +42,8 @@ func main() {
 
 		// 2. Handle button callback query
 		if data := update.CallbackData(); data != "" {
-			fmt.Printf("Received callback button click: ID=%s, Data=%s\n", 
-				update.CallbackID(), 
+			fmt.Printf("Received callback button click: ID=%s, Data=%s\n",
+				update.CallbackID(),
 				data,
 			)
 

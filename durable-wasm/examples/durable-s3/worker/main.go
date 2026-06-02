@@ -21,16 +21,18 @@ var (
 //go:wasmimport env checkpoint
 func checkpoint()
 
-//go:wasmimport env stream_data
 // direction: 0 for reading from network, 1 for writing to network.
 // ptr: memory address pointing to the start of the buffer.
 // length: size of the buffer/data to transfer.
 // Returns the number of bytes read/written, or a negative value on error.
+//
+//go:wasmimport env stream_data
 func stream_data(direction int32, ptr uint32, length uint32) int32
 
-//export run
 // The entrypoint function invoked by the Go host.
 // It uses a state machine to support resumption from checkpoints.
+//
+//export run
 func run() int32 {
 	for {
 		switch step {
@@ -45,7 +47,7 @@ func run() int32 {
 
 		case 1:
 			println("[WASM WORKER] Step 1: Processing data stream...")
-			
+
 			// Allocate a 4KB buffer on the WASM heap.
 			// This represents O(1) memory consumption since the buffer size is constant.
 			buf := make([]byte, 4096)

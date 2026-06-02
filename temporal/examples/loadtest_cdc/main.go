@@ -194,7 +194,7 @@ func main() {
 			completedInstances.Add(1)
 
 			if submissionDelayMs > 0 {
-				time.Sleep(time.Duration(submissionDelayMs + rand.Intn(10)) * time.Millisecond)
+				time.Sleep(time.Duration(submissionDelayMs+rand.Intn(10)) * time.Millisecond)
 			}
 		}(i)
 	}
