@@ -1,3 +1,8 @@
-worker/worker.wasm
-host/host
+# WASM compiled files
+*.wasm
+**/worker.wasm
+
+# Compiled binaries
+host
+**/host
 *.bin
