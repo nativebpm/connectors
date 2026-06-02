@@ -9,6 +9,11 @@ WORKDIR /app
 COPY go.work go.work.sum ./
 COPY durable-wasm durable-wasm
 COPY httpstream httpstream
+COPY camunda camunda
+COPY gotenberg gotenberg
+COPY sequin sequin
+COPY telegram telegram
+COPY temporal temporal
 
 # Build the host application
 WORKDIR /app/durable-wasm/examples/simple/host
