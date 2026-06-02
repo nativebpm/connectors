@@ -6,20 +6,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/suite"
-	"go.temporal.io/sdk/testsuite"
+	"github.com/google/uuid"
+	localTemporal "github.com/nativebpm/connectors/temporal"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
 )
 
-type DurableWasmTemporalTestSuite struct {
-	suite.Suite
-	testsuite.WorkflowTestSuite
-}
-
-func TestDurableWasmTemporalTestSuite(t *testing.T) {
-	suite.Run(t, new(DurableWasmTemporalTestSuite))
-}
-
-func (s *DurableWasmTemporalTestSuite) Test_DurableWasmWorkflow_Success_With_Retry() {
+func TestDurableWasmWorkflow_RealTemporalServer(t *testing.T) {
 	// 1. Clean up database files
 	_ = os.Remove(dbFile)
 	_ = os.Remove(sqliteDBFile)
@@ -35,27 +30,40 @@ func (s *DurableWasmTemporalTestSuite) Test_DurableWasmWorkflow_Success_With_Ret
 	// Give mock server time to start
 	time.Sleep(100 * time.Millisecond)
 
-	// 3. Create test environment
-	env := s.NewTestWorkflowEnvironment()
+	// 3. Connect to real Temporal Server
+	cfg := localTemporal.LoadFromEnv()
+	cfg.TaskQueue = "durable-wasm-test-queue-" + uuid.New().String()
 
-	// Register real Workflow and Activity (no mocks!)
-	env.RegisterWorkflow(DurableWasmWorkflow)
-	env.RegisterActivity(ExecuteDurableWasmActivity)
+	c, err := localTemporal.NewClient(cfg)
+	require.NoError(t, err, "Temporal server must be running on %s", cfg.HostPort)
+	defer c.Close()
 
-	// 4. Run Workflow
-	instanceID := "test-temporal-tx"
-	env.ExecuteWorkflow(DurableWasmWorkflow, instanceID, serverAddr)
+	// 4. Start real Worker in background
+	w := worker.New(c.RawClient(), cfg.TaskQueue, worker.Options{})
+	w.RegisterWorkflow(DurableWasmWorkflow)
+	w.RegisterActivity(ExecuteDurableWasmActivity)
 
-	// 5. Assert completion and lack of errors
-	s.True(env.IsWorkflowCompleted())
-	s.NoError(env.GetWorkflowError())
+	err = w.Start()
+	require.NoError(t, err)
+	defer w.Stop()
 
+	// 5. Run Workflow
+	workflowID := "durable-wasm-test-workflow-" + uuid.New().String()
+	instanceID := "temporal-test-activity-tx-" + uuid.New().String()
+
+	run, err := c.ExecuteWorkflow(context.Background(), client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: cfg.TaskQueue,
+	}, DurableWasmWorkflow, instanceID, serverAddr)
+	require.NoError(t, err)
+
+	// 6. Wait for workflow to finish
 	var result string
-	err := env.GetWorkflowResult(&result)
-	s.NoError(err)
+	err = run.Get(context.Background(), &result)
+	require.NoError(t, err)
 
-	// 6. Verify final result format and persistence
-	s.Contains(result, `"completed":true`)
-	s.Contains(result, `"result_value":1800`)
-	s.Contains(result, `"activity_id":"ACT-TEMP-4455"`)
+	// 7. Verify final result format
+	assert.Contains(t, result, `"completed":true`)
+	assert.Contains(t, result, `"result_value":1800`)
+	assert.Contains(t, result, `"activity_id":"ACT-TEMP-4455"`)
 }
