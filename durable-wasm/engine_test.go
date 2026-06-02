@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bytecodealliance/wasmtime-go/v20"
+	"github.com/nativebpm/connectors/durable-wasm/testdata"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -91,50 +92,7 @@ func TestDurableExecutionLifecycle(t *testing.T) {
 func TestDirtyPageAndOplog(t *testing.T) {
 	instanceID := "test-dirty-oplog-instance"
 
-	// Write simple WebAssembly Text (WAT) module to simulate Oplog and Dirty pages
-	wat := `
-	(module
-	  (import "env" "checkpoint" (func $checkpoint))
-	  (import "env" "host_call_api" (func $host_call_api (param i32 i32 i32 i32 i32 i32) (result i32)))
-	  (memory (export "memory") 2)
-	  (data (i32.const 0) "test_api")
-	  (data (i32.const 16) "hello")
-	  (data (i32.const 100) "world")
-	  (func (export "run_test")
-	    ;; Call test_api with payload "hello" -> outputs to offset 32
-	    (call $host_call_api
-	      (i32.const 0)   ;; apiNamePtr
-	      (i32.const 8)   ;; apiNameLen
-	      (i32.const 16)  ;; reqPtr
-	      (i32.const 5)   ;; reqLen
-	      (i32.const 32)  ;; respPtr
-	      (i32.const 64)  ;; respMaxLen
-	    )
-	    drop
-
-	    ;; First checkpoint (Crash point 1)
-	    (call $checkpoint)
-
-	    ;; Modify memory in the 2nd page (offset 70000) to trigger dirty-page tracking
-	    (i32.store (i32.const 70000) (i32.const 42))
-
-	    ;; Call test_api with payload "world" -> outputs to offset 200
-	    (call $host_call_api
-	      (i32.const 0)   ;; apiNamePtr
-	      (i32.const 8)   ;; apiNameLen
-	      (i32.const 100) ;; reqPtr
-	      (i32.const 5)   ;; reqLen
-	      (i32.const 200) ;; respPtr
-	      (i32.const 64)  ;; respMaxLen
-	    )
-	    drop
-
-	    ;; Second checkpoint
-	    (call $checkpoint)
-	  )
-	)
-	`
-	wasmBytes, err := wasmtime.Wat2Wasm(wat)
+	wasmBytes, err := wasmtime.Wat2Wasm(testdata.DirtyPageOplogWat)
 	require.NoError(t, err)
 
 	tempDir := t.TempDir()
@@ -247,27 +205,7 @@ func TestPostgresSnapshotStore(t *testing.T) {
 func TestHostGetTime(t *testing.T) {
 	instanceID := "test-time-instance"
 
-	wat := `
-	(module
-	  (import "env" "host_get_time" (func $host_get_time (result i64)))
-	  (import "env" "checkpoint" (func $checkpoint))
-	  (memory (export "memory") 1)
-	  (func (export "run_test")
-	    ;; Call time 1
-	    (i64.store (i32.const 0) (call $host_get_time))
-
-	    ;; First checkpoint
-	    (call $checkpoint)
-
-	    ;; Call time 2
-	    (i64.store (i32.const 8) (call $host_get_time))
-
-	    ;; Second checkpoint
-	    (call $checkpoint)
-	  )
-	)
-	`
-	wasmBytes, err := wasmtime.Wat2Wasm(wat)
+	wasmBytes, err := wasmtime.Wat2Wasm(testdata.HostGetTimeWat)
 	require.NoError(t, err)
 
 	tempDir := t.TempDir()
@@ -321,58 +259,7 @@ func TestHostGetTime(t *testing.T) {
 func TestMultiCheckpointRecovery(t *testing.T) {
 	instanceID := "test-multi-checkpoint-instance"
 
-	wat := `
-	(module
-	  (import "env" "checkpoint" (func $checkpoint))
-	  (memory (export "memory") 1)
-	  (func (export "run_test")
-	    (local $val i32)
-	    ;; Read value from offset 0
-	    (local.set $val (i32.load (i32.const 0)))
-
-	    ;; If val == 0 (First execution)
-	    (if (i32.eq (local.get $val) (i32.const 0))
-	      (then
-	        (i32.store (i32.const 0) (i32.const 10))
-	        (call $checkpoint)
-	      )
-	    )
-
-	    ;; If val == 10
-	    (if (i32.eq (local.get $val) (i32.const 10))
-	      (then
-	        (i32.store (i32.const 0) (i32.const 20))
-	        (call $checkpoint)
-	      )
-	    )
-
-	    ;; If val == 20
-	    (if (i32.eq (local.get $val) (i32.const 20))
-	      (then
-	        (i32.store (i32.const 0) (i32.const 30))
-	        (call $checkpoint)
-	      )
-	    )
-
-	    ;; If val == 30
-	    (if (i32.eq (local.get $val) (i32.const 30))
-	      (then
-	        (i32.store (i32.const 0) (i32.const 40))
-	        (call $checkpoint)
-	      )
-	    )
-
-	    ;; If val == 40
-	    (if (i32.eq (local.get $val) (i32.const 40))
-	      (then
-	        (i32.store (i32.const 0) (i32.const 50))
-	        (call $checkpoint)
-	      )
-	    )
-	  )
-	)
-	`
-	wasmBytes, err := wasmtime.Wat2Wasm(wat)
+	wasmBytes, err := wasmtime.Wat2Wasm(testdata.MultiCheckpointWat)
 	require.NoError(t, err)
 
 	tempDir := t.TempDir()
@@ -422,37 +309,16 @@ func TestMultiCheckpointRecovery(t *testing.T) {
 func TestWasmModuleHashMismatch(t *testing.T) {
 	instanceID := "test-hash-mismatch-instance"
 
-	wat1 := `
-	(module
-	  (import "env" "checkpoint" (func $checkpoint))
-	  (memory (export "memory") 1)
-	  (func (export "run_test")
-	    (i32.store (i32.const 0) (i32.const 100))
-	    (call $checkpoint)
-	  )
-	)
-	`
-	wat2 := `
-	(module
-	  (import "env" "checkpoint" (func $checkpoint))
-	  (memory (export "memory") 1)
-	  (func (export "run_test")
-	    (i32.store (i32.const 0) (i32.const 200))
-	    (call $checkpoint)
-	  )
-	)
-	`
-
 	tempDir := t.TempDir()
 	wasmPath1 := filepath.Join(tempDir, "test1.wasm")
 	wasmPath2 := filepath.Join(tempDir, "test2.wasm")
 
-	wasmBytes1, err := wasmtime.Wat2Wasm(wat1)
+	wasmBytes1, err := wasmtime.Wat2Wasm(testdata.HashMismatchWat1)
 	require.NoError(t, err)
 	err = os.WriteFile(wasmPath1, wasmBytes1, 0644)
 	require.NoError(t, err)
 
-	wasmBytes2, err := wasmtime.Wat2Wasm(wat2)
+	wasmBytes2, err := wasmtime.Wat2Wasm(testdata.HashMismatchWat2)
 	require.NoError(t, err)
 	err = os.WriteFile(wasmPath2, wasmBytes2, 0644)
 	require.NoError(t, err)
@@ -490,24 +356,7 @@ func TestConcurrentExecution(t *testing.T) {
 	instanceID := "test-concurrent-instance"
 	serverAddr := "localhost:18084"
 
-	wat := `
-	(module
-	  (import "env" "host_call_api" (func $host_call_api (param i32 i32 i32 i32 i32 i32) (result i32)))
-	  (import "env" "checkpoint" (func $checkpoint))
-	  (memory (export "memory") 1)
-	  (data (i32.const 0) "trigger_race")
-	  (func (export "run_test")
-	    (call $checkpoint) ;; Checkpoint 1
-
-	    ;; Call trigger_race API to increment version in DB behind our back
-	    (call $host_call_api (i32.const 0) (i32.const 12) (i32.const 0) (i32.const 0) (i32.const 100) (i32.const 10))
-	    drop
-
-	    (call $checkpoint) ;; Checkpoint 2 (Should fail due to OCC)
-	  )
-	)
-	`
-	wasmBytes, err := wasmtime.Wat2Wasm(wat)
+	wasmBytes, err := wasmtime.Wat2Wasm(testdata.ConcurrentExecutionWat)
 	require.NoError(t, err)
 
 	tempDir := t.TempDir()
@@ -563,75 +412,7 @@ func TestConcurrentExecution(t *testing.T) {
 func TestOplogTruncation(t *testing.T) {
 	instanceID := "test-truncation-instance"
 
-	wat := `
-	(module
-	  (import "env" "host_call_api" (func $host_call_api (param i32 i32 i32 i32 i32 i32) (result i32)))
-	  (import "env" "checkpoint" (func $checkpoint))
-	  (memory (export "memory") 1)
-	  (data (i32.const 0) "test_api")
-	  (data (i32.const 16) "hello")
-	  (func (export "run_test")
-	    (local $val i32)
-	    (local.set $val (i32.load (i32.const 200)))
-
-	    ;; Call API 1
-	    (call $host_call_api (i32.const 0) (i32.const 8) (i32.const 16) (i32.const 5) (i32.const 32) (i32.const 64))
-	    drop
-	    ;; If val == 0
-	    (if (i32.eq (local.get $val) (i32.const 0))
-	      (then
-	        (i32.store (i32.const 200) (i32.const 10))
-	        (call $checkpoint)
-	      )
-	    )
-
-	    ;; Call API 2
-	    (call $host_call_api (i32.const 0) (i32.const 8) (i32.const 16) (i32.const 5) (i32.const 32) (i32.const 64))
-	    drop
-	    ;; If val == 10
-	    (if (i32.eq (local.get $val) (i32.const 10))
-	      (then
-	        (i32.store (i32.const 200) (i32.const 20))
-	        (call $checkpoint)
-	      )
-	    )
-
-	    ;; Call API 3
-	    (call $host_call_api (i32.const 0) (i32.const 8) (i32.const 16) (i32.const 5) (i32.const 32) (i32.const 64))
-	    drop
-	    ;; If val == 20
-	    (if (i32.eq (local.get $val) (i32.const 20))
-	      (then
-	        (i32.store (i32.const 200) (i32.const 30))
-	        (call $checkpoint)
-	      )
-	    )
-
-	    ;; Call API 4
-	    (call $host_call_api (i32.const 0) (i32.const 8) (i32.const 16) (i32.const 5) (i32.const 32) (i32.const 64))
-	    drop
-	    ;; If val == 30
-	    (if (i32.eq (local.get $val) (i32.const 30))
-	      (then
-	        (i32.store (i32.const 200) (i32.const 40))
-	        (call $checkpoint)
-	      )
-	    )
-
-	    ;; Call API 5
-	    (call $host_call_api (i32.const 0) (i32.const 8) (i32.const 16) (i32.const 5) (i32.const 32) (i32.const 64))
-	    drop
-	    ;; If val == 40
-	    (if (i32.eq (local.get $val) (i32.const 40))
-	      (then
-	        (i32.store (i32.const 200) (i32.const 50))
-	        (call $checkpoint)
-	      )
-	    )
-	  )
-	)
-	`
-	wasmBytes, err := wasmtime.Wat2Wasm(wat)
+	wasmBytes, err := wasmtime.Wat2Wasm(testdata.OplogTruncationWat)
 	require.NoError(t, err)
 
 	tempDir := t.TempDir()
@@ -684,41 +465,16 @@ func TestOplogTruncation(t *testing.T) {
 func TestMultiVersionWasmExecution(t *testing.T) {
 	instanceID := "test-multi-version-instance"
 
-	wat1 := `
-	(module
-	  (import "env" "checkpoint" (func $checkpoint))
-	  (memory (export "memory") 1)
-	  (func (export "run_test")
-	    (i32.store (i32.const 0) (i32.const 777))
-	    (call $checkpoint)
-	    (i32.store (i32.const 0) (i32.const 888))
-	    (call $checkpoint)
-	  )
-	)
-	`
-	wat2 := `
-	(module
-	  (import "env" "checkpoint" (func $checkpoint))
-	  (memory (export "memory") 1)
-	  (func (export "run_test")
-	    (i32.store (i32.const 0) (i32.const 111))
-	    (call $checkpoint)
-	    (i32.store (i32.const 0) (i32.const 222))
-	    (call $checkpoint)
-	  )
-	)
-	`
-
 	tempDir := t.TempDir()
 	wasmPath1 := filepath.Join(tempDir, "test1.wasm")
 	wasmPath2 := filepath.Join(tempDir, "test2.wasm")
 
-	wasmBytes1, err := wasmtime.Wat2Wasm(wat1)
+	wasmBytes1, err := wasmtime.Wat2Wasm(testdata.MultiVersionWat1)
 	require.NoError(t, err)
 	err = os.WriteFile(wasmPath1, wasmBytes1, 0644)
 	require.NoError(t, err)
 
-	wasmBytes2, err := wasmtime.Wat2Wasm(wat2)
+	wasmBytes2, err := wasmtime.Wat2Wasm(testdata.MultiVersionWat2)
 	require.NoError(t, err)
 	err = os.WriteFile(wasmPath2, wasmBytes2, 0644)
 	require.NoError(t, err)
@@ -760,18 +516,7 @@ func TestExecuteCancellation(t *testing.T) {
 	instanceID := "test-cancel-instance"
 	serverAddr := "localhost:18085"
 
-	wat := `
-	(module
-	  (import "env" "host_call_api" (func $host_call_api (param i32 i32 i32 i32 i32 i32) (result i32)))
-	  (memory (export "memory") 1)
-	  (data (i32.const 0) "long_call")
-	  (func (export "run_test")
-	    (call $host_call_api (i32.const 0) (i32.const 9) (i32.const 0) (i32.const 0) (i32.const 100) (i32.const 10))
-	    drop
-	  )
-	)
-	`
-	wasmBytes, err := wasmtime.Wat2Wasm(wat)
+	wasmBytes, err := wasmtime.Wat2Wasm(testdata.ExecuteCancellationWat)
 	require.NoError(t, err)
 
 	tempDir := t.TempDir()
@@ -857,16 +602,7 @@ func (e *ErrorInjectingStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 func TestStorageErrorInjection(t *testing.T) {
 	instanceID := "test-error-injection-instance"
 
-	wat := `
-	(module
-	  (import "env" "checkpoint" (func $checkpoint))
-	  (memory (export "memory") 1)
-	  (func (export "run_test")
-	    (call $checkpoint)
-	  )
-	)
-	`
-	wasmBytes, err := wasmtime.Wat2Wasm(wat)
+	wasmBytes, err := wasmtime.Wat2Wasm(testdata.StorageErrorInjectionWat)
 	require.NoError(t, err)
 
 	tempDir := t.TempDir()
@@ -900,17 +636,7 @@ func TestStorageErrorInjection(t *testing.T) {
 }
 
 func TestSoakStressTesting(t *testing.T) {
-	wat := `
-	(module
-	  (import "env" "checkpoint" (func $checkpoint))
-	  (memory (export "memory") 1)
-	  (func (export "run_test")
-	    (i32.store (i32.const 0) (i32.const 999))
-	    (call $checkpoint)
-	  )
-	)
-	`
-	wasmBytes, err := wasmtime.Wat2Wasm(wat)
+	wasmBytes, err := wasmtime.Wat2Wasm(testdata.SoakStressWat)
 	require.NoError(t, err)
 
 	tempDir := t.TempDir()
