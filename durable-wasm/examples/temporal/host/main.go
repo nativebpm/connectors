@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nativebpm/connectors/durable-wasm"
+	_ "github.com/nativebpm/connectors/temporal"
 )
 
 const (
