@@ -1,4 +1,4 @@
-.PHONY: infra-up infra-down run-worker-helloworld run-starter-helloworld run-worker-signal run-starter-signal run-worker-saga run-starter-saga run-loadtest run-loadtest-cdc test
+.PHONY: infra-up infra-down run-worker-helloworld run-starter-helloworld run-worker-signal run-starter-signal run-worker-saga run-starter-saga run-loadtest run-loadtest-cdc run-worker-gotenberg-telegram run-starter-gotenberg-telegram run-server-sequin-outbox run-worker-sequin-outbox test
 
 # Запуск инфраструктуры (Temporal Server + PostgreSQL + Web UI)
 infra-up:
@@ -56,6 +56,15 @@ run-worker-gotenberg-telegram:
 run-starter-gotenberg-telegram:
 	go run examples/gotenberg-telegram/starter/main.go
 
+# Запуск вебхук-сервера Sequin Outbox
+run-server-sequin-outbox:
+	go run examples/sequin-outbox/server/main.go
+
+# Запуск воркера Sequin Outbox
+run-worker-sequin-outbox:
+	go run examples/sequin-outbox/worker/main.go
+
 # Запуск тестов модуля в виртуальной тестовой среде
 test:
 	go test -v ./...
+
