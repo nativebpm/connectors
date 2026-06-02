@@ -11,6 +11,15 @@ import (
 //go:embed migrations/sqlite/20260602191000_init_sqlite.sql
 var sqliteSchema string
 
+//go:embed queries/sqlite.sql
+var sqliteQueriesFile string
+
+var sqliteQueries map[string]string
+
+func init() {
+	sqliteQueries = parseQueries(sqliteQueriesFile)
+}
+
 // SqliteSnapshotStore implements SnapshotStore using a local SQLite database.
 type SqliteSnapshotStore struct {
 	db *sql.DB
@@ -48,14 +57,7 @@ func NewSqliteSnapshotStore(dbPath string) (*SqliteSnapshotStore, error) {
 
 // Save inserts or updates a linear memory snapshot inside the database.
 func (s *SqliteSnapshotStore) Save(id string, snapshot []byte) error {
-	query := `
-	INSERT INTO snapshots (id, snapshot, updated_at)
-	VALUES (?, ?, CURRENT_TIMESTAMP)
-	ON CONFLICT(id) DO UPDATE SET
-		snapshot = excluded.snapshot,
-		updated_at = CURRENT_TIMESTAMP;`
-
-	_, err := s.db.Exec(query, id, snapshot)
+	_, err := s.db.Exec(sqliteQueries["SaveSnapshot"], id, snapshot)
 	if err != nil {
 		return fmt.Errorf("failed to save snapshot for '%s': %w", id, err)
 	}
@@ -64,10 +66,8 @@ func (s *SqliteSnapshotStore) Save(id string, snapshot []byte) error {
 
 // Load retrieves a linear memory snapshot from the database.
 func (s *SqliteSnapshotStore) Load(id string) ([]byte, error) {
-	query := `SELECT snapshot FROM snapshots WHERE id = ?;`
-
 	var snapshot []byte
-	err := s.db.QueryRow(query, id).Scan(&snapshot)
+	err := s.db.QueryRow(sqliteQueries["LoadSnapshot"], id).Scan(&snapshot)
 	if err == sql.ErrNoRows {
 		return nil, sql.ErrNoRows
 	} else if err != nil {
@@ -84,14 +84,7 @@ func (s *SqliteSnapshotStore) SaveDeltas(id string, deltas map[int][]byte) error
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	query := `
-	INSERT INTO memory_deltas (instance_id, page_index, data, updated_at)
-	VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-	ON CONFLICT(instance_id, page_index) DO UPDATE SET
-		data = excluded.data,
-		updated_at = CURRENT_TIMESTAMP;`
-
-	stmt, err := tx.Prepare(query)
+	stmt, err := tx.Prepare(sqliteQueries["SaveDeltas"])
 	if err != nil {
 		return fmt.Errorf("failed to prepare SaveDeltas query: %w", err)
 	}
@@ -109,8 +102,7 @@ func (s *SqliteSnapshotStore) SaveDeltas(id string, deltas map[int][]byte) error
 
 // LoadDeltas retrieves delta pages from the database
 func (s *SqliteSnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
-	query := `SELECT page_index, data FROM memory_deltas WHERE instance_id = ?;`
-	rows, err := s.db.Query(query, id)
+	rows, err := s.db.Query(sqliteQueries["LoadDeltas"], id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query memory deltas: %w", err)
 	}
@@ -130,15 +122,7 @@ func (s *SqliteSnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
 
 // SaveOplog records API call in database
 func (s *SqliteSnapshotStore) SaveOplog(id string, callIndex int, apiName string, request []byte, response []byte) error {
-	query := `
-	INSERT INTO oplog (instance_id, call_index, api_name, request_payload, response_payload, created_at)
-	VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-	ON CONFLICT(instance_id, call_index) DO UPDATE SET
-		api_name = excluded.api_name,
-		request_payload = excluded.request_payload,
-		response_payload = excluded.response_payload;`
-
-	_, err := s.db.Exec(query, id, callIndex, apiName, request, response)
+	_, err := s.db.Exec(sqliteQueries["SaveOplog"], id, callIndex, apiName, request, response)
 	if err != nil {
 		return fmt.Errorf("failed to save oplog: %w", err)
 	}
@@ -147,8 +131,7 @@ func (s *SqliteSnapshotStore) SaveOplog(id string, callIndex int, apiName string
 
 // LoadOplog retrieves the execution log
 func (s *SqliteSnapshotStore) LoadOplog(id string) ([]OplogEntry, error) {
-	query := `SELECT call_index, api_name, request_payload, response_payload FROM oplog WHERE instance_id = ? ORDER BY call_index ASC;`
-	rows, err := s.db.Query(query, id)
+	rows, err := s.db.Query(sqliteQueries["LoadOplog"], id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query oplog: %w", err)
 	}
@@ -173,18 +156,17 @@ func (s *SqliteSnapshotStore) Delete(id string) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	_, _ = tx.Exec("DELETE FROM snapshots WHERE id = ?;", id)
-	_, _ = tx.Exec("DELETE FROM memory_deltas WHERE instance_id = ?;", id)
-	_, _ = tx.Exec("DELETE FROM oplog WHERE instance_id = ?;", id)
-	_, _ = tx.Exec("DELETE FROM instance_meta WHERE instance_id = ?;", id)
+	_, _ = tx.Exec(sqliteQueries["DeleteSnapshots"], id)
+	_, _ = tx.Exec(sqliteQueries["DeleteDeltas"], id)
+	_, _ = tx.Exec(sqliteQueries["DeleteOplog"], id)
+	_, _ = tx.Exec(sqliteQueries["DeleteMeta"], id)
 
 	return tx.Commit()
 }
 
 // TruncateDeltas deletes all memory deltas for the instance.
 func (s *SqliteSnapshotStore) TruncateDeltas(id string) error {
-	query := `DELETE FROM memory_deltas WHERE instance_id = ?;`
-	_, err := s.db.Exec(query, id)
+	_, err := s.db.Exec(sqliteQueries["TruncateDeltas"], id)
 	if err != nil {
 		return fmt.Errorf("failed to truncate deltas: %w", err)
 	}
@@ -193,8 +175,7 @@ func (s *SqliteSnapshotStore) TruncateDeltas(id string) error {
 
 // TruncateOplog deletes all oplog entries for the instance at or below the given call index.
 func (s *SqliteSnapshotStore) TruncateOplog(id string, beforeCallIndex int) error {
-	query := `DELETE FROM oplog WHERE instance_id = ? AND call_index <= ?;`
-	_, err := s.db.Exec(query, id, beforeCallIndex)
+	_, err := s.db.Exec(sqliteQueries["TruncateOplog"], id, beforeCallIndex)
 	if err != nil {
 		return fmt.Errorf("failed to truncate oplog: %w", err)
 	}
@@ -203,9 +184,8 @@ func (s *SqliteSnapshotStore) TruncateOplog(id string, beforeCallIndex int) erro
 
 // LoadMetadata retrieves the instance metadata from SQLite.
 func (s *SqliteSnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
-	query := `SELECT instance_id, wasm_hash, version FROM instance_meta WHERE instance_id = ?;`
 	var meta InstanceMeta
-	err := s.db.QueryRow(query, id).Scan(&meta.InstanceID, &meta.WasmHash, &meta.Version)
+	err := s.db.QueryRow(sqliteQueries["LoadMetadata"], id).Scan(&meta.InstanceID, &meta.WasmHash, &meta.Version)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
@@ -217,8 +197,7 @@ func (s *SqliteSnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
 // SaveMetadata saves metadata or atomically updates version via CAS.
 func (s *SqliteSnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 	if meta.Version == 0 {
-		query := `INSERT INTO instance_meta (instance_id, wasm_hash, version, updated_at) VALUES (?, ?, 1, CURRENT_TIMESTAMP);`
-		_, err := s.db.Exec(query, meta.InstanceID, meta.WasmHash)
+		_, err := s.db.Exec(sqliteQueries["SaveMetadataInsert"], meta.InstanceID, meta.WasmHash)
 		if err != nil {
 			return false, nil
 		}
@@ -226,8 +205,7 @@ func (s *SqliteSnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 		return true, nil
 	}
 
-	query := `UPDATE instance_meta SET version = ?, wasm_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE instance_id = ? AND version = ?;`
-	res, err := s.db.Exec(query, meta.Version+1, meta.WasmHash, meta.InstanceID, meta.Version)
+	res, err := s.db.Exec(sqliteQueries["SaveMetadataUpdate"], meta.Version+1, meta.WasmHash, meta.InstanceID, meta.Version)
 	if err != nil {
 		return false, fmt.Errorf("failed to update metadata: %w", err)
 	}
@@ -244,8 +222,7 @@ func (s *SqliteSnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 
 // SaveWasm saves a WASM module binary by its SHA256 hash.
 func (s *SqliteSnapshotStore) SaveWasm(hash string, wasmBytes []byte) error {
-	query := `INSERT OR IGNORE INTO wasm_modules (hash, wasm_bytes) VALUES (?, ?);`
-	_, err := s.db.Exec(query, hash, wasmBytes)
+	_, err := s.db.Exec(sqliteQueries["SaveWasm"], hash, wasmBytes)
 	if err != nil {
 		return fmt.Errorf("failed to save WASM module %s: %w", hash, err)
 	}
@@ -254,9 +231,8 @@ func (s *SqliteSnapshotStore) SaveWasm(hash string, wasmBytes []byte) error {
 
 // LoadWasm loads a WASM module binary by its SHA256 hash.
 func (s *SqliteSnapshotStore) LoadWasm(hash string) ([]byte, error) {
-	query := `SELECT wasm_bytes FROM wasm_modules WHERE hash = ?;`
 	var wasmBytes []byte
-	err := s.db.QueryRow(query, hash).Scan(&wasmBytes)
+	err := s.db.QueryRow(sqliteQueries["LoadWasm"], hash).Scan(&wasmBytes)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("wasm module not found: %s", hash)
 	} else if err != nil {
