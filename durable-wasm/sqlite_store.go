@@ -78,6 +78,33 @@ func NewSqliteSnapshotStore(dbPath string) (*SqliteSnapshotStore, error) {
 		return nil, fmt.Errorf("failed to create oplog table: %w", err)
 	}
 
+	// Create table to hold instance metadata (OCC & WASM hash verification)
+	createMetaTableSQL := `
+	CREATE TABLE IF NOT EXISTS instance_meta (
+		instance_id TEXT PRIMARY KEY,
+		wasm_hash TEXT NOT NULL,
+		version INTEGER NOT NULL,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`
+	_, err = db.Exec(createMetaTableSQL)
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to create instance_meta table: %w", err)
+	}
+
+	// Create table to hold WASM modules (Multi-version Execution)
+	createWasmTableSQL := `
+	CREATE TABLE IF NOT EXISTS wasm_modules (
+		hash TEXT PRIMARY KEY,
+		wasm_bytes BLOB NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`
+	_, err = db.Exec(createWasmTableSQL)
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to create wasm_modules table: %w", err)
+	}
+
 	return &SqliteSnapshotStore{db: db}, nil
 }
 
@@ -211,8 +238,93 @@ func (s *SqliteSnapshotStore) Delete(id string) error {
 	_, _ = tx.Exec("DELETE FROM snapshots WHERE id = ?;", id)
 	_, _ = tx.Exec("DELETE FROM memory_deltas WHERE instance_id = ?;", id)
 	_, _ = tx.Exec("DELETE FROM oplog WHERE instance_id = ?;", id)
+	_, _ = tx.Exec("DELETE FROM instance_meta WHERE instance_id = ?;", id)
 
 	return tx.Commit()
+}
+
+// TruncateDeltas deletes all memory deltas for the instance.
+func (s *SqliteSnapshotStore) TruncateDeltas(id string) error {
+	query := `DELETE FROM memory_deltas WHERE instance_id = ?;`
+	_, err := s.db.Exec(query, id)
+	if err != nil {
+		return fmt.Errorf("failed to truncate deltas: %w", err)
+	}
+	return nil
+}
+
+// TruncateOplog deletes all oplog entries for the instance at or below the given call index.
+func (s *SqliteSnapshotStore) TruncateOplog(id string, beforeCallIndex int) error {
+	query := `DELETE FROM oplog WHERE instance_id = ? AND call_index <= ?;`
+	_, err := s.db.Exec(query, id, beforeCallIndex)
+	if err != nil {
+		return fmt.Errorf("failed to truncate oplog: %w", err)
+	}
+	return nil
+}
+
+// LoadMetadata retrieves the instance metadata from SQLite.
+func (s *SqliteSnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
+	query := `SELECT instance_id, wasm_hash, version FROM instance_meta WHERE instance_id = ?;`
+	var meta InstanceMeta
+	err := s.db.QueryRow(query, id).Scan(&meta.InstanceID, &meta.WasmHash, &meta.Version)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to load metadata: %w", err)
+	}
+	return &meta, nil
+}
+
+// SaveMetadata saves metadata or atomically updates version via CAS.
+func (s *SqliteSnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
+	if meta.Version == 0 {
+		query := `INSERT INTO instance_meta (instance_id, wasm_hash, version, updated_at) VALUES (?, ?, 1, CURRENT_TIMESTAMP);`
+		_, err := s.db.Exec(query, meta.InstanceID, meta.WasmHash)
+		if err != nil {
+			return false, nil
+		}
+		meta.Version = 1
+		return true, nil
+	}
+
+	query := `UPDATE instance_meta SET version = ?, wasm_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE instance_id = ? AND version = ?;`
+	res, err := s.db.Exec(query, meta.Version+1, meta.WasmHash, meta.InstanceID, meta.Version)
+	if err != nil {
+		return false, fmt.Errorf("failed to update metadata: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if rows == 0 {
+		return false, nil
+	}
+	meta.Version++
+	return true, nil
+}
+
+// SaveWasm saves a WASM module binary by its SHA256 hash.
+func (s *SqliteSnapshotStore) SaveWasm(hash string, wasmBytes []byte) error {
+	query := `INSERT OR IGNORE INTO wasm_modules (hash, wasm_bytes) VALUES (?, ?);`
+	_, err := s.db.Exec(query, hash, wasmBytes)
+	if err != nil {
+		return fmt.Errorf("failed to save WASM module %s: %w", hash, err)
+	}
+	return nil
+}
+
+// LoadWasm loads a WASM module binary by its SHA256 hash.
+func (s *SqliteSnapshotStore) LoadWasm(hash string) ([]byte, error) {
+	query := `SELECT wasm_bytes FROM wasm_modules WHERE hash = ?;`
+	var wasmBytes []byte
+	err := s.db.QueryRow(query, hash).Scan(&wasmBytes)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("wasm module not found: %s", hash)
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to load WASM module %s: %w", hash, err)
+	}
+	return wasmBytes, nil
 }
 
 // Close gracefully closes the SQLite database connection.

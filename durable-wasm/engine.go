@@ -2,6 +2,8 @@ package durable
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
@@ -9,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"unsafe"
@@ -16,6 +19,18 @@ import (
 	"github.com/bytecodealliance/wasmtime-go/v20"
 	"github.com/nativebpm/httpstream"
 )
+
+var (
+	ErrWasmVersionMismatch = fmt.Errorf("wasm module hash mismatch")
+	ErrConcurrentExecution = fmt.Errorf("concurrent execution detected (OCC fencing)")
+)
+
+// InstanceMeta holds execution metadata for safety checks and OCC.
+type InstanceMeta struct {
+	InstanceID string `json:"instance_id"`
+	WasmHash   string `json:"wasm_hash"`
+	Version    int    `json:"version"`
+}
 
 // OplogEntry represents a single external call log.
 type OplogEntry struct {
@@ -34,10 +49,20 @@ type SnapshotStore interface {
 	// Delta Snapshots
 	SaveDeltas(id string, deltas map[int][]byte) error
 	LoadDeltas(id string) (map[int][]byte, error)
+	TruncateDeltas(id string) error
 
 	// Oplog
 	SaveOplog(id string, callIndex int, apiName string, request []byte, response []byte) error
 	LoadOplog(id string) ([]OplogEntry, error)
+	TruncateOplog(id string, beforeCallIndex int) error
+
+	// Metadata & OCC
+	SaveMetadata(meta *InstanceMeta) (bool, error)
+	LoadMetadata(id string) (*InstanceMeta, error)
+
+	// WASM Registry for Multi-Version Support
+	SaveWasm(hash string, wasmBytes []byte) error
+	LoadWasm(hash string) ([]byte, error)
 }
 
 // FileSnapshotStore implements SnapshotStore using the local file system.
@@ -82,6 +107,15 @@ func (f *FileSnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
 	return deltas, err
 }
 
+func (f *FileSnapshotStore) TruncateDeltas(id string) error {
+	path := fmt.Sprintf("%s_deltas.json", id)
+	if f.Dir != "" {
+		path = fmt.Sprintf("%s/%s_deltas.json", f.Dir, id)
+	}
+	_ = os.Remove(path)
+	return nil
+}
+
 func (f *FileSnapshotStore) SaveOplog(id string, callIndex int, apiName string, request []byte, response []byte) error {
 	path := fmt.Sprintf("%s_oplog.json", id)
 	if f.Dir != "" {
@@ -122,19 +156,123 @@ func (f *FileSnapshotStore) LoadOplog(id string) ([]OplogEntry, error) {
 	return list, err
 }
 
+func (f *FileSnapshotStore) TruncateOplog(id string, beforeCallIndex int) error {
+	path := fmt.Sprintf("%s_oplog.json", id)
+	if f.Dir != "" {
+		path = fmt.Sprintf("%s/%s_oplog.json", f.Dir, id)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	var list []OplogEntry
+	if err := json.Unmarshal(data, &list); err != nil {
+		return err
+	}
+	var filtered []OplogEntry
+	for _, entry := range list {
+		if entry.CallIndex > beforeCallIndex {
+			filtered = append(filtered, entry)
+		}
+	}
+	newData, err := json.Marshal(filtered)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, newData, 0644)
+}
+
+func (f *FileSnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
+	path := fmt.Sprintf("%s_meta.json", meta.InstanceID)
+	if f.Dir != "" {
+		path = fmt.Sprintf("%s/%s_meta.json", f.Dir, meta.InstanceID)
+	}
+	var existing InstanceMeta
+	data, err := os.ReadFile(path)
+	if err == nil {
+		_ = json.Unmarshal(data, &existing)
+		if meta.Version == 0 {
+			return false, nil
+		}
+		if existing.Version != meta.Version {
+			return false, nil
+		}
+	} else if !os.IsNotExist(err) {
+		return false, err
+	} else if meta.Version > 0 {
+		return false, nil
+	}
+
+	meta.Version++
+	newData, err := json.Marshal(meta)
+	if err != nil {
+		return false, err
+	}
+	err = os.WriteFile(path, newData, 0644)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (f *FileSnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
+	path := fmt.Sprintf("%s_meta.json", id)
+	if f.Dir != "" {
+		path = fmt.Sprintf("%s/%s_meta.json", f.Dir, id)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var meta InstanceMeta
+	err = json.Unmarshal(data, &meta)
+	if err != nil {
+		return nil, err
+	}
+	return &meta, nil
+}
+
 func (f *FileSnapshotStore) Delete(id string) error {
 	path := fmt.Sprintf("%s.bin", id)
 	pathDeltas := fmt.Sprintf("%s_deltas.json", id)
 	pathOplog := fmt.Sprintf("%s_oplog.json", id)
+	pathMeta := fmt.Sprintf("%s_meta.json", id)
 	if f.Dir != "" {
 		path = fmt.Sprintf("%s/%s.bin", f.Dir, id)
 		pathDeltas = fmt.Sprintf("%s/%s_deltas.json", f.Dir, id)
 		pathOplog = fmt.Sprintf("%s/%s_oplog.json", f.Dir, id)
+		pathMeta = fmt.Sprintf("%s/%s_meta.json", f.Dir, id)
 	}
 	_ = os.Remove(path)
 	_ = os.Remove(pathDeltas)
 	_ = os.Remove(pathOplog)
+	_ = os.Remove(pathMeta)
 	return nil
+}
+
+func (f *FileSnapshotStore) SaveWasm(hash string, wasmBytes []byte) error {
+	path := fmt.Sprintf("wasm_%s.wasm", hash)
+	if f.Dir != "" {
+		path = fmt.Sprintf("%s/wasm_%s.wasm", f.Dir, hash)
+	}
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	}
+	return os.WriteFile(path, wasmBytes, 0644)
+}
+
+func (f *FileSnapshotStore) LoadWasm(hash string) ([]byte, error) {
+	path := fmt.Sprintf("wasm_%s.wasm", hash)
+	if f.Dir != "" {
+		path = fmt.Sprintf("%s/wasm_%s.wasm", f.Dir, hash)
+	}
+	return os.ReadFile(path)
 }
 
 // Engine coordinates execution, compilation, and snapshotting of WASM modules.
@@ -143,6 +281,7 @@ type Engine struct {
 	module     *wasmtime.Module
 	store      SnapshotStore
 	httpClient *http.Client
+	wasmHash   string
 }
 
 // Session tracks the dynamic execution state of a running WASM instance.
@@ -154,6 +293,7 @@ type Session struct {
 	serverAddr              string
 	shouldCrashOnCheckpoint bool
 	crashed                 bool
+	meta                    *InstanceMeta
 
 	// Dirty-page snapshot hashes and Oplog progress
 	pageHashes map[int]uint64
@@ -170,8 +310,25 @@ type Session struct {
 
 // NewEngine creates a new reusable WASM Durable Execution Engine.
 func NewEngine(wasmPath string, store SnapshotStore) (*Engine, error) {
-	wasmEngine := wasmtime.NewEngine()
-	module, err := wasmtime.NewModuleFromFile(wasmEngine, wasmPath)
+	// Read WASM bytes to calculate SHA256 hash (WASM Module Versioning)
+	wasmBytes, err := os.ReadFile(wasmPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read WASM module file: %w", err)
+	}
+	hash := sha256.Sum256(wasmBytes)
+	wasmHash := hex.EncodeToString(hash[:])
+
+	// Save WASM module in registry for future multi-version execution
+	err = store.SaveWasm(wasmHash, wasmBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to save WASM module in registry: %w", err)
+	}
+
+	// Configure Wasmtime with strict float determinism (NaN Canonicalization)
+	config := wasmtime.NewConfig()
+
+	wasmEngine := wasmtime.NewEngineWithConfig(config)
+	module, err := wasmtime.NewModule(wasmEngine, wasmBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compile WASM module: %w", err)
 	}
@@ -180,6 +337,7 @@ func NewEngine(wasmPath string, store SnapshotStore) (*Engine, error) {
 		wasmEngine: wasmEngine,
 		module:     module,
 		store:      store,
+		wasmHash:   wasmHash,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 			Transport: &http.Transport{
@@ -195,11 +353,42 @@ func NewEngine(wasmPath string, store SnapshotStore) (*Engine, error) {
 // Execute runs the WASM instance with a given entrypoint and session context.
 // If it finds a saved snapshot, it automatically restores the linear memory.
 func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string, shouldCrash bool) (bool, error) {
+	// Load or initialize metadata (WASM Module Versioning & OCC)
+	meta, err := e.store.LoadMetadata(instanceID)
+	if err != nil {
+		return false, fmt.Errorf("failed to load metadata: %w", err)
+	}
+
+	var runModule *wasmtime.Module
+	if meta != nil {
+		if meta.WasmHash != e.wasmHash {
+			slog.Info("[ENGINE] Instance requires a different WASM module version", "instance_id", instanceID, "required_hash", meta.WasmHash, "current_hash", e.wasmHash)
+			loadedBytes, err := e.store.LoadWasm(meta.WasmHash)
+			if err != nil {
+				return false, fmt.Errorf("failed to load required WASM version %s from registry: %w: %w", meta.WasmHash, err, ErrWasmVersionMismatch)
+			}
+			runModule, err = wasmtime.NewModule(e.wasmEngine, loadedBytes)
+			if err != nil {
+				return false, fmt.Errorf("failed to compile historical WASM module %s: %w", meta.WasmHash, err)
+			}
+		} else {
+			runModule = e.module
+		}
+	} else {
+		meta = &InstanceMeta{
+			InstanceID: instanceID,
+			WasmHash:   e.wasmHash,
+			Version:    0,
+		}
+		runModule = e.module
+	}
+
 	session := &Session{
 		engine:                  e,
 		instanceID:              instanceID,
 		serverAddr:              serverAddr,
 		shouldCrashOnCheckpoint: shouldCrash,
+		meta:                    meta,
 	}
 
 	// Guarantee cleanup of HTTP connections and pipes on return
@@ -223,7 +412,7 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 
 	// Create Linker and define WASI imports
 	linker := wasmtime.NewLinker(e.wasmEngine)
-	err := linker.DefineWasi()
+	err = linker.DefineWasi()
 	if err != nil {
 		return false, fmt.Errorf("failed to link WASI: %w", err)
 	}
@@ -231,6 +420,18 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 	// Register Host Function: checkpoint (using local closure)
 	err = linker.DefineFunc(store, "env", "checkpoint", func(caller *wasmtime.Caller) *wasmtime.Trap {
 		slog.Info("[ENGINE] 'checkpoint' invoked", "instance_id", session.instanceID)
+
+		// 1. Атомарный Compare-And-Swap версии метаданных (OCC)
+		session.meta.WasmHash = e.wasmHash
+		ok, err := e.store.SaveMetadata(session.meta)
+		if err != nil {
+			slog.Error("[ENGINE] Failed to save metadata", "error", err)
+			return wasmtime.NewTrap("failed to save metadata")
+		}
+		if !ok {
+			slog.Warn("[ENGINE] OCC conflict detected. Aborting execution.")
+			return wasmtime.NewTrap("concurrent_execution_detected")
+		}
 
 		ext := caller.GetExport("memory")
 		if ext == nil {
@@ -246,46 +447,60 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 		}
 		memoryBytes := unsafe.Slice((*byte)(ptr), size)
 
-		// 1. Full Snapshot (backward compatibility)
-		snapshotCopy := make([]byte, len(memoryBytes))
-		copy(snapshotCopy, memoryBytes)
-		err := e.store.Save(session.instanceID, snapshotCopy)
-		if err != nil {
-			slog.Error("[ENGINE] Failed to save full snapshot", "error", err)
-			return wasmtime.NewTrap("failed to write snapshot")
-		}
+		// 2. Snapshotting strategy (Full vs Deltas) & Truncation
+		// Делаем полный снапшот при первом чекпоинте (Version = 1, так как SaveMetadata только что инкрементировал её с 0 до 1)
+		// или каждые 5 чекпоинтов.
+		isFullSnapshot := session.meta.Version == 1 || (session.meta.Version > 1 && session.meta.Version%5 == 0)
 
-		// 2. Dirty-Page delta snapshotting
-		blockSize := 4096
-		numBlocks := len(memoryBytes) / blockSize
-		deltas := make(map[int][]byte)
-		for i := 0; i < numBlocks; i++ {
-			start := i * blockSize
-			end := start + blockSize
-			if end > len(memoryBytes) {
-				end = len(memoryBytes)
-			}
-			blockData := memoryBytes[start:end]
-			h := fnv.New64a()
-			h.Write(blockData)
-			hashVal := h.Sum64()
-
-			prevHash, exists := session.pageHashes[i]
-			if !exists || prevHash != hashVal {
-				blockCopy := make([]byte, len(blockData))
-				copy(blockCopy, blockData)
-				deltas[i] = blockCopy
-				session.pageHashes[i] = hashVal
-			}
-		}
-
-		if len(deltas) > 0 {
-			err = e.store.SaveDeltas(session.instanceID, deltas)
+		if isFullSnapshot {
+			slog.Info("[ENGINE] Writing Full Memory Snapshot", "version", session.meta.Version)
+			snapshotCopy := make([]byte, len(memoryBytes))
+			copy(snapshotCopy, memoryBytes)
+			err := e.store.Save(session.instanceID, snapshotCopy)
 			if err != nil {
-				slog.Error("[ENGINE] Failed to save memory deltas", "error", err)
-				return wasmtime.NewTrap("failed to write memory deltas")
+				slog.Error("[ENGINE] Failed to save full snapshot", "error", err)
+				return wasmtime.NewTrap("failed to write snapshot")
 			}
-			slog.Info("[ENGINE] Memory deltas successfully saved", "dirty_blocks", len(deltas))
+
+			// Truncate Oplog & memory_deltas only for periodic full snapshots (Version > 1)
+			if session.meta.Version > 1 {
+				slog.Info("[ENGINE] Truncating Oplog and memory deltas", "before_call_index", session.callIndex)
+				_ = e.store.TruncateOplog(session.instanceID, session.callIndex)
+				_ = e.store.TruncateDeltas(session.instanceID)
+			}
+		} else {
+			// Инкрементальный чекпоинт (Dirty-Page deltas)
+			blockSize := 4096
+			numBlocks := len(memoryBytes) / blockSize
+			deltas := make(map[int][]byte)
+			for i := 0; i < numBlocks; i++ {
+				start := i * blockSize
+				end := start + blockSize
+				if end > len(memoryBytes) {
+					end = len(memoryBytes)
+				}
+				blockData := memoryBytes[start:end]
+				h := fnv.New64a()
+				h.Write(blockData)
+				hashVal := h.Sum64()
+
+				prevHash, exists := session.pageHashes[i]
+				if !exists || prevHash != hashVal {
+					blockCopy := make([]byte, len(blockData))
+					copy(blockCopy, blockData)
+					deltas[i] = blockCopy
+					session.pageHashes[i] = hashVal
+				}
+			}
+
+			if len(deltas) > 0 {
+				err = e.store.SaveDeltas(session.instanceID, deltas)
+				if err != nil {
+					slog.Error("[ENGINE] Failed to save memory deltas", "error", err)
+					return wasmtime.NewTrap("failed to write memory deltas")
+				}
+				slog.Info("[ENGINE] Memory deltas successfully saved", "dirty_blocks", len(deltas))
+			}
 		}
 
 		if session.shouldCrashOnCheckpoint {
@@ -298,6 +513,41 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 	})
 	if err != nil {
 		return false, fmt.Errorf("failed to register 'checkpoint': %w", err)
+	}
+
+	// Register Host Function: host_get_time
+	err = linker.DefineFunc(store, "env", "host_get_time", func(caller *wasmtime.Caller) int64 {
+		session.callIndex++
+		callIdx := session.callIndex
+
+		// Check Oplog Replay for host_get_time
+		oplog, err := e.store.LoadOplog(session.instanceID)
+		if err == nil {
+			for _, entry := range oplog {
+				if entry.CallIndex == callIdx && entry.ApiName == "host_get_time" {
+					slog.Info("[ENGINE] Oplog Replay (Time)", "call_index", callIdx)
+					val, err := strconv.ParseInt(string(entry.ResponsePayload), 10, 64)
+					if err == nil {
+						return val
+					}
+					slog.Error("[ENGINE] Failed to parse time from oplog", "error", err)
+				}
+			}
+		}
+
+		// Live execution
+		nowNano := time.Now().UnixNano()
+		slog.Info("[ENGINE] Oplog Execution: host_get_time", "call_index", callIdx, "time", nowNano)
+
+		payload := []byte(strconv.FormatInt(nowNano, 10))
+		err = e.store.SaveOplog(session.instanceID, callIdx, "host_get_time", nil, payload)
+		if err != nil {
+			slog.Error("[ENGINE] Failed to save Oplog for host_get_time", "error", err)
+		}
+		return nowNano
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to register 'host_get_time': %w", err)
 	}
 
 	// Register Host Function: host_call_api
@@ -339,7 +589,7 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 		oplog, err := e.store.LoadOplog(session.instanceID)
 		if err == nil {
 			for _, entry := range oplog {
-				if entry.CallIndex == callIdx {
+				if entry.CallIndex == callIdx && entry.ApiName == apiName {
 					slog.Info("[ENGINE] Oplog Replay", "api", apiName, "call_index", callIdx)
 					if int(respMaxLen) < len(entry.ResponsePayload) {
 						slog.Error("[ENGINE] Oplog Replay: response buffer too small")
@@ -414,7 +664,7 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 	}
 
 	// Instantiate the WASM module
-	instance, err := linker.Instantiate(store, e.module)
+	instance, err := linker.Instantiate(store, runModule)
 	if err != nil {
 		return false, fmt.Errorf("failed to instantiate WASM: %w", err)
 	}
@@ -426,10 +676,45 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 	}
 	session.memory = ext.Memory()
 
-	// RESTORE: Check if there is an existing snapshot to restore (tries deltas first, then full snapshot)
+	// RESTORE: Check if there is an existing snapshot to restore
+	session.pageHashes = make(map[int]uint64)
+
+	// 1. Load full snapshot if exists
+	snapshot, err := e.store.Load(instanceID)
+	if err == nil && len(snapshot) > 0 {
+		slog.Info("[ENGINE] Found saved full snapshot. Restoring memory...", "instance_id", instanceID)
+		currentPages := session.memory.Size(store)
+		neededPages := (uint64(len(snapshot)) + 65535) / 65536
+		if neededPages > currentPages {
+			growPages := neededPages - currentPages
+			slog.Info("[ENGINE] Growing memory", "pages", growPages)
+			_, err = session.memory.Grow(store, growPages)
+			if err != nil {
+				return false, fmt.Errorf("failed to grow memory for snapshot: %w", err)
+			}
+		}
+		ptr := session.memory.Data(store)
+		size := session.memory.DataSize(store)
+		memoryBytes := unsafe.Slice((*byte)(ptr), size)
+		copy(memoryBytes, snapshot)
+
+		// Populate base hashes from full snapshot
+		blockSize := 4096
+		numBlocks := len(memoryBytes) / blockSize
+		for i := 0; i < numBlocks; i++ {
+			start := i * blockSize
+			end := start + blockSize
+			h := fnv.New64a()
+			h.Write(memoryBytes[start:end])
+			session.pageHashes[i] = h.Sum64()
+		}
+		slog.Info("[ENGINE] Memory successfully restored from full snapshot")
+	}
+
+	// 2. Load memory deltas if exists, and overlay them
 	deltas, err := e.store.LoadDeltas(instanceID)
 	if err == nil && len(deltas) > 0 {
-		slog.Info("[ENGINE] Found saved memory deltas. Restoring memory...", "instance_id", instanceID)
+		slog.Info("[ENGINE] Found saved memory deltas. Applying to memory...", "instance_id", instanceID)
 		maxPageIndex := 0
 		for idx := range deltas {
 			if idx > maxPageIndex {
@@ -451,7 +736,6 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 		size := session.memory.DataSize(store)
 		memoryBytes := unsafe.Slice((*byte)(ptr), size)
 
-		session.pageHashes = make(map[int]uint64)
 		for idx, data := range deltas {
 			start := idx * 4096
 			copy(memoryBytes[start:start+len(data)], data)
@@ -459,39 +743,7 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 			h.Write(data)
 			session.pageHashes[idx] = h.Sum64()
 		}
-		slog.Info("[ENGINE] Memory successfully restored from deltas", "restored_pages", len(deltas))
-	} else {
-		session.pageHashes = make(map[int]uint64)
-		snapshot, err := e.store.Load(instanceID)
-		if err == nil && len(snapshot) > 0 {
-			slog.Info("[ENGINE] Found saved full snapshot. Restoring memory...", "instance_id", instanceID)
-			currentPages := session.memory.Size(store)
-			neededPages := (uint64(len(snapshot)) + 65535) / 65536
-			if neededPages > currentPages {
-				growPages := neededPages - currentPages
-				slog.Info("[ENGINE] Growing memory", "pages", growPages)
-				_, err = session.memory.Grow(store, growPages)
-				if err != nil {
-					return false, fmt.Errorf("failed to grow memory for snapshot: %w", err)
-				}
-			}
-			ptr := session.memory.Data(store)
-			size := session.memory.DataSize(store)
-			memoryBytes := unsafe.Slice((*byte)(ptr), size)
-			copy(memoryBytes, snapshot)
-
-			// Populate base page hashes
-			blockSize := 4096
-			numBlocks := len(memoryBytes) / blockSize
-			for i := 0; i < numBlocks; i++ {
-				start := i * blockSize
-				end := start + blockSize
-				h := fnv.New64a()
-				h.Write(memoryBytes[start:end])
-				session.pageHashes[i] = h.Sum64()
-			}
-			slog.Info("[ENGINE] Memory full snapshot successfully restored")
-		}
+		slog.Info("[ENGINE] Memory deltas successfully applied", "restored_pages", len(deltas))
 	}
 
 	// Locate entrypoint
@@ -505,6 +757,9 @@ func (e *Engine) Execute(instanceID string, entrypoint string, serverAddr string
 	if err != nil {
 		if session.crashed {
 			return true, err // True indicates a simulated crash occurred
+		}
+		if strings.Contains(err.Error(), "concurrent_execution_detected") {
+			return false, ErrConcurrentExecution
 		}
 		return false, err
 	}
