@@ -13,6 +13,7 @@ require (
 	github.com/nativebpm/connectors/temporal v0.0.7
 	github.com/nativebpm/httpstream v0.0.3
 	github.com/stretchr/testify v1.11.1
+	github.com/nativebpm/connectors/wasman/runner v0.0.0
 	go.temporal.io/sdk v1.33.0
 )
 
@@ -58,3 +59,6 @@ require (
 	google.golang.org/protobuf v1.34.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/nativebpm/connectors/wasman/runner => ./runner
+

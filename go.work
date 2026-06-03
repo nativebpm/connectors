@@ -9,4 +9,5 @@ use (
 	./telegram
 	./temporal
 	./wasman
+	./wasman/runner
 )

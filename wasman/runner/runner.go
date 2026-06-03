@@ -1,6 +1,6 @@
 //go:build wasm
 
-package wasman
+package runner
 
 import (
 	"errors"
