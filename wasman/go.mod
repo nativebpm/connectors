@@ -13,7 +13,7 @@ require (
 	github.com/nativebpm/connectors/temporal v0.0.7
 	github.com/nativebpm/httpstream v0.0.3
 	github.com/stretchr/testify v1.11.1
-	github.com/nativebpm/connectors/wasman/runner v0.0.0
+	github.com/nativebpm/connectors/wasman/runner v0.0.1
 	go.temporal.io/sdk v1.33.0
 )
 
