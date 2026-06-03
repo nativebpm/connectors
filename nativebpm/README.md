@@ -110,3 +110,14 @@ The SDK client provides builder pattern methods (Fluent API) for action requests
 | `client.ListInstances(ctx)` | `GET /api/instances` | Lists all execution instance records. |
 | `client.GetInstance(ctx, id)` | `GET /api/instances/{id}` | Fetches active state metadata. |
 | `client.GetInstanceLogs(ctx, id)` | `GET /api/instances/{id}/logs` | Retrieves audit trail log events. |
+
+---
+
+## Runnable Examples
+
+For complete, ready-to-run examples and benchmarks, check out the **[examples](file:///Users/user/github.com/nativebpm/connectors/nativebpm/examples)** directory:
+
+*   **[Simple Example](file:///Users/user/github.com/nativebpm/connectors/nativebpm/examples/simple)**: Demonstrates process deployment, instance startup, task completion, and audit log query using a simple User Task process.
+*   **[Complex Example](file:///Users/user/github.com/nativebpm/connectors/nativebpm/examples/complex)**: Explains exclusive gateway branching (`XOR`) with conditions evaluating active workflow routing.
+*   **[Load Testing](file:///Users/user/github.com/nativebpm/connectors/nativebpm/examples/loadtest)**: High-concurrency performance benchmark demonstrating execution throughputs up to **750+ RPS** against the optimized PostgreSQL backend.
+*   **[Hybrid Camunda Bridge](file:///Users/user/github.com/nativebpm/connectors/nativebpm/examples/hybrid-camunda)**: Adapts an external Camunda engine with the NativeBPM platform to delegate task execution.
