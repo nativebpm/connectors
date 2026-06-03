@@ -57,11 +57,12 @@ jobs:
             exit 1
           fi
           
-          # Try to get tag annotation (if it's an annotated tag)
-          ANNOTATION=$(git cat-file tag "$FULL_TAG" 2>/dev/null | sed '1,/^$/d' || echo "")
-          
-          if [[ -z "$ANNOTATION" ]]; then
-            echo "ℹ️ Tag '$FULL_TAG' is lightweight or has no annotation message. Using fallback description."
+          # Check if tag is annotated or lightweight
+          TAG_TYPE=$(git cat-file -t "$FULL_TAG" 2>/dev/null || echo "commit")
+          if [[ "$TAG_TYPE" == "tag" ]]; then
+            ANNOTATION=$(git cat-file tag "$FULL_TAG" | sed '1,/^$/d')
+          else
+            echo "ℹ️ Tag '$FULL_TAG' is lightweight. Using fallback description."
             ANNOTATION="Release $TAG_NAME of $MODULE_NAME module"
           fi
           
