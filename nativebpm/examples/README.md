@@ -6,6 +6,7 @@ This directory contains executable examples demonstrating how to interact with t
 
 *   **[`simple/`](file:///Users/user/github.com/nativebpm/connectors/nativebpm/examples/simple)**: A basic workflow containing a single manual `User Task` (Approval). Demonstrates process deployment, instance startup, task completion, and audit log retrieval.
 *   **[`complex/`](file:///Users/user/github.com/nativebpm/connectors/nativebpm/examples/complex)**: A process with exclusive gateway branching (`XOR`). Runs two scenarios concurrently to demonstrate how execution routing behaves depending on input variables (`amount`).
+*   **[`loadtest/`](file:///Users/user/github.com/nativebpm/connectors/nativebpm/examples/loadtest)**: High-concurrency performance benchmark. Runs multiple parallel execution workers to measure NativeBPM platform throughput and RPS limits.
 *   **[`hybrid-camunda/`](file:///Users/user/github.com/nativebpm/connectors/nativebpm/examples/hybrid-camunda)**: A hybrid architecture where a Camunda engine delegates tasks to NativeBPM. The Go worker polls Camunda, invokes the NativeBPM REST API, and returns the result.
 
 ## Prerequisites
@@ -37,7 +38,25 @@ cd complex
 go run main.go
 ```
 
-### 3. Hybrid Camunda Bridge
+### 3. Load Testing
+Navigate to the `loadtest` directory and run:
+```bash
+cd loadtest
+# Run standard load test (concurrency 20, iterations 5)
+go test -v .
+
+# Run with custom load settings
+LOAD_CONCURRENCY=50 LOAD_ITERATIONS=10 go test -v .
+```
+
+#### Load Test Benchmarks (Executed on 2026-06-04)
+| Concurrency (Workers) | Iterations | Total Runs | RPS | Status | Notes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 50 | 10 | 500 | **511.24** | **PASS** | Stable execution, 0 database bottlenecks. |
+| 70 | 10 | 700 | **658.49** | **PASS** | Maximum stable throughput on local Docker СOMPOSE. |
+| 100 | 10 | 1000 | **585.84** | **FAIL** | Failed due to PostgreSQL connection pool exhaustion. |
+
+### 4. Hybrid Camunda Bridge
 Ensure you have Camunda running (e.g. on port `8082`), then navigate to the `hybrid-camunda` directory and run:
 ```bash
 cd hybrid-camunda
