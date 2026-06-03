@@ -13,6 +13,7 @@ This directory contains executable examples demonstrating how to interact with t
 
 1.  Start the NativeBPM platform mock containers (PostgreSQL, MinIO, and Server):
     ```bash
+    cd ../docker
     docker compose up -d
     ```
     This launches the server at `http://localhost:8080`.
