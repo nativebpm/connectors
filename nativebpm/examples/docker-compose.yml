@@ -51,7 +51,7 @@ services:
       "
 
   nativebpm:
-    image: nativebpm:latest
+    image: registry.gitlab.com/nativebpm/platform:latest
     container_name: nativebpm-server
     depends_on:
       postgres:
