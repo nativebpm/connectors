@@ -27,23 +27,30 @@ func main() {
 	}
 
 	// 2. Initialize Camunda Client (communicates with external Camunda on port 8082)
-	camundaClient := camunda.NewClient("http://localhost:8082/engine-rest")
+	camundaClient, err := camunda.NewClient("http://localhost:8082", "hybrid-bridge-worker")
+	if err != nil {
+		slog.Error("Failed to initialize Camunda client", "error", err)
+		return
+	}
 
 	// 3. Create External Task Worker for Camunda
-	worker := camunda.NewWorker(camundaClient, "hybrid-bridge-worker")
+	worker := camunda.NewWorker(camundaClient, logger)
 
 	// Register a task handler. When Camunda requires WASM execution, this worker catches it,
 	// deploys/starts a process instance in NativeBPM, and reports results back to Camunda.
-	worker.RegisterHandler("delegate-to-nativebpm", func(ctx context.Context, task *camunda.ExternalTask) error {
+	worker.RegisterHandler("delegate-to-nativebpm", camunda.TaskHandlerFunc(func(ctx context.Context, client *camunda.Client, task camunda.ExternalTask, complete camunda.CompleteFunc, fail camunda.FailFunc) error {
 		slog.Info("Received task delegation from Camunda", "taskID", task.ID, "variables", task.Variables)
 
 		// Extract variables passed from Camunda
-		amount := task.Variables["amount"]
+		var amount interface{}
+		if v, ok := task.Variables["amount"]; ok {
+			amount = v.Value
+		}
 
 		// Forward execution to NativeBPM Platform
 		slog.Info("Triggering workflow execution in NativeBPM platform...", "process", "userTaskProcess")
 		pi, err := nativeClient.StartProcessInstance("userTaskProcess").
-			InstanceID("camunda-bridge-" + task.ID).
+			InstanceID(task.ID).
 			Variable("amount", amount).
 			Variable("source", "camunda").
 			Send(ctx)
@@ -55,12 +62,12 @@ func main() {
 		slog.Info("NativeBPM platform instance started successfully", "nativeInstanceID", pi.ID)
 
 		// Complete external task in Camunda, sending back the NativeBPM execution context
-		return task.Complete(ctx, map[string]interface{}{
-			"nativebpm_instance_id": pi.ID,
-			"bridge_timestamp":      time.Now().Format(time.RFC3339),
-			"execution_status":      "delegated",
-		})
-	})
+		return complete().
+			StringVariable("nativebpm_instance_id", pi.ID).
+			StringVariable("bridge_timestamp", time.Now().Format(time.RFC3339)).
+			StringVariable("execution_status", "delegated").
+			Execute()
+	}), 30000, []string{"amount"})
 
 	// Start worker polling loop in background
 	slog.Info("Starting Camunda-to-NativeBPM bridge worker...")

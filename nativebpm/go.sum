@@ -1,0 +1,3 @@
+github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/nativebpm/httpstream v0.0.4/go.mod h1:fUaYUTlX6B5cJC+I3zuc3c1s4mYcvM/+H6LSa9OEzRM=

@@ -4,9 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	"strconv"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/nativebpm/connectors/nativebpm"
 )
 
@@ -44,7 +43,7 @@ func main() {
 	// Scenario A: Low Amount ($500) -> Auto Approved (No User Task)
 	// ----------------------------------------------------
 	slog.Info("=== Executing Scenario A: Low Amount ($500) ===")
-	instA_ID := "complex-inst-low-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	instA_ID := uuid.New().String()
 	piA, err := client.StartProcessInstance("complexProcess").
 		InstanceID(instA_ID).
 		Variable("amount", 500).
@@ -59,7 +58,7 @@ func main() {
 	// Scenario B: High Amount ($1500) -> Requires Manager Approval (User Task)
 	// ----------------------------------------------------
 	slog.Info("=== Executing Scenario B: High Amount ($1500) ===")
-	instB_ID := "complex-inst-high-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	instB_ID := uuid.New().String()
 	piB, err := client.StartProcessInstance("complexProcess").
 		InstanceID(instB_ID).
 		Variable("amount", 1500).

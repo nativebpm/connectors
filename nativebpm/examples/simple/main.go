@@ -4,9 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	"strconv"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/nativebpm/connectors/nativebpm"
 )
 
@@ -41,7 +40,7 @@ func main() {
 	slog.Info("Process deployed successfully", "status", deployResp.Status, "processID", deployResp.ProcessID)
 
 	// 4. Start instance
-	instanceID := "simple-inst-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	instanceID := uuid.New().String()
 	pi, err := client.StartProcessInstance("userTaskProcess").
 		InstanceID(instanceID).
 		Variable("applicant", "Alice").
