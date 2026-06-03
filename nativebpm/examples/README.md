@@ -53,8 +53,9 @@ LOAD_CONCURRENCY=50 LOAD_ITERATIONS=10 go test -v .
 | Concurrency (Workers) | Iterations | Total Runs | RPS | Status | Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 50 | 10 | 500 | **511.24** | **PASS** | Stable execution, 0 database bottlenecks. |
-| 70 | 10 | 700 | **658.49** | **PASS** | Maximum stable throughput on local Docker СOMPOSE. |
-| 100 | 10 | 1000 | **585.84** | **FAIL** | Failed due to PostgreSQL connection pool exhaustion. |
+| 70 | 10 | 700 | **658.49** | **PASS** | High throughput, 0 database bottlenecks. |
+| 100 | 10 | 1000 | **759.04** | **PASS** | Passes successfully after optimizing PostgreSQL configuration (`max_connections=500`). |
+| 150 | 10 | 1500 | **756.80** | **PASS** | Peak stable throughput under extreme concurrency. |
 
 ### 4. Hybrid Camunda Bridge
 Ensure you have Camunda running (e.g. on port `8082`), then navigate to the `hybrid-camunda` directory and run:
