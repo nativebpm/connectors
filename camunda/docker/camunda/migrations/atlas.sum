@@ -1,3 +1,4 @@
-h1:xmiIvLAqgRcGA7JIVo1zd+ieEtf3WVgHaNLNMTIoM0o=
+h1:OqnJyxUXH/eW26gd6PuAXHWIpB7Ix4xhJ3btmD7md50=
 20260531100000_init_sequin.sql h1:xhocdRnBapw8TLvYP8v7UwMRJw/WBnmj6Gw0HrHFm/0=
 20260531100001_enable_replica_identity.sql h1:dmNzSTMkAYfB8jsoRKE5wX1hrjDSVyjCeJVYovPmMUM=
+20260603000000_add_task_autolock_trigger.sql h1:h67+GvMKfCQye07UOHWVGOsbi0xlDMUA8wdXgtn4dcQ=

@@ -641,11 +641,15 @@ func TestSequinWorker_AsyncDelegation(t *testing.T) {
 		case strings.HasPrefix(r.URL.Path, "/external-task/task123/lock"):
 			lockCalled = true
 			w.WriteHeader(http.StatusNoContent)
-		case strings.HasPrefix(r.URL.Path, "/process-instance/inst123/variables"):
+		case strings.HasPrefix(r.URL.Path, "/execution/exec123/variables"):
 			getVarsCalled = true
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{}`))
+		case strings.HasPrefix(r.URL.Path, "/process-instance/inst123"):
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"businessKey": "biz123"}`))
 		case strings.HasPrefix(r.URL.Path, "/external-task/task123/complete"):
 			completeCalled = true
 			w.WriteHeader(http.StatusNoContent)
