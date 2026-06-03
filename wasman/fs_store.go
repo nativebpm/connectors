@@ -241,3 +241,60 @@ func (f *FileSnapshotStore) LoadWasm(hash string) ([]byte, error) {
 	}
 	return os.ReadFile(path)
 }
+
+// UpdateActiveIndex updates the local index file.
+func (f *FileSnapshotStore) UpdateActiveIndex(id string, info []byte, completed bool) error {
+	path := "active_index.json"
+	if f.Dir != "" {
+		path = fmt.Sprintf("%s/active_index.json", f.Dir)
+	}
+
+	var index []map[string]interface{}
+	data, err := os.ReadFile(path)
+	if err == nil {
+		_ = json.Unmarshal(data, &index)
+	}
+
+	var newInfo map[string]interface{}
+	if err := json.Unmarshal(info, &newInfo); err != nil {
+		return fmt.Errorf("failed to unmarshal index info: %w", err)
+	}
+
+	updated := false
+	nextIndex := make([]map[string]interface{}, 0)
+	for _, entry := range index {
+		if entry["instance_id"] == id {
+			if !completed {
+				nextIndex = append(nextIndex, newInfo)
+				updated = true
+			}
+		} else {
+			nextIndex = append(nextIndex, entry)
+		}
+	}
+	if !updated && !completed {
+		nextIndex = append(nextIndex, newInfo)
+	}
+
+	newData, err := json.Marshal(nextIndex)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, newData, 0644)
+}
+
+// LoadActiveIndex loads the local active index file.
+func (f *FileSnapshotStore) LoadActiveIndex() ([]byte, error) {
+	path := "active_index.json"
+	if f.Dir != "" {
+		path = fmt.Sprintf("%s/active_index.json", f.Dir)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []byte("[]"), nil
+		}
+		return nil, err
+	}
+	return data, nil
+}
