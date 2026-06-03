@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 )
 
 // FileSnapshotStore implements SnapshotStore using the local file system.
 type FileSnapshotStore struct {
 	Dir string
+	mu  sync.Mutex
 }
 
 var _ SnapshotStore = (*FileSnapshotStore)(nil)
@@ -244,6 +246,9 @@ func (f *FileSnapshotStore) LoadWasm(hash string) ([]byte, error) {
 
 // UpdateActiveIndex updates the local index file.
 func (f *FileSnapshotStore) UpdateActiveIndex(id string, info []byte, completed bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	path := "active_index.json"
 	if f.Dir != "" {
 		path = fmt.Sprintf("%s/active_index.json", f.Dir)
@@ -285,6 +290,9 @@ func (f *FileSnapshotStore) UpdateActiveIndex(id string, info []byte, completed 
 
 // LoadActiveIndex loads the local active index file.
 func (f *FileSnapshotStore) LoadActiveIndex() ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	path := "active_index.json"
 	if f.Dir != "" {
 		path = fmt.Sprintf("%s/active_index.json", f.Dir)

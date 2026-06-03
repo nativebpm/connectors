@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -394,20 +395,25 @@ func (s *S3SnapshotStore) UpdateActiveIndex(id string, info []byte, completed bo
 	key := "instances/active_index.json"
 	maxRetries := 5
 
+	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		// 1. Read existing index
 		data, etag, err := s.readObject(key)
 		var index []map[string]interface{}
 
+		if err != nil && !isNotFound(err) {
+			lastErr = fmt.Errorf("failed to read active index from S3: %w", err)
+			slog.Warn("[S3 STORE] Temporary read active index failure, retrying...", "attempt", attempt+1, "error", err)
+			time.Sleep(time.Duration(10+attempt*20) * time.Millisecond)
+			continue
+		}
 		if err == nil {
 			_ = json.Unmarshal(data, &index)
-		} else if !isNotFound(err) {
-			return fmt.Errorf("failed to read active index from S3: %w", err)
 		}
 
 		// 2. Parse new info
 		var newInfo map[string]interface{}
-		if err := json.Unmarshal(info, &newInfo); err != nil {
+		if err = json.Unmarshal(info, &newInfo); err != nil {
 			return fmt.Errorf("failed to unmarshal new index info: %w", err)
 		}
 
@@ -451,16 +457,12 @@ func (s *S3SnapshotStore) UpdateActiveIndex(id string, info []byte, completed bo
 			return nil // Success!
 		}
 
-		if isPreconditionFailed(err) {
-			// OCC conflict, back off and retry
-			time.Sleep(time.Duration(10+attempt*20) * time.Millisecond)
-			continue
-		}
-
-		return fmt.Errorf("failed to write active index to S3: %w", err)
+		lastErr = fmt.Errorf("failed to write active index to S3: %w", err)
+		slog.Warn("[S3 STORE] Temporary write active index failure (OCC or network), retrying...", "attempt", attempt+1, "error", err)
+		time.Sleep(time.Duration(10+attempt*20) * time.Millisecond)
 	}
 
-	return fmt.Errorf("failed to update active index on S3 after %d attempts due to OCC conflicts", maxRetries)
+	return fmt.Errorf("failed to update active index on S3 after %d attempts: %w", maxRetries, lastErr)
 }
 
 // LoadActiveIndex loads the global active index file from S3.
