@@ -3,7 +3,7 @@ module github.com/nativebpm/connectors/telegram
 go 1.26
 
 require (
-	github.com/nativebpm/httpstream v0.0.3
+	github.com/nativebpm/httpstream v0.0.4
 	github.com/stretchr/testify v1.11.1
 )
 
