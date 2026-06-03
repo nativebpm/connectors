@@ -13,11 +13,11 @@ Monorepository containing Go client libraries and integration connectors used ac
 *   **[telegram](telegram/)** — High-performance, stream-first Go client library for the Telegram Bot API with zero-buffer media uploads.
 
 ### Platform
+*   **[nativebpm](nativebpm/)** — Public Go SDK client for interacting with the NativeBPM engine using Fluent API builders.
 *   **[bpmn](bpmn/)** — Lightweight BPMN 2.0 process interpreter and DMN decision table evaluator with support for Wait States, Sagas, and WebAssembly workers.
 *   **[camunda](camunda/)** — Client library for Camunda BPMN workflow engine with highly optimized task locking and Postgres CDC integration.
 *   **[wasman](wasman/)** — Reusable Durable Execution Engine for running fault-tolerant Go/TinyGo business logic in an isolated WASM sandbox with O(1) memory consumption and transparent checkpointing.
 *   **[wasman/runner](wasman/runner/)** — Light-weight guest-side Runner API and Fluent Workflow builder for WASM workers, completely decoupled from host dependencies.
-*   **[nativebpm](nativebpm/)** — Public Go SDK client for interacting with the NativeBPM engine using Fluent API builders.
 *   **[temporal](temporal/)** — Wrapper client, worker setup configurations, and orchestration utilities for Temporal.io.
 
 ## Development
