@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nativebpm/connectors/nativebpm"
 )
 
@@ -95,7 +95,7 @@ func TestLoad_Concurrently(t *testing.T) {
 		go func(workerID int) {
 			defer wg.Done()
 			for i := 0; i < iterations; i++ {
-				instanceID := fmt.Sprintf("load-inst-%d-%d-%d", workerID, i, time.Now().UnixNano())
+				instanceID := uuid.New().String()
 
 				// 1. Start instance
 				pi, err := client.StartProcessInstance("userTaskProcess").
