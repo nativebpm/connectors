@@ -289,10 +289,33 @@ func (sw *SequinWorker) processMessage(ctx context.Context, msg sequinMessagePay
 	businessKey := record.BusinessKey
 	var lockExpiration *time.Time
 
-	if msg.Data.Metadata.Enrichment.ID != "" {
-		sw.logger.Info("CDC zero-lookup mode activated: using enriched metadata", "task_id", record.ID, "business_key", msg.Data.Metadata.Enrichment.BusinessKey)
+	// 1. Lock the task using Camunda REST API (Required for both modes to ensure exactly-once execution and owner check)
+	lockDurationMs := 30000 // 30 seconds by default
+	if customDuration, ok := sw.lockDurations[record.TopicName]; ok && customDuration > 0 {
+		lockDurationMs = customDuration
+	}
+	exp := time.Now().Add(time.Duration(lockDurationMs) * time.Millisecond)
+	lockExpiration = &exp
 
-		// 1. Extract variables from enrichment
+	err := sw.client.Lock(record.ID, lockDurationMs).Context(ctx).Execute()
+	if err != nil {
+		if strings.Contains(err.Error(), "status 404") {
+			sw.logger.Debug("Task not found via REST API (likely completed or deleted), acking change", "task_id", record.ID)
+			sw.ackMessage(context.Background(), msg.AckID)
+			return
+		}
+
+		sw.logger.Warn("Lock request failed with transient error, nacking in Sequin", "task_id", record.ID, "error", err)
+		sw.nackMessage(context.Background(), msg.AckID)
+		return
+	}
+	sw.logger.Info("Logical CDC lock acquired on task via REST", "task_id", record.ID, "topic", record.TopicName)
+
+	// 2. Resolve variables and business key
+	if msg.Data.Metadata.Enrichment.ID != "" {
+		sw.logger.Info("CDC mode activated: using enriched metadata (zero-lookup for variables)", "task_id", record.ID, "business_key", msg.Data.Metadata.Enrichment.BusinessKey)
+
+		// Extract variables from enrichment
 		variables = make(map[string]Variable)
 		for k, v := range msg.Data.Metadata.Enrichment.Variables {
 			variables[k] = Variable{
@@ -300,35 +323,10 @@ func (sw *SequinWorker) processMessage(ctx context.Context, msg sequinMessagePay
 			}
 		}
 
-		// 2. Use business key from enrichment
+		// Use business key from enrichment
 		businessKey = msg.Data.Metadata.Enrichment.BusinessKey
-
-		// 3. Set a default logical lock expiration of 5 minutes (trigger db lock timeout)
-		exp := time.Now().Add(5 * time.Minute)
-		lockExpiration = &exp
 	} else {
-		// Legacy-mode: Lock and fetch via REST API
-		lockDurationMs := 30000 // 30 seconds by default
-		if customDuration, ok := sw.lockDurations[record.TopicName]; ok && customDuration > 0 {
-			lockDurationMs = customDuration
-		}
-		exp := time.Now().Add(time.Duration(lockDurationMs) * time.Millisecond)
-		lockExpiration = &exp
-
-		err := sw.client.Lock(record.ID, lockDurationMs).Context(ctx).Execute()
-		if err != nil {
-			if strings.Contains(err.Error(), "status 404") {
-				sw.logger.Debug("Task not found via REST API (likely completed or deleted), acking change", "task_id", record.ID)
-				sw.ackMessage(context.Background(), msg.AckID)
-				return
-			}
-
-			sw.logger.Warn("Lock request failed with transient error, nacking in Sequin", "task_id", record.ID, "error", err)
-			sw.nackMessage(context.Background(), msg.AckID)
-			return
-		}
-		sw.logger.Info("Logical CDC lock acquired on task via REST", "task_id", record.ID, "topic", record.TopicName)
-
+		// Legacy-mode: Fetch variables and business key via REST API
 		var getErr error
 		variables, getErr = sw.client.GetExecutionVariables(ctx, record.ExecutionID)
 		if getErr != nil {
