@@ -1,14 +1,4 @@
-package main
-
-import (
-	"context"
-	"log/slog"
-	"os"
-
-	"github.com/nativebpm/connectors/nativebpm"
-)
-
-const userTaskBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="4.7.0">
   <process id="userTaskProcess" name="User Task Process" isExecutable="true">
     <startEvent id="StartEvent_1" name="Start">
@@ -51,62 +41,4 @@ const userTaskBPMN = `<?xml version="1.0" encoding="UTF-8"?>
       </bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
-</definitions>`
-
-func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	slog.SetDefault(logger)
-
-	ctx := context.Background()
-
-	// 1. New Client
-	client, err := nativebpm.NewClient("http://localhost:8080")
-	if err != nil {
-		slog.Error("Failed to initialize NativeBPM SDK client", "error", err)
-		return
-	}
-
-	// 2. Deploy
-	deployResp, err := client.Deploy("userTaskProcess", "User Task Process").
-		XML([]byte(userTaskBPMN)).
-		Send(ctx)
-	if err != nil {
-		slog.Error("Deploy failed", "error", err)
-		return
-	}
-	slog.Info("Process deployed", "status", deployResp.Status, "processID", deployResp.ProcessID)
-
-	// 3. Start instance
-	pi, err := client.StartProcessInstance("userTaskProcess").
-		InstanceID("test-instance-1").
-		Variable("applicant", "Alice").
-		Send(ctx)
-	if err != nil {
-		slog.Error("StartProcessInstance failed", "error", err)
-		return
-	}
-	slog.Info("Instance started", "id", pi.ID, "completed", pi.Completed, "waiting", pi.WaitingTokens)
-
-	// 4. Complete task
-	if len(pi.WaitingTokens) > 0 {
-		taskID := pi.WaitingTokens[0]
-		pi, err = client.CompleteTask(pi.ID, taskID).
-			Variable("approved", true).
-			Send(ctx)
-		if err != nil {
-			slog.Error("CompleteTask failed", "error", err)
-			return
-		}
-		slog.Info("Task completed", "id", pi.ID, "completed", pi.Completed, "waiting", pi.WaitingTokens)
-	}
-
-	// 5. Get Logs
-	logs, err := client.GetInstanceLogs(ctx, "test-instance-1")
-	if err != nil {
-		slog.Error("GetInstanceLogs failed", "error", err)
-		return
-	}
-	for _, l := range logs {
-		slog.Info("Audit Log Record", "nodeID", l.NodeID, "nodeName", l.NodeName, "action", l.Action)
-	}
-}
+</definitions>
