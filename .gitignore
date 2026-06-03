@@ -20,3 +20,5 @@ __debug_bin*
 *.exe
 *.env
 go.work.sum
+*.pprof
+*.pprof.gz
