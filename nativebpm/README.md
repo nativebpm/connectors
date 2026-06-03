@@ -58,7 +58,7 @@ func main() {
 
 	// 3. Start a new Process Instance (Fluent API)
 	pi, err := client.StartProcessInstance("loanApproval").
-		InstanceID("instance-1234").
+		InstanceID("da8b3d68-0eb4-44df-be9e-f00140280eb4").
 		Variable("amount", 25000).
 		Variable("user", "john_doe").
 		Send(ctx)
@@ -69,22 +69,17 @@ func main() {
 	logger.Info("Process instance started", "instanceID", pi.ID, "waitingTasks", pi.WaitingTokens)
 
 	// 4. Complete User Task / Wait State (Fluent API)
-	if len(pi.WaitingTokens) > 0 {
-		userTaskID := pi.WaitingTokens[0] // e.g. "taskApprove"
-		logger.Info("Completing task", "taskID", userTaskID)
-
-		pi, err = client.CompleteTask(pi.ID, userTaskID).
-			Variable("approved", true).
-			Send(ctx)
-		if err != nil {
-			logger.Error("Failed to complete task", "error", err)
-			return
-		}
-		logger.Info("Task completed", "isCompleted", pi.Completed)
+	pi, err = client.CompleteTask(pi.ID, "taskApprove").
+		Variable("approved", true).
+		Send(ctx)
+	if err != nil {
+		logger.Error("Failed to complete task", "error", err)
+		return
 	}
+	logger.Info("Task completed", "isCompleted", pi.Completed)
 
 	// 5. Query Audit Logs
-	logs, err := client.GetInstanceLogs(ctx, "instance-1234")
+	logs, err := client.GetInstanceLogs(ctx, "da8b3d68-0eb4-44df-be9e-f00140280eb4")
 	if err != nil {
 		logger.Error("Failed to get logs", "error", err)
 		return
