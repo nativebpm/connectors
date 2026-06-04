@@ -98,10 +98,11 @@ func (b *DeployBuilder) Send(ctx context.Context) (*DeploymentResponse, error) {
 
 // StartInstanceBuilder provides a fluent builder for launching a process instance.
 type StartInstanceBuilder struct {
-	client     *Client
-	processID  string
-	instanceID string
-	variables  map[string]interface{}
+	client      *Client
+	processID   string
+	instanceID  string
+	businessKey string
+	variables   map[string]interface{}
 }
 
 // StartProcessInstance creates a new StartInstanceBuilder.
@@ -116,6 +117,12 @@ func (c *Client) StartProcessInstance(processID string) *StartInstanceBuilder {
 // InstanceID configures a specific ID for the process instance.
 func (b *StartInstanceBuilder) InstanceID(instanceID string) *StartInstanceBuilder {
 	b.instanceID = instanceID
+	return b
+}
+
+// BusinessKey configures the business key for the process instance.
+func (b *StartInstanceBuilder) BusinessKey(businessKey string) *StartInstanceBuilder {
+	b.businessKey = businessKey
 	return b
 }
 
@@ -134,15 +141,17 @@ func (b *StartInstanceBuilder) Variables(vars map[string]interface{}) *StartInst
 }
 
 type startInstanceRequest struct {
-	InstanceID string                 `json:"instance_id"`
-	Variables  map[string]interface{} `json:"variables"`
+	InstanceID  string                 `json:"instance_id"`
+	BusinessKey string                 `json:"business_key"`
+	Variables   map[string]interface{} `json:"variables"`
 }
 
 // Send executes the start process instance request.
 func (b *StartInstanceBuilder) Send(ctx context.Context) (*ProcessInstance, error) {
 	payload := startInstanceRequest{
-		InstanceID: b.instanceID,
-		Variables:  b.variables,
+		InstanceID:  b.instanceID,
+		BusinessKey: b.businessKey,
+		Variables:   b.variables,
 	}
 	resp, err := b.client.httpClient.POST(ctx, "/api/definitions/{id}/start").
 		PathParam("id", b.processID).
