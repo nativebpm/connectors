@@ -1095,3 +1095,69 @@ func testStoreActiveIndex(t *testing.T, store SnapshotStore) {
 	require.Len(t, list, 1)
 	assert.Equal(t, "inst-2", list[0]["instance_id"])
 }
+
+func TestNewEngineWithBytes_SafeTask(t *testing.T) {
+	instanceID := "test-safe-task-instance"
+	serverAddr := "localhost:18099"
+
+	// Mock server state
+	var receivedVars map[string]interface{}
+
+	// Setup mock HTTP server
+	mux := http.NewServeMux()
+	mux.HandleFunc("/download", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"item": "out_of_stock_item",
+		})
+	})
+
+	mux.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
+		err := json.NewDecoder(r.Body).Decode(&receivedVars)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("OK"))
+	})
+
+	server := &http.Server{
+		Addr:    serverAddr,
+		Handler: mux,
+	}
+
+	ln, err := net.Listen("tcp", serverAddr)
+	require.NoError(t, err)
+
+	go func() {
+		_ = server.Serve(ln)
+	}()
+	defer server.Shutdown(context.Background())
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Read compiled task.wasm
+	wasmPath := filepath.Join("examples", "safe-task", "task.wasm")
+	wasmBytes, err := os.ReadFile(wasmPath)
+	require.NoError(t, err, "task.wasm must be built first. Run GOOS=wasip1 GOARCH=wasm go build -o task.wasm inside examples/safe-task")
+
+	store := newInMemorySnapshotStore()
+
+	// Initialize using NewEngineWithBytes
+	engine, err := NewEngineWithBytes(wasmBytes, store)
+	require.NoError(t, err)
+
+	crashed, err := engine.Session(instanceID).
+		WithServer(serverAddr).
+		WithCrash(false).
+		Run(context.Background())
+	require.NoError(t, err)
+	assert.False(t, crashed)
+
+	// Verify updated variables
+	require.NotNil(t, receivedVars)
+	assert.Equal(t, "out_of_stock_item", receivedVars["item"])
+	assert.Equal(t, false, receivedVars["in_stock"])
+}
+

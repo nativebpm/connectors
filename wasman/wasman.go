@@ -34,18 +34,22 @@ func GetSession(ctx context.Context) *Session {
 	return nil
 }
 
-// NewEngine creates a new reusable WASM Durable Execution Engine.
+// NewEngine creates a new reusable WASM Durable Execution Engine from a WASM module file path.
 func NewEngine(wasmPath string, store SnapshotStore, opts ...EngineOption) (*Engine, error) {
-	// Read WASM bytes to calculate SHA256 hash (WASM Module Versioning)
 	wasmBytes, err := os.ReadFile(wasmPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read WASM module file: %w", err)
 	}
+	return NewEngineWithBytes(wasmBytes, store, opts...)
+}
+
+// NewEngineWithBytes creates a new reusable WASM Durable Execution Engine directly from in-memory WASM bytes.
+func NewEngineWithBytes(wasmBytes []byte, store SnapshotStore, opts ...EngineOption) (*Engine, error) {
 	hash := sha256.Sum256(wasmBytes)
 	wasmHash := hex.EncodeToString(hash[:])
 
 	// Save WASM module in registry for future multi-version execution
-	err = store.SaveWasm(wasmHash, wasmBytes)
+	err := store.SaveWasm(wasmHash, wasmBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save WASM module in registry: %w", err)
 	}
@@ -53,16 +57,34 @@ func NewEngine(wasmPath string, store SnapshotStore, opts ...EngineOption) (*Eng
 	ctx := context.Background()
 	runtime := wazero.NewRuntime(ctx)
 
-	// Instantiate WASI imports with customized proc_exit to allow calling exported functions after _start exits
+	compiled, err := runtime.CompileModule(ctx, wasmBytes)
+	if err != nil {
+		runtime.Close(ctx)
+		return nil, fmt.Errorf("failed to compile WASM module: %w", err)
+	}
+
+	hasRunExport := false
+	for _, f := range compiled.ExportedFunctions() {
+		if f.Name() == "run" {
+			hasRunExport = true
+			break
+		}
+	}
+
+	// Instantiate WASI imports.
+	// Only customize proc_exit if the guest module has a separate exported "run" entrypoint (typical of TinyGo workers).
+	// For standard Go (wasip1) modules which run entirely in main(), overriding proc_exit breaks wazero's internal WASI context.
 	wasiBuilder := runtime.NewHostModuleBuilder("wasi_snapshot_preview1")
 	wasi_snapshot_preview1.NewFunctionExporter().ExportFunctions(wasiBuilder)
-	wasiBuilder.NewFunctionBuilder().
-		WithFunc(func(ctx context.Context, mod api.Module, exitCode uint32) {
-			if exitCode != 0 {
-				_ = mod.CloseWithExitCode(ctx, exitCode)
-			}
-		}).
-		Export("proc_exit")
+	if hasRunExport {
+		wasiBuilder.NewFunctionBuilder().
+			WithFunc(func(ctx context.Context, mod api.Module, exitCode uint32) {
+				if exitCode != 0 {
+					_ = mod.CloseWithExitCode(ctx, exitCode)
+				}
+			}).
+			Export("proc_exit")
+	}
 	_, err = wasiBuilder.Instantiate(ctx)
 	if err != nil {
 		runtime.Close(ctx)
@@ -310,13 +332,6 @@ func NewEngine(wasmPath string, store SnapshotStore, opts ...EngineOption) (*Eng
 		return nil, fmt.Errorf("failed to instantiate host module 'env': %w", err)
 	}
 
-	compiled, err := runtime.CompileModule(ctx, wasmBytes)
-	if err != nil {
-		runtime.Close(ctx)
-		return nil, fmt.Errorf("failed to compile WASM module: %w", err)
-	}
-
-
 	engine := &Engine{
 		runtime:    runtime,
 		compiled:   compiled,
@@ -494,7 +509,21 @@ func (e *Engine) Execute(ctx context.Context, instanceID string, entrypoint stri
 
 	runFunc := mod.ExportedFunction(entrypoint)
 	if runFunc == nil {
-		return false, fmt.Errorf("entrypoint function '%s' not found", entrypoint)
+		// Fallback to _start if the requested entrypoint is "run" but it is not exported (typical of standard Go main tasks)
+		if entrypoint == "run" {
+			runFunc = mod.ExportedFunction("_start")
+			if runFunc != nil {
+				entrypoint = "_start"
+			}
+		}
+		if runFunc == nil {
+			return false, fmt.Errorf("entrypoint function '%s' not found", entrypoint)
+		}
+	}
+
+	if entrypoint == "_start" {
+		slog.Info("[ENGINE] Entrypoint is '_start' which was executed during instantiation. Skipping redundant Call.")
+		return false, nil
 	}
 
 	slog.Info("[ENGINE] Invoking entrypoint", "entrypoint", entrypoint)
