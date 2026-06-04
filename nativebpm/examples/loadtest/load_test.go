@@ -57,8 +57,16 @@ const userTaskBPMN = `<?xml version="1.0" encoding="UTF-8"?>
   </bpmndi:BPMNDiagram>
 </definitions>`
 
+func getClient() (*nativebpm.Client, error) {
+	url := os.Getenv("NATIVEBPM_API_URL")
+	if url == "" {
+		url = "http://localhost:8080"
+	}
+	return nativebpm.NewClient(url)
+}
+
 func TestLoad_Concurrently(t *testing.T) {
-	client, err := nativebpm.NewClient("http://localhost:8080")
+	client, err := getClient()
 	if err != nil {
 		t.Fatalf("Failed to initialize client: %v", err)
 	}
@@ -129,7 +137,7 @@ func TestLoad_Concurrently(t *testing.T) {
 }
 
 func TestComplexLoad_Concurrently(t *testing.T) {
-	client, err := nativebpm.NewClient("http://localhost:8080")
+	client, err := getClient()
 	if err != nil {
 		t.Fatalf("Failed to initialize client: %v", err)
 	}
@@ -209,7 +217,7 @@ func TestComplexLoad_Concurrently(t *testing.T) {
 }
 
 func TestBPMNCrashRecovery(t *testing.T) {
-	client, err := nativebpm.NewClient("http://localhost:8080")
+	client, err := getClient()
 	if err != nil {
 		t.Fatalf("Failed to initialize client: %v", err)
 	}
@@ -263,7 +271,7 @@ func TestBPMNCrashRecovery(t *testing.T) {
 }
 
 func TestWasmLoad_Concurrently(t *testing.T) {
-	client, err := nativebpm.NewClient("http://localhost:8080")
+	client, err := getClient()
 	if err != nil {
 		t.Fatalf("Failed to initialize client: %v", err)
 	}
@@ -349,7 +357,7 @@ func TestWasmLoad_Concurrently(t *testing.T) {
 }
 
 func TestWasmCrashRecovery(t *testing.T) {
-	client, err := nativebpm.NewClient("http://localhost:8080")
+	client, err := getClient()
 	if err != nil {
 		t.Fatalf("Failed to initialize client: %v", err)
 	}
