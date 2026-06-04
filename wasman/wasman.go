@@ -400,8 +400,9 @@ func (e *Engine) Execute(ctx context.Context, instanceID string, entrypoint stri
 	// Bind session to context
 	executeCtx := WithSession(ctx, session)
 
-	// Instantiate the module config
+	// Instantiate the module config with a unique name to allow concurrent executions
 	config := wazero.NewModuleConfig().
+		WithName(fmt.Sprintf("main-%s", instanceID)).
 		WithStdout(os.Stdout).
 		WithStderr(os.Stderr)
 

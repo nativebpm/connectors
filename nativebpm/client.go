@@ -237,6 +237,70 @@ func (b *CompleteTaskBuilder) Send(ctx context.Context) (*ProcessInstance, error
 	return &result, nil
 }
 
+// ResumeInstanceBuilder provides a fluent builder for resuming a process instance.
+type ResumeInstanceBuilder struct {
+	client     *Client
+	instanceID string
+	variables  map[string]interface{}
+}
+
+// ResumeProcessInstance creates a new ResumeInstanceBuilder.
+func (c *Client) ResumeProcessInstance(instanceID string) *ResumeInstanceBuilder {
+	return &ResumeInstanceBuilder{
+		client:     c,
+		instanceID: instanceID,
+		variables:  make(map[string]interface{}),
+	}
+}
+
+// Variable sets a single variable value.
+func (b *ResumeInstanceBuilder) Variable(name string, value interface{}) *ResumeInstanceBuilder {
+	b.variables[name] = value
+	return b
+}
+
+// Variables adds multiple variables to the resumption request.
+func (b *ResumeInstanceBuilder) Variables(vars map[string]interface{}) *ResumeInstanceBuilder {
+	for k, v := range vars {
+		b.variables[k] = v
+	}
+	return b
+}
+
+type resumeInstanceRequest struct {
+	Variables map[string]interface{} `json:"variables"`
+}
+
+// Send executes the resume process instance request.
+func (b *ResumeInstanceBuilder) Send(ctx context.Context) (*ProcessInstance, error) {
+	payload := resumeInstanceRequest{
+		Variables: b.variables,
+	}
+	resp, err := b.client.httpClient.POST(ctx, "/api/instances/{id}/resume").
+		PathParam("id", b.instanceID).
+		JSON(payload).
+		Send()
+	if err != nil {
+		return nil, fmt.Errorf("resume process instance request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("resume process instance failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result ProcessInstance
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return &result, nil
+}
+
 // --- Query methods ---
 
 // ListDefinitions retrieves all deployed process definitions.
