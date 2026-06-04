@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -19,6 +20,7 @@ import (
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
+	"github.com/tetratelabs/wazero/sys"
 )
 
 type contextKey struct{}
@@ -63,28 +65,20 @@ func NewEngineWithBytes(wasmBytes []byte, store SnapshotStore, opts ...EngineOpt
 		return nil, fmt.Errorf("failed to compile WASM module: %w", err)
 	}
 
-	hasRunExport := false
-	for _, f := range compiled.ExportedFunctions() {
-		if f.Name() == "run" {
-			hasRunExport = true
-			break
-		}
-	}
-
 	// Instantiate WASI imports.
-	// Only customize proc_exit if the guest module has a separate exported "run" entrypoint (typical of TinyGo workers).
-	// For standard Go (wasip1) modules which run entirely in main(), overriding proc_exit breaks wazero's internal WASI context.
+	// We override proc_exit to NOT call CloseWithExitCode, because the default
+	// implementation sets Sys=nil on the module, making it unusable for subsequent
+	// exported function calls. TinyGo-compiled modules call proc_exit(0) at the end
+	// of _start, but we still need the module alive to call 'run' or 'run_test' afterwards.
 	wasiBuilder := runtime.NewHostModuleBuilder("wasi_snapshot_preview1")
 	wasi_snapshot_preview1.NewFunctionExporter().ExportFunctions(wasiBuilder)
-	if hasRunExport {
-		wasiBuilder.NewFunctionBuilder().
-			WithFunc(func(ctx context.Context, mod api.Module, exitCode uint32) {
-				if exitCode != 0 {
-					_ = mod.CloseWithExitCode(ctx, exitCode)
-				}
-			}).
-			Export("proc_exit")
-	}
+	wasiBuilder.NewFunctionBuilder().
+		WithFunc(func(ctx context.Context, mod api.Module, exitCode uint32) {
+			// Only interrupt execution, do NOT close the module.
+			// This preserves mod.Sys (file descriptors, stdout/stderr) for subsequent calls.
+			panic(sys.NewExitError(exitCode))
+		}).
+		Export("proc_exit")
 	_, err = wasiBuilder.Instantiate(ctx)
 	if err != nil {
 		runtime.Close(ctx)
@@ -415,18 +409,37 @@ func (e *Engine) Execute(ctx context.Context, instanceID string, entrypoint stri
 	// Bind session to context
 	executeCtx := WithSession(ctx, session)
 
-	// Instantiate the module config with a unique name to allow concurrent executions
+	// Instantiate the module config with a unique name to allow concurrent executions.
+	// We disable automatic _start to prevent wazero from closing the module when
+	// TinyGo's _start calls proc_exit(0). This keeps mod.Sys alive for subsequent calls.
 	config := wazero.NewModuleConfig().
 		WithName(fmt.Sprintf("main-%s", instanceID)).
 		WithStdout(os.Stdout).
-		WithStderr(os.Stderr)
+		WithStderr(os.Stderr).
+		WithStartFunctions() // Empty: disable automatic _start call
 
-	// Instantiate the compiled WASM module
+	// Instantiate the compiled WASM module (without calling _start)
 	mod, err := e.runtime.InstantiateModule(executeCtx, runModule, config)
 	if err != nil {
+		slog.Error("[ENGINE] InstantiateModule failed", "error", err)
 		return false, fmt.Errorf("failed to instantiate WASM: %w", err)
 	}
 	defer mod.Close(executeCtx)
+
+	// Manually call _start to initialize the TinyGo runtime.
+	// TinyGo's _start runs package init() + main(), then calls proc_exit(0).
+	// Our custom proc_exit only panics without closing the module, so Sys stays alive.
+	if startFunc := mod.ExportedFunction("_start"); startFunc != nil {
+		if _, err := startFunc.Call(executeCtx); err != nil {
+			var exitErr *sys.ExitError
+			if errors.As(err, &exitErr) && exitErr.ExitCode() == 0 {
+				// Expected: TinyGo _start exits with code 0 after initialization.
+				// Module is still alive because our proc_exit doesn't close it.
+			} else {
+				return false, fmt.Errorf("_start failed: %w", err)
+			}
+		}
+	}
 
 	session.mod = mod
 	session.memory = mod.Memory()
@@ -532,12 +545,17 @@ func (e *Engine) Execute(ctx context.Context, instanceID string, entrypoint stri
 		return false, executeCtx.Err()
 	}
 	if err != nil {
+		var exitErr *sys.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 0 {
+			return false, nil
+		}
 		if session.crashed {
 			return true, err // True indicates a simulated crash occurred
 		}
 		if strings.Contains(err.Error(), "concurrent_execution_detected") {
 			return false, ErrConcurrentExecution
 		}
+		slog.Error("[ENGINE] runFunc.Call failed", "error", err, "crashed", session.crashed)
 		return false, err
 	}
 

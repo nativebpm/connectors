@@ -10,5 +10,6 @@ use (
 	./temporal
 	./wasman
 	./wasman/runner
+	./wasman/testdata
 	./nativebpm
 )
