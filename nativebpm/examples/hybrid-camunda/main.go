@@ -49,7 +49,7 @@ func main() {
 
 		// Forward execution to NativeBPM Platform
 		slog.Info("Triggering workflow execution in NativeBPM platform...", "process", "userTaskProcess")
-		pi, err := nativeClient.StartProcessInstance("userTaskProcess").
+		startResp, err := nativeClient.StartProcessInstance("userTaskProcess").
 			InstanceID(task.ID).
 			Variable("amount", amount).
 			Variable("source", "camunda").
@@ -59,11 +59,11 @@ func main() {
 			return err
 		}
 
-		slog.Info("NativeBPM platform instance started successfully", "nativeInstanceID", pi.ID)
+		slog.Info("NativeBPM platform instance start request accepted", "nativeInstanceID", startResp.InstanceID)
 
 		// Complete external task in Camunda, sending back the NativeBPM execution context
 		return complete().
-			StringVariable("nativebpm_instance_id", pi.ID).
+			StringVariable("nativebpm_instance_id", startResp.InstanceID).
 			StringVariable("bridge_timestamp", time.Now().Format(time.RFC3339)).
 			StringVariable("execution_status", "delegated").
 			Execute()

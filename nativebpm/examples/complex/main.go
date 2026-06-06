@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nativebpm/connectors/nativebpm"
@@ -44,7 +45,7 @@ func main() {
 	// ----------------------------------------------------
 	slog.Info("=== Executing Scenario A: Low Amount ($500) ===")
 	instA_ID := uuid.New().String()
-	piA, err := client.StartProcessInstance("complexProcess").
+	startRespA, err := client.StartProcessInstance("complexProcess").
 		InstanceID(instA_ID).
 		Variable("amount", 500).
 		Send(ctx)
@@ -52,19 +53,49 @@ func main() {
 		slog.Error("Scenario A start failed", "error", err)
 		return
 	}
-	slog.Info("Scenario A Started", "id", piA.ID, "completed", piA.Completed, "waiting", piA.WaitingTokens)
+	slog.Info("Scenario A start request accepted", "instance_id", startRespA.InstanceID, "status", startRespA.Status)
+
+	// Poll until the instance is completed (auto approved)
+	var piA *nativebpm.ProcessInstance
+	for i := 0; i < 50; i++ {
+		piA, err = client.GetInstance(ctx, startRespA.InstanceID)
+		if err == nil && piA.Completed {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if err != nil {
+		slog.Error("Failed to fetch Scenario A instance", "error", err)
+		return
+	}
+	slog.Info("Scenario A Completed", "id", piA.ID, "completed", piA.Completed, "waiting", piA.WaitingTokens)
 
 	// ----------------------------------------------------
 	// Scenario B: High Amount ($1500) -> Requires Manager Approval (User Task)
 	// ----------------------------------------------------
 	slog.Info("=== Executing Scenario B: High Amount ($1500) ===")
 	instB_ID := uuid.New().String()
-	piB, err := client.StartProcessInstance("complexProcess").
+	startRespB, err := client.StartProcessInstance("complexProcess").
 		InstanceID(instB_ID).
 		Variable("amount", 1500).
 		Send(ctx)
 	if err != nil {
 		slog.Error("Scenario B start failed", "error", err)
+		return
+	}
+	slog.Info("Scenario B start request accepted", "instance_id", startRespB.InstanceID, "status", startRespB.Status)
+
+	// Poll until the instance is active and waiting for task
+	var piB *nativebpm.ProcessInstance
+	for i := 0; i < 50; i++ {
+		piB, err = client.GetInstance(ctx, startRespB.InstanceID)
+		if err == nil && len(piB.WaitingTokens) > 0 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if err != nil {
+		slog.Error("Failed to fetch Scenario B instance", "error", err)
 		return
 	}
 	slog.Info("Scenario B Started", "id", piB.ID, "completed", piB.Completed, "waiting", piB.WaitingTokens)

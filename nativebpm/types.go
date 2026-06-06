@@ -76,3 +76,10 @@ type DeploymentResponse struct {
 	ProcessID string `json:"process_id"`
 	Name      string `json:"name"`
 }
+
+// StartInstanceResponse represents the server response after launching a process instance asynchronously.
+type StartInstanceResponse struct {
+	Status     string `json:"status"`
+	InstanceID string `json:"instance_id"`
+}
+

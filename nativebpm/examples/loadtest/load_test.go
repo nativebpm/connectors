@@ -2,19 +2,37 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nativebpm/connectors/nativebpm"
 )
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
+}
 
 func getClient() (*nativebpm.Client, error) {
 	url := os.Getenv("NATIVEBPM_API_URL")
 	if url == "" {
 		url = "http://localhost:8080"
 	}
-	return nativebpm.NewClient(url)
+	client, err := nativebpm.NewClient(url)
+	if err != nil {
+		return nil, err
+	}
+	client.Use(func(next http.RoundTripper) http.RoundTripper {
+		return roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			r.Header.Set("Authorization", "Bearer test-bearer-token")
+			return next.RoundTrip(r)
+		})
+	})
+	return client, nil
 }
 
 func TestBPMNCrashRecovery(t *testing.T) {
@@ -42,7 +60,7 @@ func TestBPMNCrashRecovery(t *testing.T) {
 	instanceID := "recovery-test-" + uuid.New().String()
 
 	// 1. Start process instance. It will halt at the UserTask "Activity_User_Approve" wait state.
-	pi, err := client.StartProcessInstance("gateways_process").
+	startResp, err := client.StartProcessInstance("gateways_process").
 		InstanceID(instanceID).
 		Variable("score", 60).
 		Send(ctx)
@@ -50,6 +68,19 @@ func TestBPMNCrashRecovery(t *testing.T) {
 		t.Fatalf("StartProcessInstance failed: %v", err)
 	}
 
+	// Poll until the instance is created and waiting at Activity_User_Approve
+	var pi *nativebpm.ProcessInstance
+	for i := 0; i < 50; i++ {
+		pi, err = client.GetInstance(ctx, startResp.InstanceID)
+		if err == nil && len(pi.WaitingTokens) > 0 && pi.WaitingTokens[0] == "Activity_User_Approve" {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if err != nil {
+		t.Fatalf("Failed to fetch process instance during polling: %v", err)
+	}
 	if len(pi.WaitingTokens) == 0 || pi.WaitingTokens[0] != "Activity_User_Approve" {
 		t.Fatalf("Expected process to pause at Activity_User_Approve, got: %v", pi.WaitingTokens)
 	}
@@ -108,18 +139,34 @@ func TestWasmCrashRecovery(t *testing.T) {
 	instanceID := uuid.New().String()
 
 	// 1. Start process instance with simulate_crash=true. This causes WASM execution to panic/crash on checkpoint.
-	_, err = client.StartProcessInstance("wasmTaskProcess").
+	startResp, err := client.StartProcessInstance("wasmTaskProcess").
 		InstanceID(instanceID).
 		Variable("approved", true).
 		Variable("simulate_crash", true).
 		Send(ctx)
-	if err == nil {
-		t.Fatalf("Expected StartProcessInstance to fail/crash, but it succeeded")
+	if err != nil {
+		t.Fatalf("StartProcessInstance failed: %v", err)
 	}
-	t.Logf("Process failed as expected: %v", err)
 
-	// Verify that the instance exists in the database and is paused/stalled at WasmTask_1
-	inst, err := client.GetInstance(ctx, instanceID)
+	// Poll until the instance is available and stalled at WasmTask_1
+	var inst *nativebpm.ProcessInstance
+	for i := 0; i < 50; i++ {
+		inst, err = client.GetInstance(ctx, startResp.InstanceID)
+		if err == nil {
+			foundActiveToken := false
+			for _, token := range inst.ActiveTokens {
+				if token == "WasmTask_1" {
+					foundActiveToken = true
+					break
+				}
+			}
+			if foundActiveToken {
+				break
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
 	if err != nil {
 		t.Fatalf("Failed to fetch process instance state: %v", err)
 	}
@@ -138,7 +185,7 @@ func TestWasmCrashRecovery(t *testing.T) {
 	}
 
 	// 2. Disable simulate_crash and call ResumeProcessInstance to resume the execution.
-	pi, err := client.ResumeProcessInstance(instanceID).
+	pi, err := client.ResumeProcessInstance(startResp.InstanceID).
 		Variable("simulate_crash", false).
 		Send(ctx)
 	if err != nil {

@@ -147,7 +147,7 @@ type startInstanceRequest struct {
 }
 
 // Send executes the start process instance request.
-func (b *StartInstanceBuilder) Send(ctx context.Context) (*ProcessInstance, error) {
+func (b *StartInstanceBuilder) Send(ctx context.Context) (*StartInstanceResponse, error) {
 	payload := startInstanceRequest{
 		InstanceID:  b.instanceID,
 		BusinessKey: b.businessKey,
@@ -167,11 +167,11 @@ func (b *StartInstanceBuilder) Send(ctx context.Context) (*ProcessInstance, erro
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusAccepted {
 		return nil, fmt.Errorf("start process instance failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var result ProcessInstance
+	var result StartInstanceResponse
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}

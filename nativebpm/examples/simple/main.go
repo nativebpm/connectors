@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nativebpm/connectors/nativebpm"
@@ -41,7 +42,7 @@ func main() {
 
 	// 4. Start instance
 	instanceID := uuid.New().String()
-	pi, err := client.StartProcessInstance("userTaskProcess").
+	startResp, err := client.StartProcessInstance("userTaskProcess").
 		InstanceID(instanceID).
 		Variable("applicant", "Alice").
 		Send(ctx)
@@ -49,7 +50,22 @@ func main() {
 		slog.Error("StartProcessInstance failed", "error", err)
 		return
 	}
-	slog.Info("Instance started", "id", pi.ID, "completed", pi.Completed, "waiting", pi.WaitingTokens)
+	slog.Info("Instance start request accepted", "instance_id", startResp.InstanceID, "status", startResp.Status)
+
+	// Poll until the instance is active and waiting for task
+	var pi *nativebpm.ProcessInstance
+	for i := 0; i < 50; i++ {
+		pi, err = client.GetInstance(ctx, startResp.InstanceID)
+		if err == nil && len(pi.WaitingTokens) > 0 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if err != nil {
+		slog.Error("Failed to fetch instance during polling", "error", err)
+		return
+	}
+	slog.Info("Instance started asynchronously", "id", pi.ID, "completed", pi.Completed, "waiting", pi.WaitingTokens)
 
 	// 5. Complete task
 	if len(pi.WaitingTokens) > 0 {

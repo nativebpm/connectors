@@ -64,7 +64,8 @@ func TestClient_AllEndpoints(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"inst-1","process_id":"proc-1","variables":{"amount":500},"completed":false}`))
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"status":"accepted","instance_id":"inst-1"}`))
 	})
 
 	// 4. List Instances
@@ -145,15 +146,15 @@ func TestClient_AllEndpoints(t *testing.T) {
 	}
 
 	// 3. Test Start Process Instance (Fluent Builder)
-	pi, err := client.StartProcessInstance("proc-1").
+	startResp, err := client.StartProcessInstance("proc-1").
 		InstanceID("inst-1").
 		Variable("amount", 500).
 		Send(ctx)
 	if err != nil {
 		t.Fatalf("StartProcessInstance failed: %v", err)
 	}
-	if pi.ID != "inst-1" || pi.Variables["amount"] != float64(500) || pi.Completed {
-		t.Errorf("Unexpected process instance state: %+v", pi)
+	if startResp.InstanceID != "inst-1" || startResp.Status != "accepted" {
+		t.Errorf("Unexpected start instance response: %+v", startResp)
 	}
 
 	// 4. Test List Instances
