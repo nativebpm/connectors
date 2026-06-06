@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"filippo.io/age"
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/nativebpm/connectors/totp"
@@ -442,6 +443,39 @@ func TestUpdateUserRoleAndGetUsers(t *testing.T) {
 		t.Errorf("Persisted role not updated, got %s", auth2.Users[username].Role)
 	}
 }
+
+func TestVerifySupabaseJWT(t *testing.T) {
+	jwtSecret := "my-supabase-jwt-secret-key-12345"
+	auth := New().WithSupabase("https://my-supabase.supabase.co", jwtSecret)
+
+	// Create a mock Supabase JWT token
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"email": "user@example.com",
+		"sub":   "a543b210-9876-4321-8765-abcdef012345",
+		"exp":   float64(time.Now().Add(1 * time.Hour).Unix()),
+		"user_metadata": map[string]interface{}{
+			"role": "developer",
+		},
+	})
+	tokenString, err := token.SignedString([]byte(jwtSecret))
+	if err != nil {
+		t.Fatalf("Failed to sign token: %v", err)
+	}
+
+	// Verify the token using the authenticator
+	sess, err := auth.VerifySessionCookie(tokenString)
+	if err != nil {
+		t.Fatalf("VerifySessionCookie failed to parse Supabase token: %v", err)
+	}
+
+	if sess.Username != "user@example.com" {
+		t.Errorf("Expected username user@example.com, got %q", sess.Username)
+	}
+	if sess.Role != "developer" {
+		t.Errorf("Expected role developer, got %q", sess.Role)
+	}
+}
+
 
 
 func BenchmarkCreateSessionCookie(b *testing.B) {

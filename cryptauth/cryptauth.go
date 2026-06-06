@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"filippo.io/age"
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/yaml.v3"
 
@@ -65,6 +66,10 @@ type Authenticator struct {
 	muEvents      sync.RWMutex
 	Events        []*SecurityEvent
 	err           error // internal error tracking
+
+	// Supabase integration fields
+	SupabaseJWTSecret []byte
+	SupabaseURL       string
 }
 
 // New creates a new, unconfigured Authenticator builder.
@@ -85,6 +90,18 @@ func (a *Authenticator) WithSessionSecret(secret string) *Authenticator {
 		return a
 	}
 	a.SessionSecret = []byte(secret)
+	return a
+}
+
+// WithSupabase configures the Supabase API endpoint and JWT verification secret.
+func (a *Authenticator) WithSupabase(url, jwtSecret string) *Authenticator {
+	if a.err != nil {
+		return a
+	}
+	a.SupabaseURL = url
+	if jwtSecret != "" {
+		a.SupabaseJWTSecret = []byte(jwtSecret)
+	}
 	return a
 }
 
@@ -267,6 +284,71 @@ func (a *Authenticator) CreateSessionCookie(username, role string, duration time
 
 // VerifySessionCookie decodes and validates a session token.
 func (a *Authenticator) VerifySessionCookie(cookieValue string) (*Session, error) {
+	if len(a.SupabaseJWTSecret) > 0 {
+		token, err := jwt.Parse(cookieValue, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			}
+			return a.SupabaseJWTSecret, nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("invalid Supabase session token: %w", err)
+		}
+
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok || !token.Valid {
+			return nil, errors.New("invalid Supabase token claims")
+		}
+
+		// Extract Username (use email, if empty use sub)
+		var username string
+		if emailVal, ok := claims["email"]; ok {
+			username, _ = emailVal.(string)
+		}
+		if username == "" {
+			if subVal, ok := claims["sub"]; ok {
+				username, _ = subVal.(string)
+			}
+		}
+
+		// Extract Role from user_metadata or app_metadata
+		role := "viewer"
+		if userMetaVal, ok := claims["user_metadata"]; ok {
+			if userMeta, ok := userMetaVal.(map[string]interface{}); ok {
+				if rVal, ok := userMeta["role"]; ok {
+					if rStr, ok := rVal.(string); ok && rStr != "" {
+						role = rStr
+					}
+				}
+			}
+		}
+		if role == "viewer" {
+			if appMetaVal, ok := claims["app_metadata"]; ok {
+				if appMeta, ok := appMetaVal.(map[string]interface{}); ok {
+					if rVal, ok := appMeta["role"]; ok {
+						if rStr, ok := rVal.(string); ok && rStr != "" {
+							role = rStr
+						}
+					}
+				}
+			}
+		}
+
+		// Extract Expiry
+		var expiresAt int64
+		if expVal, ok := claims["exp"]; ok {
+			if expFloat, ok := expVal.(float64); ok {
+				expiresAt = int64(expFloat)
+			}
+		}
+
+		return &Session{
+			Username:  username,
+			Role:      role,
+			ExpiresAt: expiresAt,
+		}, nil
+	}
+
 	idx := strings.IndexByte(cookieValue, '.')
 	if idx == -1 {
 		return nil, errors.New("invalid session format")
