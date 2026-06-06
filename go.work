@@ -5,11 +5,11 @@ use (
 	./camunda
 	./gotenberg
 	./httpstream
+	./nativebpm
 	./sequin
 	./telegram
 	./temporal
 	./wasman
 	./wasman/runner
 	./wasman/testdata
-	./nativebpm
 )
