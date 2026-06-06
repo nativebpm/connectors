@@ -3,12 +3,16 @@ go 1.26
 use (
 	./bpmn
 	./camunda
+	./cryptauth
+	./cryptenv
 	./gotenberg
 	./httpstream
+	./logger
 	./nativebpm
 	./sequin
 	./telegram
 	./temporal
+	./totp
 	./wasman
 	./wasman/runner
 	./wasman/testdata
