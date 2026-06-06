@@ -489,10 +489,82 @@ func BenchmarkCreateSessionCookie(b *testing.B) {
 
 func BenchmarkVerifySessionCookie(b *testing.B) {
 	auth, _ := NewAuthenticator("my-signing-secret")
+	// Make sure the user is in-memory for local verify session check to pass
+	auth.Users["admin"] = &User{
+		Username: "admin",
+		Role:     "admin",
+	}
 	cookieVal, _ := auth.CreateSessionCookie("admin", "admin", 1*time.Hour)
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		_, _ = auth.VerifySessionCookie(cookieVal)
+	}
+}
+
+func BenchmarkVerifySessionCookieUncached(b *testing.B) {
+	auth, _ := NewAuthenticator("my-signing-secret")
+	auth.Users["admin"] = &User{
+		Username: "admin",
+		Role:     "admin",
+	}
+	cookieVal, _ := auth.CreateSessionCookie("admin", "admin", 1*time.Hour)
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		auth.InvalidateAll()
+		_, _ = auth.VerifySessionCookie(cookieVal)
+	}
+}
+
+func TestSessionCacheHitsAndRevocation(t *testing.T) {
+	auth, err := NewAuthenticator("my-signing-secret")
+	if err != nil {
+		t.Fatalf("Failed to create authenticator: %v", err)
+	}
+
+	auth.Users["user1"] = &User{
+		Username: "user1",
+		Role:     "developer",
+	}
+
+	cookieVal, err := auth.CreateSessionCookie("user1", "developer", 1*time.Hour)
+	if err != nil {
+		t.Fatalf("CreateSessionCookie failed: %v", err)
+	}
+
+	// 1. Initial verification: cache miss, performs full verification
+	sess1, err := auth.VerifySessionCookie(cookieVal)
+	if err != nil {
+		t.Fatalf("First VerifySessionCookie failed: %v", err)
+	}
+
+	// 2. Second verification: cache hit
+	sess2, err := auth.VerifySessionCookie(cookieVal)
+	if err != nil {
+		t.Fatalf("Second VerifySessionCookie failed: %v", err)
+	}
+
+	if sess1.Username != sess2.Username || sess1.Role != sess2.Role {
+		t.Errorf("Sessions do not match: %+v vs %+v", sess1, sess2)
+	}
+
+	// Verify it was actually cached
+	hash := auth.hashToken(cookieVal)
+	auth.cacheMu.RLock()
+	cached, exists := auth.sessionCache[hash]
+	auth.cacheMu.RUnlock()
+	if !exists || cached.Session != sess2 {
+		t.Errorf("Expected token to be cached under hash %s", hash)
+	}
+
+	// 3. Test revocation invalidates the cache entries of this user
+	auth.InvalidateUserSessions("user1")
+
+	auth.cacheMu.RLock()
+	_, exists = auth.sessionCache[hash]
+	auth.cacheMu.RUnlock()
+	if exists {
+		t.Errorf("Expected cached session to be evicted after user session invalidation")
 	}
 }

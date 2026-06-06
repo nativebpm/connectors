@@ -58,6 +58,11 @@ type Session struct {
 	ExpiresAt int64  `json:"expires_at"`
 }
 
+type cachedSession struct {
+	Session   *Session
+	ExpiresAt time.Time
+}
+
 // Authenticator handles loading credentials, verifying passwords, generating/validating sessions, and logging audit events.
 type Authenticator struct {
 	SessionSecret []byte
@@ -70,13 +75,20 @@ type Authenticator struct {
 	// Supabase integration fields
 	SupabaseJWTSecret []byte
 	SupabaseURL       string
+
+	// In-memory session cache fields
+	cacheMu           sync.RWMutex
+	sessionCache      map[[32]byte]*cachedSession
+	userSessionHashes map[string][][32]byte
 }
 
 // New creates a new, unconfigured Authenticator builder.
 func New() *Authenticator {
 	return &Authenticator{
-		Users:  make(map[string]*User),
-		Events: make([]*SecurityEvent, 0),
+		Users:             make(map[string]*User),
+		Events:            make([]*SecurityEvent, 0),
+		sessionCache:      make(map[[32]byte]*cachedSession),
+		userSessionHashes: make(map[string][][32]byte),
 	}
 }
 
@@ -138,9 +150,11 @@ func NewAuthenticator(sessionSecret string) (*Authenticator, error) {
 		return nil, errors.New("session secret cannot be empty")
 	}
 	return &Authenticator{
-		SessionSecret: []byte(sessionSecret),
-		Users:         make(map[string]*User),
-		Events:        make([]*SecurityEvent, 0),
+		SessionSecret:     []byte(sessionSecret),
+		Users:             make(map[string]*User),
+		Events:            make([]*SecurityEvent, 0),
+		sessionCache:      make(map[[32]byte]*cachedSession),
+		userSessionHashes: make(map[string][][32]byte),
 	}, nil
 }
 
@@ -282,73 +296,107 @@ func (a *Authenticator) CreateSessionCookie(username, role string, duration time
 	return encodedPayload + "." + encodedSignature, nil
 }
 
-// VerifySessionCookie decodes and validates a session token.
+// VerifySessionCookie decodes and validates a session token, utilizing an in-memory cache.
 func (a *Authenticator) VerifySessionCookie(cookieValue string) (*Session, error) {
+	// 1. Check in-memory cache first
+	if sess, ok := a.GetCachedSession(cookieValue); ok {
+		if len(a.SupabaseJWTSecret) == 0 {
+			a.muUsers.RLock()
+			user, exists := a.Users[sess.Username]
+			a.muUsers.RUnlock()
+			if !exists {
+				a.InvalidateToken(cookieValue)
+				return nil, errors.New("user no longer exists")
+			}
+			sess.Role = user.Role
+		}
+		return sess, nil
+	}
+
+	// 2. Perform full cryptographic verification
+	var sess *Session
+	var err error
 	if len(a.SupabaseJWTSecret) > 0 {
-		token, err := jwt.Parse(cookieValue, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		sess, err = a.verifySupabaseJWT(cookieValue)
+	} else {
+		sess, err = a.verifyLocalSession(cookieValue)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Cache the verified session
+	a.AddCachedSession(cookieValue, sess)
+	return sess, nil
+}
+
+func (a *Authenticator) verifySupabaseJWT(cookieValue string) (*Session, error) {
+	token, err := jwt.Parse(cookieValue, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return a.SupabaseJWTSecret, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("invalid Supabase session token: %w", err)
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || !token.Valid {
+		return nil, errors.New("invalid Supabase token claims")
+	}
+
+	// Extract Username (use email, if empty use sub)
+	var username string
+	if emailVal, ok := claims["email"]; ok {
+		username, _ = emailVal.(string)
+	}
+	if username == "" {
+		if subVal, ok := claims["sub"]; ok {
+			username, _ = subVal.(string)
+		}
+	}
+
+	// Extract Role from user_metadata or app_metadata
+	role := "viewer"
+	if userMetaVal, ok := claims["user_metadata"]; ok {
+		if userMeta, ok := userMetaVal.(map[string]interface{}); ok {
+			if rVal, ok := userMeta["role"]; ok {
+				if rStr, ok := rVal.(string); ok && rStr != "" {
+					role = rStr
+				}
 			}
-			return a.SupabaseJWTSecret, nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("invalid Supabase session token: %w", err)
 		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok || !token.Valid {
-			return nil, errors.New("invalid Supabase token claims")
-		}
-
-		// Extract Username (use email, if empty use sub)
-		var username string
-		if emailVal, ok := claims["email"]; ok {
-			username, _ = emailVal.(string)
-		}
-		if username == "" {
-			if subVal, ok := claims["sub"]; ok {
-				username, _ = subVal.(string)
-			}
-		}
-
-		// Extract Role from user_metadata or app_metadata
-		role := "viewer"
-		if userMetaVal, ok := claims["user_metadata"]; ok {
-			if userMeta, ok := userMetaVal.(map[string]interface{}); ok {
-				if rVal, ok := userMeta["role"]; ok {
+	}
+	if role == "viewer" {
+		if appMetaVal, ok := claims["app_metadata"]; ok {
+			if appMeta, ok := appMetaVal.(map[string]interface{}); ok {
+				if rVal, ok := appMeta["role"]; ok {
 					if rStr, ok := rVal.(string); ok && rStr != "" {
 						role = rStr
 					}
 				}
 			}
 		}
-		if role == "viewer" {
-			if appMetaVal, ok := claims["app_metadata"]; ok {
-				if appMeta, ok := appMetaVal.(map[string]interface{}); ok {
-					if rVal, ok := appMeta["role"]; ok {
-						if rStr, ok := rVal.(string); ok && rStr != "" {
-							role = rStr
-						}
-					}
-				}
-			}
-		}
-
-		// Extract Expiry
-		var expiresAt int64
-		if expVal, ok := claims["exp"]; ok {
-			if expFloat, ok := expVal.(float64); ok {
-				expiresAt = int64(expFloat)
-			}
-		}
-
-		return &Session{
-			Username:  username,
-			Role:      role,
-			ExpiresAt: expiresAt,
-		}, nil
 	}
 
+	// Extract Expiry
+	var expiresAt int64
+	if expVal, ok := claims["exp"]; ok {
+		if expFloat, ok := expVal.(float64); ok {
+			expiresAt = int64(expFloat)
+		}
+	}
+
+	return &Session{
+		Username:  username,
+		Role:      role,
+		ExpiresAt: expiresAt,
+	}, nil
+}
+
+func (a *Authenticator) verifyLocalSession(cookieValue string) (*Session, error) {
 	idx := strings.IndexByte(cookieValue, '.')
 	if idx == -1 {
 		return nil, errors.New("invalid session format")
@@ -582,6 +630,10 @@ func (a *Authenticator) SaveUserToGopassFile(usersDir, username, password, passp
 		RecoveryHash: recoveryHash,
 	}
 	a.muUsers.Unlock()
+
+	// Invalidate cached sessions for the user
+	a.InvalidateUserSessions(username)
+
 	return nil
 }
 
@@ -712,6 +764,100 @@ func (a *Authenticator) UpdateUserRole(usersDir, username, passphrase, newRole s
 		return fmt.Errorf("failed to write encrypted user file: %w", err)
 	}
 
+	// Invalidate cached sessions for the user
+	a.InvalidateUserSessions(username)
+
 	return nil
+}
+
+// hashToken returns a secure SHA-256 hash array of the token.
+func (a *Authenticator) hashToken(token string) [32]byte {
+	return sha256.Sum256([]byte(token))
+}
+
+// GetCachedSession retrieves a validated session from the cache.
+func (a *Authenticator) GetCachedSession(token string) (*Session, bool) {
+	if token == "" {
+		return nil, false
+	}
+	hash := a.hashToken(token)
+
+	a.cacheMu.RLock()
+	cached, exists := a.sessionCache[hash]
+	a.cacheMu.RUnlock()
+
+	if !exists {
+		return nil, false
+	}
+
+	if time.Now().After(cached.ExpiresAt) {
+		// Clean up expired cache entry
+		a.cacheMu.Lock()
+		delete(a.sessionCache, hash)
+		a.cacheMu.Unlock()
+		return nil, false
+	}
+
+	return cached.Session, true
+}
+
+// AddCachedSession stores a validated session in the in-memory cache.
+func (a *Authenticator) AddCachedSession(token string, sess *Session) {
+	if token == "" || sess == nil {
+		return
+	}
+	hash := a.hashToken(token)
+	expiresAt := time.Unix(sess.ExpiresAt, 0)
+
+	a.cacheMu.Lock()
+	defer a.cacheMu.Unlock()
+
+	// Store in main cache
+	a.sessionCache[hash] = &cachedSession{
+		Session:   sess,
+		ExpiresAt: expiresAt,
+	}
+
+	// Add to user session lookup mapping
+	a.userSessionHashes[sess.Username] = append(a.userSessionHashes[sess.Username], hash)
+}
+
+// InvalidateUserSessions revokes all active cached sessions for a given username.
+func (a *Authenticator) InvalidateUserSessions(username string) {
+	if username == "" {
+		return
+	}
+	a.cacheMu.Lock()
+	defer a.cacheMu.Unlock()
+
+	hashes, exists := a.userSessionHashes[username]
+	if !exists {
+		return
+	}
+
+	for _, h := range hashes {
+		delete(a.sessionCache, h)
+	}
+	delete(a.userSessionHashes, username)
+}
+
+// InvalidateToken removes a single session token from the cache.
+func (a *Authenticator) InvalidateToken(token string) {
+	if token == "" {
+		return
+	}
+	hash := a.hashToken(token)
+	a.cacheMu.Lock()
+	delete(a.sessionCache, hash)
+	a.cacheMu.Unlock()
+}
+
+// InvalidateAll clears the entire session cache.
+func (a *Authenticator) InvalidateAll() {
+	a.cacheMu.Lock()
+	defer a.cacheMu.Unlock()
+
+	a.sessionCache = make(map[[32]byte]*cachedSession)
+	a.userSessionHashes = make(map[string][][32]byte)
 }
 
