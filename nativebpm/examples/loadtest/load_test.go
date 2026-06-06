@@ -72,7 +72,7 @@ func TestBPMNCrashRecovery(t *testing.T) {
 	var pi *nativebpm.ProcessInstance
 	for i := 0; i < 50; i++ {
 		pi, err = client.GetInstance(ctx, startResp.InstanceID)
-		if err == nil && len(pi.WaitingTokens) > 0 && pi.WaitingTokens[0] == "Activity_User_Approve" {
+		if err == nil && len(pi.WaitingActivityInstances) > 0 && pi.WaitingActivityInstances[0] == "Activity_User_Approve" {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -81,13 +81,13 @@ func TestBPMNCrashRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to fetch process instance during polling: %v", err)
 	}
-	if len(pi.WaitingTokens) == 0 || pi.WaitingTokens[0] != "Activity_User_Approve" {
-		t.Fatalf("Expected process to pause at Activity_User_Approve, got: %v", pi.WaitingTokens)
+	if len(pi.WaitingActivityInstances) == 0 || pi.WaitingActivityInstances[0] != "Activity_User_Approve" {
+		t.Fatalf("Expected process to pause at Activity_User_Approve, got: %v", pi.WaitingActivityInstances)
 	}
 
 	// 2. Complete the user task. Because the REST API server is stateless and fully backed by Postgres,
 	// this simulates resuming the process from DB state as if the server had rebooted/recovered.
-	taskID := pi.WaitingTokens[0]
+	taskID := pi.WaitingActivityInstances[0]
 	completedPi, err := client.CompleteTask(pi.ID, taskID).Send(ctx)
 	if err != nil {
 		t.Fatalf("CompleteTask failed: %v", err)
@@ -97,8 +97,8 @@ func TestBPMNCrashRecovery(t *testing.T) {
 	if !completedPi.Completed {
 		t.Errorf("Expected process to be completed, got state: %+v", completedPi)
 	}
-	if len(completedPi.ActiveTokens) != 0 {
-		t.Errorf("Expected no active tokens left, got: %v", completedPi.ActiveTokens)
+	if len(completedPi.ActiveActivityInstances) != 0 {
+		t.Errorf("Expected no active tokens left, got: %v", completedPi.ActiveActivityInstances)
 	}
 }
 
@@ -127,6 +127,33 @@ func TestWasmCrashRecovery(t *testing.T) {
       <incoming>Flow_2</incoming>
     </endEvent>
   </process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="wasmTaskProcess">
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <omgdi:waypoint x="188" y="120" />
+        <omgdi:waypoint x="240" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+        <omgdi:waypoint x="340" y="120" />
+        <omgdi:waypoint x="392" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <omgdc:Bounds x="152" y="102" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="158" y="145" width="24" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="WasmTask_1_di" bpmnElement="WasmTask_1">
+        <omgdc:Bounds x="240" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
+        <omgdc:Bounds x="392" y="102" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="400" y="145" width="20" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </definitions>`
 
 	_, err = client.Deploy("wasmTaskProcess", "WASM Task Process").
@@ -154,7 +181,7 @@ func TestWasmCrashRecovery(t *testing.T) {
 		inst, err = client.GetInstance(ctx, startResp.InstanceID)
 		if err == nil {
 			foundActiveToken := false
-			for _, token := range inst.ActiveTokens {
+			for _, token := range inst.ActiveActivityInstances {
 				if token == "WasmTask_1" {
 					foundActiveToken = true
 					break
@@ -174,14 +201,14 @@ func TestWasmCrashRecovery(t *testing.T) {
 		t.Fatalf("Expected instance to not be completed, but it is completed")
 	}
 	foundActiveToken := false
-	for _, token := range inst.ActiveTokens {
+	for _, token := range inst.ActiveActivityInstances {
 		if token == "WasmTask_1" {
 			foundActiveToken = true
 			break
 		}
 	}
 	if !foundActiveToken {
-		t.Fatalf("Expected WasmTask_1 to be in ActiveTokens, got: %v", inst.ActiveTokens)
+		t.Fatalf("Expected WasmTask_1 to be in ActiveActivityInstances, got: %v", inst.ActiveActivityInstances)
 	}
 
 	// 2. Disable simulate_crash and call ResumeProcessInstance to resume the execution.
