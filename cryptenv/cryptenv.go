@@ -10,10 +10,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
+	"strconv"
 	"sync"
 
 	"filippo.io/age"
 	"github.com/joho/godotenv"
+	"gopkg.in/yaml.v3"
 )
 
 // SecureEnv manages environment secrets in-memory by keeping them encrypted
@@ -306,4 +309,91 @@ func stringsIndex(s, substr string) int {
 		}
 	}
 	return -1
+}
+
+// ToMap decrypts and returns all secrets as a map[string]string.
+// Useful for integration with third-party libraries (e.g. caarlos0/env).
+func (se *SecureEnv) ToMap() (map[string]string, error) {
+	se.mu.RLock()
+	defer se.mu.RUnlock()
+
+	result := make(map[string]string)
+	for k := range se.secrets {
+		val, err := se.Get(k)
+		if err != nil {
+			return nil, err
+		}
+		result[k] = val
+	}
+	return result, nil
+}
+
+// Unmarshal populates a struct pointer with values from the SecureEnv using the "env" and "envDefault" tags.
+func (se *SecureEnv) Unmarshal(v interface{}) error {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+		return errors.New("must pass a non-nil pointer to a struct")
+	}
+
+	elem := rv.Elem()
+	if elem.Kind() != reflect.Struct {
+		return errors.New("must pass a pointer to a struct")
+	}
+
+	t := elem.Type()
+	for i := 0; i < elem.NumField(); i++ {
+		field := elem.Field(i)
+		structField := t.Field(i)
+		if !field.CanSet() {
+			continue
+		}
+
+		tag := structField.Tag.Get("env")
+		if tag == "" {
+			continue
+		}
+
+		envKey := tag
+		val, err := se.Get(envKey)
+		if err != nil {
+			defaultVal := structField.Tag.Get("envDefault")
+			if defaultVal == "" {
+				continue
+			}
+			val = defaultVal
+		}
+
+		switch field.Kind() {
+		case reflect.String:
+			field.SetString(val)
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			intVal, err := strconv.ParseInt(val, 10, 64)
+			if err != nil {
+				return fmt.Errorf("failed to parse field %s as int: %w", structField.Name, err)
+			}
+			field.SetInt(intVal)
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			uintVal, err := strconv.ParseUint(val, 10, 64)
+			if err != nil {
+				return fmt.Errorf("failed to parse field %s as uint: %w", structField.Name, err)
+			}
+			field.SetUint(uintVal)
+		case reflect.Bool:
+			boolVal, err := strconv.ParseBool(val)
+			if err != nil {
+				return fmt.Errorf("failed to parse field %s as bool: %w", structField.Name, err)
+			}
+			field.SetBool(boolVal)
+		}
+	}
+	return nil
+}
+
+// GetYAML decrypts the secret at key and unmarshals it into v using gopkg.in/yaml.v3.
+func (se *SecureEnv) GetYAML(key string, v interface{}) error {
+	val, err := se.Get(key)
+	if err != nil {
+		return err
+	}
+	return yaml.Unmarshal([]byte(val), v)
 }

@@ -225,3 +225,100 @@ func TestAESLoadAndSave(t *testing.T) {
 		t.Errorf("expected %q, got %q", "9000", port)
 	}
 }
+
+type TestConfigStruct struct {
+	DBUser   string `env:"DB_USER"`
+	DBPass   string `env:"DB_PASS"`
+	DBPort   int    `env:"DB_PORT" envDefault:"5432"`
+	SSLMode  bool   `env:"SSL_MODE"`
+	LogLevel string `env:"LOG_LEVEL" envDefault:"info"`
+}
+
+func TestUnmarshal(t *testing.T) {
+	se, err := NewSecureEnv("master-key-123")
+	if err != nil {
+		t.Fatalf("failed to init: %v", err)
+	}
+
+	_ = se.Set("DB_USER", "postgres")
+	_ = se.Set("DB_PASS", "postgres_password")
+	_ = se.Set("SSL_MODE", "true")
+
+	var cfg TestConfigStruct
+	err = se.Unmarshal(&cfg)
+	if err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if cfg.DBUser != "postgres" {
+		t.Errorf("DBUser mismatch: %s", cfg.DBUser)
+	}
+	if cfg.DBPass != "postgres_password" {
+		t.Errorf("DBPass mismatch: %s", cfg.DBPass)
+	}
+	if cfg.DBPort != 5432 {
+		t.Errorf("DBPort should use default value 5432, got %d", cfg.DBPort)
+	}
+	if !cfg.SSLMode {
+		t.Errorf("SSLMode should be true")
+	}
+	if cfg.LogLevel != "info" {
+		t.Errorf("LogLevel should use default value 'info', got %s", cfg.LogLevel)
+	}
+}
+
+func TestToMap(t *testing.T) {
+	se, err := NewSecureEnv("master-key-123")
+	if err != nil {
+		t.Fatalf("failed to init: %v", err)
+	}
+
+	_ = se.Set("KEY1", "val1")
+	_ = se.Set("KEY2", "val2")
+
+	m, err := se.ToMap()
+	if err != nil {
+		t.Fatalf("ToMap failed: %v", err)
+	}
+
+	if len(m) != 2 {
+		t.Errorf("map length mismatch: %d", len(m))
+	}
+	if m["KEY1"] != "val1" || m["KEY2"] != "val2" {
+		t.Errorf("map content mismatch")
+	}
+}
+
+type YamlConfig struct {
+	Database struct {
+		Host string `yaml:"host"`
+		Port int    `yaml:"port"`
+	} `yaml:"database"`
+}
+
+func TestGetYAML(t *testing.T) {
+	se, err := NewSecureEnv("master-key-123")
+	if err != nil {
+		t.Fatalf("failed to init: %v", err)
+	}
+
+	yamlStr := `
+database:
+  host: 127.0.0.1
+  port: 5432
+`
+	_ = se.Set("CONFIG_YAML", yamlStr)
+
+	var cfg YamlConfig
+	err = se.GetYAML("CONFIG_YAML", &cfg)
+	if err != nil {
+		t.Fatalf("GetYAML failed: %v", err)
+	}
+
+	if cfg.Database.Host != "127.0.0.1" {
+		t.Errorf("Host mismatch: %s", cfg.Database.Host)
+	}
+	if cfg.Database.Port != 5432 {
+		t.Errorf("Port mismatch: %d", cfg.Database.Port)
+	}
+}
