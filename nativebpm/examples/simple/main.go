@@ -56,7 +56,7 @@ func main() {
 	var pi *nativebpm.ProcessInstance
 	for i := 0; i < 50; i++ {
 		pi, err = client.GetInstance(ctx, startResp.InstanceID)
-		if err == nil && len(pi.WaitingTokens) > 0 {
+		if err == nil && len(pi.WaitingActivityInstances) > 0 {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -65,11 +65,11 @@ func main() {
 		slog.Error("Failed to fetch instance during polling", "error", err)
 		return
 	}
-	slog.Info("Instance started asynchronously", "id", pi.ID, "completed", pi.Completed, "waiting", pi.WaitingTokens)
+	slog.Info("Instance started asynchronously", "id", pi.ID, "completed", pi.Completed, "waiting", pi.WaitingActivityInstances)
 
 	// 5. Complete task
-	if len(pi.WaitingTokens) > 0 {
-		taskID := pi.WaitingTokens[0]
+	if len(pi.WaitingActivityInstances) > 0 {
+		taskID := pi.WaitingActivityInstances[0]
 		pi, err = client.CompleteTask(pi.ID, taskID).
 			Variable("approved", true).
 			Send(ctx)
@@ -77,7 +77,7 @@ func main() {
 			slog.Error("CompleteTask failed", "error", err)
 			return
 		}
-		slog.Info("Task completed", "id", pi.ID, "completed", pi.Completed, "waiting", pi.WaitingTokens)
+		slog.Info("Task completed", "id", pi.ID, "completed", pi.Completed, "waiting", pi.WaitingActivityInstances)
 	}
 
 	// 6. Get Logs

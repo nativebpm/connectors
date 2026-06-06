@@ -68,7 +68,7 @@ func main() {
 		slog.Error("Failed to fetch Scenario A instance", "error", err)
 		return
 	}
-	slog.Info("Scenario A Completed", "id", piA.ID, "completed", piA.Completed, "waiting", piA.WaitingTokens)
+	slog.Info("Scenario A Completed", "id", piA.ID, "completed", piA.Completed, "waiting", piA.WaitingActivityInstances)
 
 	// ----------------------------------------------------
 	// Scenario B: High Amount ($1500) -> Requires Manager Approval (User Task)
@@ -89,7 +89,7 @@ func main() {
 	var piB *nativebpm.ProcessInstance
 	for i := 0; i < 50; i++ {
 		piB, err = client.GetInstance(ctx, startRespB.InstanceID)
-		if err == nil && len(piB.WaitingTokens) > 0 {
+		if err == nil && len(piB.WaitingActivityInstances) > 0 {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -98,11 +98,11 @@ func main() {
 		slog.Error("Failed to fetch Scenario B instance", "error", err)
 		return
 	}
-	slog.Info("Scenario B Started", "id", piB.ID, "completed", piB.Completed, "waiting", piB.WaitingTokens)
+	slog.Info("Scenario B Started", "id", piB.ID, "completed", piB.Completed, "waiting", piB.WaitingActivityInstances)
 
 	// Complete Manager Approval task for Scenario B
-	if len(piB.WaitingTokens) > 0 {
-		taskID := piB.WaitingTokens[0]
+	if len(piB.WaitingActivityInstances) > 0 {
+		taskID := piB.WaitingActivityInstances[0]
 		slog.Info("Completing Manager Approval task for Scenario B", "taskID", taskID)
 		piB, err = client.CompleteTask(piB.ID, taskID).
 			Variable("manager_approved", true).
@@ -111,7 +111,7 @@ func main() {
 			slog.Error("Failed to complete Manager Approval task", "error", err)
 			return
 		}
-		slog.Info("Scenario B Task Completed", "id", piB.ID, "completed", piB.Completed, "waiting", piB.WaitingTokens)
+		slog.Info("Scenario B Task Completed", "id", piB.ID, "completed", piB.Completed, "waiting", piB.WaitingActivityInstances)
 	}
 
 	// ----------------------------------------------------

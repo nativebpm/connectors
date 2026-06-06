@@ -66,7 +66,7 @@ services:
   sequin_grafana:
     image: grafana/grafana
     ports:
-      - "3000:3000"
+      - "3001:3000"
     depends_on:
       - sequin_prometheus
     volumes:

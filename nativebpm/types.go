@@ -17,8 +17,8 @@ type ProcessDefinition struct {
 type ProcessInstance struct {
 	ID             string                 `json:"id"`
 	ProcessID      string                 `json:"process_id"`
-	ActiveTokens   []string               `json:"active_tokens"`
-	WaitingTokens  []string               `json:"waiting_tokens"`
+	ActiveActivityInstances   []string               `json:"active_activity_instances"`
+	WaitingActivityInstances  []string               `json:"waiting_activity_instances"`
 	CompletedTasks []string               `json:"completed_tasks"`
 	Variables      map[string]interface{} `json:"variables"`
 	Completed      bool                   `json:"completed"`

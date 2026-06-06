@@ -222,77 +222,77 @@ func TestBPMNVSRealCamunda(t *testing.T) {
 		"score": 60, // Предоставляем результат Activity_Init шага
 	})
 	require.NoError(t, err)
-	assert.Contains(t, instance.ActiveTokens, "StartEvent_1")
+	assert.Contains(t, instance.ActiveActivityInstances, "StartEvent_1")
 
 	// Step 1: StartEvent_1 -> Activity_Init
 	err = engine.Step(ctx, instance)
 	require.NoError(t, err)
-	assert.Contains(t, instance.ActiveTokens, "Activity_Init")
+	assert.Contains(t, instance.ActiveActivityInstances, "Activity_Init")
 
 	// Step 2: Activity_Init -> Gateway_Exclusive
 	err = engine.Step(ctx, instance)
 	require.NoError(t, err)
-	assert.Contains(t, instance.ActiveTokens, "Gateway_Exclusive")
+	assert.Contains(t, instance.ActiveActivityInstances, "Gateway_Exclusive")
 
 	// Step 3: Gateway_Exclusive -> Activity_High_Score (since score = 60 > 50)
 	err = engine.Step(ctx, instance)
 	require.NoError(t, err)
-	assert.Contains(t, instance.ActiveTokens, "Activity_High_Score")
+	assert.Contains(t, instance.ActiveActivityInstances, "Activity_High_Score")
 
 	// Step 4: Activity_High_Score -> Gateway_Join_Exclusive
 	err = engine.Step(ctx, instance)
 	require.NoError(t, err)
-	assert.Contains(t, instance.ActiveTokens, "Gateway_Join_Exclusive")
+	assert.Contains(t, instance.ActiveActivityInstances, "Gateway_Join_Exclusive")
 
 	// Step 5: Gateway_Join_Exclusive -> Gateway_Parallel
 	err = engine.Step(ctx, instance)
 	require.NoError(t, err)
-	assert.Contains(t, instance.ActiveTokens, "Gateway_Parallel")
+	assert.Contains(t, instance.ActiveActivityInstances, "Gateway_Parallel")
 
 	// Step 6: Gateway_Parallel -> [Activity_User_Approve, Activity_Background_Check]
 	err = engine.Step(ctx, instance)
 	require.NoError(t, err)
-	assert.Contains(t, instance.ActiveTokens, "Activity_User_Approve")
-	assert.Contains(t, instance.ActiveTokens, "Activity_Background_Check")
+	assert.Contains(t, instance.ActiveActivityInstances, "Activity_User_Approve")
+	assert.Contains(t, instance.ActiveActivityInstances, "Activity_Background_Check")
 
-	// Step 7: Process Activity_User_Approve (UserTask) -> moves it to WaitingTokens
-	// ActiveTokens remaining: [Activity_Background_Check], WaitingTokens: [Activity_User_Approve]
+	// Step 7: Process Activity_User_Approve (UserTask) -> moves it to WaitingActivityInstances
+	// ActiveActivityInstances remaining: [Activity_Background_Check], WaitingActivityInstances: [Activity_User_Approve]
 	err = engine.Step(ctx, instance)
 	require.NoError(t, err)
-	assert.Contains(t, instance.ActiveTokens, "Activity_Background_Check")
-	assert.Contains(t, instance.WaitingTokens, "Activity_User_Approve")
+	assert.Contains(t, instance.ActiveActivityInstances, "Activity_Background_Check")
+	assert.Contains(t, instance.WaitingActivityInstances, "Activity_User_Approve")
 
 	// Step 8: Process Activity_Background_Check (ServiceTask) -> moves it to Gateway_Join_Parallel
-	// ActiveTokens: [Gateway_Join_Parallel], WaitingTokens: [Activity_User_Approve]
+	// ActiveActivityInstances: [Gateway_Join_Parallel], WaitingActivityInstances: [Activity_User_Approve]
 	err = engine.Step(ctx, instance)
 	require.NoError(t, err)
-	assert.Contains(t, instance.ActiveTokens, "Gateway_Join_Parallel")
-	assert.Contains(t, instance.WaitingTokens, "Activity_User_Approve")
+	assert.Contains(t, instance.ActiveActivityInstances, "Gateway_Join_Parallel")
+	assert.Contains(t, instance.WaitingActivityInstances, "Activity_User_Approve")
 
 	// Step 9: Process Gateway_Join_Parallel (AND join gateway).
 	// Since Activity_User_Approve has NOT arrived yet, token is parked at Gateway_Join_Parallel.
-	// ActiveTokens becomes: [Gateway_Join_Parallel], WaitingTokens: [Activity_User_Approve]
+	// ActiveActivityInstances becomes: [Gateway_Join_Parallel], WaitingActivityInstances: [Activity_User_Approve]
 	err = engine.Step(ctx, instance)
 	require.NoError(t, err)
-	assert.Contains(t, instance.ActiveTokens, "Gateway_Join_Parallel")
-	assert.Contains(t, instance.WaitingTokens, "Activity_User_Approve")
+	assert.Contains(t, instance.ActiveActivityInstances, "Gateway_Join_Parallel")
+	assert.Contains(t, instance.WaitingActivityInstances, "Activity_User_Approve")
 
 	// Step 10: Complete UserTask in our engine
 	err = engine.CompleteTask(instance, "Activity_User_Approve", nil)
 	require.NoError(t, err)
-	// ActiveTokens: [Gateway_Join_Parallel, Gateway_Join_Parallel], WaitingTokens: []
-	assert.Contains(t, instance.ActiveTokens, "Gateway_Join_Parallel")
-	assert.Empty(t, instance.WaitingTokens)
+	// ActiveActivityInstances: [Gateway_Join_Parallel, Gateway_Join_Parallel], WaitingActivityInstances: []
+	assert.Contains(t, instance.ActiveActivityInstances, "Gateway_Join_Parallel")
+	assert.Empty(t, instance.WaitingActivityInstances)
 
 	// Step 11: Process Gateway_Join_Parallel -> satisfied -> moves to EndEvent_1
-	// ActiveTokens: [EndEvent_1]
+	// ActiveActivityInstances: [EndEvent_1]
 	err = engine.Step(ctx, instance)
 	require.NoError(t, err)
-	assert.Contains(t, instance.ActiveTokens, "EndEvent_1")
+	assert.Contains(t, instance.ActiveActivityInstances, "EndEvent_1")
 
 	// Step 12: Process EndEvent_1 -> Completed!
 	err = engine.Step(ctx, instance)
 	require.NoError(t, err)
-	assert.Empty(t, instance.ActiveTokens)
+	assert.Empty(t, instance.ActiveActivityInstances)
 	assert.True(t, instance.Completed)
 }
