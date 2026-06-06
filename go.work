@@ -12,6 +12,7 @@ use (
 	./sequin
 	./telegram
 	./temporal
+	./restate
 	./totp
 	./wasman
 	./wasman/runner
