@@ -62,7 +62,7 @@ func (a *Activities) SendTelegramDocument(ctx context.Context, chatID int64, pdf
 
 	pdfReader := bytes.NewReader(pdfBytes)
 	_, err := a.telegramClient.NewDocument(chatID, pdfReader, filename).
-		Caption("Ваш документ успешно сгенерирован и отправлен нативной оркестрацией Temporal!").
+		Caption("Your document has been successfully generated and sent by native Temporal orchestration!").
 		Send(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to send Telegram document: %w", err)

@@ -63,7 +63,7 @@ type SnapshotStore interface {
 	SaveWasm(hash string, wasmBytes []byte) error
 	LoadWasm(hash string) ([]byte, error)
 
-	// Active Index for Cockpit visualization
+	// Active Index for Console visualization
 	UpdateActiveIndex(id string, info []byte, completed bool) error
 	LoadActiveIndex() ([]byte, error)
 }

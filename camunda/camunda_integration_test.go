@@ -219,7 +219,7 @@ func TestBPMNVSRealCamunda(t *testing.T) {
 
 	engine := bpmn.NewEngine(pp, nil)
 	instance, err := engine.StartInstance("instance-compare", map[string]interface{}{
-		"score": 60, // Предоставляем результат Activity_Init шага
+		"score": 60, // Provide the result of the Activity_Init step
 	})
 	require.NoError(t, err)
 	assert.Contains(t, instance.ActiveActivityInstances, "StartEvent_1")

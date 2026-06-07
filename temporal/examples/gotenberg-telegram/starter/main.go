@@ -54,11 +54,11 @@ func main() {
     </style>
 </head>
 <body>
-    <h1>Отчет о нативной интеграции</h1>
-    <p>Приветствуем вас!</p>
-    <p>Этот документ сгенерирован с помощью микросервиса <strong>Gotenberg Chromium</strong> и отправлен вам в Telegram через нативный сценарий оркестрации <strong>Temporal</strong>.</p>
-    <p>Наш монорепозиторий коннекторов позволяет объединять различные системы быстро и без лишней сложности (такой как промежуточные таблицы БД или CDC).</p>
-    <div class="footer">Сгенерировано в: ` + time.Now().Format("2006-01-02 15:04:05") + `</div>
+    <h1>Native Integration Report</h1>
+    <p>Greetings!</p>
+    <p>This document was generated using the <strong>Gotenberg Chromium</strong> microservice and sent to you in Telegram via a native <strong>Temporal</strong> orchestration workflow.</p>
+    <p>Our connectors monorepository allows combining different systems quickly and without unnecessary complexity (such as intermediate database tables or CDC).</p>
+    <div class="footer">Generated at: ` + time.Now().Format("2006-01-02 15:04:05") + `</div>
 </body>
 </html>`
 
