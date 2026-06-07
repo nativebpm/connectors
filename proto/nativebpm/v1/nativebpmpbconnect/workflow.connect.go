@@ -39,12 +39,16 @@ const (
 	// WorkflowServiceCompleteTaskProcedure is the fully-qualified name of the WorkflowService's
 	// CompleteTask RPC.
 	WorkflowServiceCompleteTaskProcedure = "/nativebpm.v1.WorkflowService/CompleteTask"
+	// WorkflowServiceStreamWorkflowEventsProcedure is the fully-qualified name of the WorkflowService's
+	// StreamWorkflowEvents RPC.
+	WorkflowServiceStreamWorkflowEventsProcedure = "/nativebpm.v1.WorkflowService/StreamWorkflowEvents"
 )
 
 // WorkflowServiceClient is a client for the nativebpm.v1.WorkflowService service.
 type WorkflowServiceClient interface {
 	StartProcess(context.Context, *connect.Request[v1.StartProcessRequest]) (*connect.Response[v1.StartProcessResponse], error)
 	CompleteTask(context.Context, *connect.Request[v1.CompleteTaskRequest]) (*connect.Response[v1.CompleteTaskResponse], error)
+	StreamWorkflowEvents(context.Context, *connect.Request[v1.StreamWorkflowEventsRequest]) (*connect.ServerStreamForClient[v1.WorkflowEvent], error)
 }
 
 // NewWorkflowServiceClient constructs a client for the nativebpm.v1.WorkflowService service. By
@@ -70,13 +74,20 @@ func NewWorkflowServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(workflowServiceMethods.ByName("CompleteTask")),
 			connect.WithClientOptions(opts...),
 		),
+		streamWorkflowEvents: connect.NewClient[v1.StreamWorkflowEventsRequest, v1.WorkflowEvent](
+			httpClient,
+			baseURL+WorkflowServiceStreamWorkflowEventsProcedure,
+			connect.WithSchema(workflowServiceMethods.ByName("StreamWorkflowEvents")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // workflowServiceClient implements WorkflowServiceClient.
 type workflowServiceClient struct {
-	startProcess *connect.Client[v1.StartProcessRequest, v1.StartProcessResponse]
-	completeTask *connect.Client[v1.CompleteTaskRequest, v1.CompleteTaskResponse]
+	startProcess         *connect.Client[v1.StartProcessRequest, v1.StartProcessResponse]
+	completeTask         *connect.Client[v1.CompleteTaskRequest, v1.CompleteTaskResponse]
+	streamWorkflowEvents *connect.Client[v1.StreamWorkflowEventsRequest, v1.WorkflowEvent]
 }
 
 // StartProcess calls nativebpm.v1.WorkflowService.StartProcess.
@@ -89,10 +100,16 @@ func (c *workflowServiceClient) CompleteTask(ctx context.Context, req *connect.R
 	return c.completeTask.CallUnary(ctx, req)
 }
 
+// StreamWorkflowEvents calls nativebpm.v1.WorkflowService.StreamWorkflowEvents.
+func (c *workflowServiceClient) StreamWorkflowEvents(ctx context.Context, req *connect.Request[v1.StreamWorkflowEventsRequest]) (*connect.ServerStreamForClient[v1.WorkflowEvent], error) {
+	return c.streamWorkflowEvents.CallServerStream(ctx, req)
+}
+
 // WorkflowServiceHandler is an implementation of the nativebpm.v1.WorkflowService service.
 type WorkflowServiceHandler interface {
 	StartProcess(context.Context, *connect.Request[v1.StartProcessRequest]) (*connect.Response[v1.StartProcessResponse], error)
 	CompleteTask(context.Context, *connect.Request[v1.CompleteTaskRequest]) (*connect.Response[v1.CompleteTaskResponse], error)
+	StreamWorkflowEvents(context.Context, *connect.Request[v1.StreamWorkflowEventsRequest], *connect.ServerStream[v1.WorkflowEvent]) error
 }
 
 // NewWorkflowServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -114,12 +131,20 @@ func NewWorkflowServiceHandler(svc WorkflowServiceHandler, opts ...connect.Handl
 		connect.WithSchema(workflowServiceMethods.ByName("CompleteTask")),
 		connect.WithHandlerOptions(opts...),
 	)
+	workflowServiceStreamWorkflowEventsHandler := connect.NewServerStreamHandler(
+		WorkflowServiceStreamWorkflowEventsProcedure,
+		svc.StreamWorkflowEvents,
+		connect.WithSchema(workflowServiceMethods.ByName("StreamWorkflowEvents")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/nativebpm.v1.WorkflowService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WorkflowServiceStartProcessProcedure:
 			workflowServiceStartProcessHandler.ServeHTTP(w, r)
 		case WorkflowServiceCompleteTaskProcedure:
 			workflowServiceCompleteTaskHandler.ServeHTTP(w, r)
+		case WorkflowServiceStreamWorkflowEventsProcedure:
+			workflowServiceStreamWorkflowEventsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -135,4 +160,8 @@ func (UnimplementedWorkflowServiceHandler) StartProcess(context.Context, *connec
 
 func (UnimplementedWorkflowServiceHandler) CompleteTask(context.Context, *connect.Request[v1.CompleteTaskRequest]) (*connect.Response[v1.CompleteTaskResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("nativebpm.v1.WorkflowService.CompleteTask is not implemented"))
+}
+
+func (UnimplementedWorkflowServiceHandler) StreamWorkflowEvents(context.Context, *connect.Request[v1.StreamWorkflowEventsRequest], *connect.ServerStream[v1.WorkflowEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("nativebpm.v1.WorkflowService.StreamWorkflowEvents is not implemented"))
 }

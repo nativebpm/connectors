@@ -270,6 +270,150 @@ func (x *CompleteTaskResponse) GetCompleted() bool {
 	return false
 }
 
+type StreamWorkflowEventsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	InstanceId    string                 `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamWorkflowEventsRequest) Reset() {
+	*x = StreamWorkflowEventsRequest{}
+	mi := &file_nativebpm_v1_workflow_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamWorkflowEventsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamWorkflowEventsRequest) ProtoMessage() {}
+
+func (x *StreamWorkflowEventsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_nativebpm_v1_workflow_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamWorkflowEventsRequest.ProtoReflect.Descriptor instead.
+func (*StreamWorkflowEventsRequest) Descriptor() ([]byte, []int) {
+	return file_nativebpm_v1_workflow_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *StreamWorkflowEventsRequest) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
+type WorkflowEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	InstanceId    string                 `protobuf:"bytes,2,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	NodeId        string                 `protobuf:"bytes,3,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	NodeName      string                 `protobuf:"bytes,4,opt,name=node_name,json=nodeName,proto3" json:"node_name,omitempty"`
+	NodeType      string                 `protobuf:"bytes,5,opt,name=node_type,json=nodeType,proto3" json:"node_type,omitempty"`
+	Action        string                 `protobuf:"bytes,6,opt,name=action,proto3" json:"action,omitempty"`
+	VariablesJson []byte                 `protobuf:"bytes,7,opt,name=variables_json,json=variablesJson,proto3" json:"variables_json,omitempty"`
+	TimestampNs   int64                  `protobuf:"varint,8,opt,name=timestamp_ns,json=timestampNs,proto3" json:"timestamp_ns,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkflowEvent) Reset() {
+	*x = WorkflowEvent{}
+	mi := &file_nativebpm_v1_workflow_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowEvent) ProtoMessage() {}
+
+func (x *WorkflowEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_nativebpm_v1_workflow_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowEvent.ProtoReflect.Descriptor instead.
+func (*WorkflowEvent) Descriptor() ([]byte, []int) {
+	return file_nativebpm_v1_workflow_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *WorkflowEvent) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+func (x *WorkflowEvent) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
+func (x *WorkflowEvent) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *WorkflowEvent) GetNodeName() string {
+	if x != nil {
+		return x.NodeName
+	}
+	return ""
+}
+
+func (x *WorkflowEvent) GetNodeType() string {
+	if x != nil {
+		return x.NodeType
+	}
+	return ""
+}
+
+func (x *WorkflowEvent) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *WorkflowEvent) GetVariablesJson() []byte {
+	if x != nil {
+		return x.VariablesJson
+	}
+	return nil
+}
+
+func (x *WorkflowEvent) GetTimestampNs() int64 {
+	if x != nil {
+		return x.TimestampNs
+	}
+	return 0
+}
+
 var File_nativebpm_v1_workflow_proto protoreflect.FileDescriptor
 
 const file_nativebpm_v1_workflow_proto_rawDesc = "" +
@@ -294,10 +438,24 @@ const file_nativebpm_v1_workflow_proto_rawDesc = "" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12#\n" +
 	"\rcurrent_state\x18\x02 \x01(\tR\fcurrentState\x12\x1c\n" +
-	"\tcompleted\x18\x03 \x01(\bR\tcompleted2\xaf\x02\n" +
+	"\tcompleted\x18\x03 \x01(\bR\tcompleted\">\n" +
+	"\x1bStreamWorkflowEventsRequest\x12\x1f\n" +
+	"\vinstance_id\x18\x01 \x01(\tR\n" +
+	"instanceId\"\x80\x02\n" +
+	"\rWorkflowEvent\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x1f\n" +
+	"\vinstance_id\x18\x02 \x01(\tR\n" +
+	"instanceId\x12\x17\n" +
+	"\anode_id\x18\x03 \x01(\tR\x06nodeId\x12\x1b\n" +
+	"\tnode_name\x18\x04 \x01(\tR\bnodeName\x12\x1b\n" +
+	"\tnode_type\x18\x05 \x01(\tR\bnodeType\x12\x16\n" +
+	"\x06action\x18\x06 \x01(\tR\x06action\x12%\n" +
+	"\x0evariables_json\x18\a \x01(\fR\rvariablesJson\x12!\n" +
+	"\ftimestamp_ns\x18\b \x01(\x03R\vtimestampNs2\xce\x03\n" +
 	"\x0fWorkflowService\x12\x8c\x01\n" +
 	"\fStartProcess\x12!.nativebpm.v1.StartProcessRequest\x1a\".nativebpm.v1.StartProcessResponse\"5\x82\xd3\xe4\x93\x02/:\x01*\"*/nativebpm.v1.WorkflowService/StartProcess\x12\x8c\x01\n" +
-	"\fCompleteTask\x12!.nativebpm.v1.CompleteTaskRequest\x1a\".nativebpm.v1.CompleteTaskResponse\"5\x82\xd3\xe4\x93\x02/:\x01*\"*/nativebpm.v1.WorkflowService/CompleteTaskB@Z>github.com/nativebpm/connectors/proto/nativebpm/v1;nativebpmpbb\x06proto3"
+	"\fCompleteTask\x12!.nativebpm.v1.CompleteTaskRequest\x1a\".nativebpm.v1.CompleteTaskResponse\"5\x82\xd3\xe4\x93\x02/:\x01*\"*/nativebpm.v1.WorkflowService/CompleteTask\x12\x9c\x01\n" +
+	"\x14StreamWorkflowEvents\x12).nativebpm.v1.StreamWorkflowEventsRequest\x1a\x1b.nativebpm.v1.WorkflowEvent\":\x82\xd3\xe4\x93\x024\x122/nativebpm.v1.WorkflowService/StreamWorkflowEvents0\x01B@Z>github.com/nativebpm/connectors/proto/nativebpm/v1;nativebpmpbb\x06proto3"
 
 var (
 	file_nativebpm_v1_workflow_proto_rawDescOnce sync.Once
@@ -311,20 +469,24 @@ func file_nativebpm_v1_workflow_proto_rawDescGZIP() []byte {
 	return file_nativebpm_v1_workflow_proto_rawDescData
 }
 
-var file_nativebpm_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_nativebpm_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_nativebpm_v1_workflow_proto_goTypes = []any{
-	(*StartProcessRequest)(nil),  // 0: nativebpm.v1.StartProcessRequest
-	(*StartProcessResponse)(nil), // 1: nativebpm.v1.StartProcessResponse
-	(*CompleteTaskRequest)(nil),  // 2: nativebpm.v1.CompleteTaskRequest
-	(*CompleteTaskResponse)(nil), // 3: nativebpm.v1.CompleteTaskResponse
+	(*StartProcessRequest)(nil),         // 0: nativebpm.v1.StartProcessRequest
+	(*StartProcessResponse)(nil),        // 1: nativebpm.v1.StartProcessResponse
+	(*CompleteTaskRequest)(nil),         // 2: nativebpm.v1.CompleteTaskRequest
+	(*CompleteTaskResponse)(nil),        // 3: nativebpm.v1.CompleteTaskResponse
+	(*StreamWorkflowEventsRequest)(nil), // 4: nativebpm.v1.StreamWorkflowEventsRequest
+	(*WorkflowEvent)(nil),               // 5: nativebpm.v1.WorkflowEvent
 }
 var file_nativebpm_v1_workflow_proto_depIdxs = []int32{
 	0, // 0: nativebpm.v1.WorkflowService.StartProcess:input_type -> nativebpm.v1.StartProcessRequest
 	2, // 1: nativebpm.v1.WorkflowService.CompleteTask:input_type -> nativebpm.v1.CompleteTaskRequest
-	1, // 2: nativebpm.v1.WorkflowService.StartProcess:output_type -> nativebpm.v1.StartProcessResponse
-	3, // 3: nativebpm.v1.WorkflowService.CompleteTask:output_type -> nativebpm.v1.CompleteTaskResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
+	4, // 2: nativebpm.v1.WorkflowService.StreamWorkflowEvents:input_type -> nativebpm.v1.StreamWorkflowEventsRequest
+	1, // 3: nativebpm.v1.WorkflowService.StartProcess:output_type -> nativebpm.v1.StartProcessResponse
+	3, // 4: nativebpm.v1.WorkflowService.CompleteTask:output_type -> nativebpm.v1.CompleteTaskResponse
+	5, // 5: nativebpm.v1.WorkflowService.StreamWorkflowEvents:output_type -> nativebpm.v1.WorkflowEvent
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -341,7 +503,7 @@ func file_nativebpm_v1_workflow_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_nativebpm_v1_workflow_proto_rawDesc), len(file_nativebpm_v1_workflow_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

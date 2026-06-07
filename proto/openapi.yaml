@@ -54,6 +54,29 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /nativebpm.v1.WorkflowService/StreamWorkflowEvents:
+        get:
+            tags:
+                - WorkflowService
+            operationId: WorkflowService_StreamWorkflowEvents
+            parameters:
+                - name: instance_id
+                  in: query
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkflowEvent'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
 components:
     schemas:
         CompleteTaskRequest:
@@ -120,5 +143,25 @@ components:
                         $ref: '#/components/schemas/GoogleProtobufAny'
                     description: A list of messages that carry the error details.  There is a common set of message types for APIs to use.
             description: 'The `Status` type defines a logical error model that is suitable for different programming environments, including REST APIs and RPC APIs. It is used by [gRPC](https://github.com/grpc). Each `Status` message contains three pieces of data: error code, error message, and error details. You can find out more about this error model and how to work with it in the [API Design Guide](https://cloud.google.com/apis/design/errors).'
+        WorkflowEvent:
+            type: object
+            properties:
+                event_id:
+                    type: string
+                instance_id:
+                    type: string
+                node_id:
+                    type: string
+                node_name:
+                    type: string
+                node_type:
+                    type: string
+                action:
+                    type: string
+                variables_json:
+                    type: string
+                    format: bytes
+                timestamp_ns:
+                    type: string
 tags:
     - name: WorkflowService

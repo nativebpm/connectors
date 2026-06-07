@@ -19,6 +19,11 @@ service WorkflowService {
       body: "*"
     };
   }
+  rpc StreamWorkflowEvents(StreamWorkflowEventsRequest) returns (stream WorkflowEvent) {
+    option (google.api.http) = {
+      get: "/nativebpm.v1.WorkflowService/StreamWorkflowEvents"
+    };
+  }
 }
 
 message StartProcessRequest {
@@ -44,4 +49,19 @@ message CompleteTaskResponse {
   string instance_id = 1;
   string current_state = 2;
   bool completed = 3;
+}
+
+message StreamWorkflowEventsRequest {
+  string instance_id = 1;
+}
+
+message WorkflowEvent {
+  string event_id = 1;
+  string instance_id = 2;
+  string node_id = 3;
+  string node_name = 4;
+  string node_type = 5;
+  string action = 6;
+  bytes variables_json = 7;
+  int64 timestamp_ns = 8;
 }
