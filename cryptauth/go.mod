@@ -11,4 +11,3 @@ require (
 
 require github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 
-replace github.com/nativebpm/connectors/totp => ../totp

@@ -6,7 +6,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.12.3
-	github.com/nativebpm/connectors/cryptenv v0.0.0
+	github.com/nativebpm/connectors/cryptenv v0.0.1
 	github.com/nativebpm/connectors/gotenberg v1.1.1
 	github.com/nativebpm/connectors/telegram v0.1.0
 	github.com/sequinstream/sequin-go v0.2.0
@@ -44,7 +44,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace (
-	github.com/nativebpm/connectors/cryptenv => ../cryptenv
-	google.golang.org/genproto => google.golang.org/genproto v0.0.0-20240827150818-7e3bb234dfed
-)
