@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package nativebpm.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "github.com/nativebpm/connectors/proto/nativebpm/v1;nativebpmpb";
+
+service WorkflowService {
+  rpc StartProcess(StartProcessRequest) returns (StartProcessResponse) {
+    option (google.api.http) = {
+      post: "/nativebpm.v1.WorkflowService/StartProcess"
+      body: "*"
+    };
+  }
+  rpc CompleteTask(CompleteTaskRequest) returns (CompleteTaskResponse) {
+    option (google.api.http) = {
+      post: "/nativebpm.v1.WorkflowService/CompleteTask"
+      body: "*"
+    };
+  }
+}
+
+message StartProcessRequest {
+  string definition_key = 1;
+  string business_key = 2;
+  bytes variables_json = 3;
+}
+
+message StartProcessResponse {
+  string instance_id = 1;
+  string definition_hash = 2;
+  string current_state = 3;
+  bool completed = 4;
+}
+
+message CompleteTaskRequest {
+  string instance_id = 1;
+  string task_id = 2;
+  bytes variables_json = 3;
+}
+
+message CompleteTaskResponse {
+  string instance_id = 1;
+  string current_state = 2;
+  bool completed = 3;
+}
