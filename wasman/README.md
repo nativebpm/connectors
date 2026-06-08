@@ -89,17 +89,17 @@ Wasman guarantees durable execution by checkpointing and restoring state across 
 
 ## Directory Structure
 
-- [wasman.go](file:///Users/user/github.com/nativebpm/connectors/wasman/wasman.go): WASM compilation, runtime setup, and engine execution loops.
-- [compress.go](file:///Users/user/github.com/nativebpm/connectors/wasman/compress.go): Transparent Gzip compression utilities.
-- [fs_store.go](file:///Users/user/github.com/nativebpm/connectors/wasman/fs_store.go): Local file-system snapshot store with optional compression.
-- [s3_store.go](file:///Users/user/github.com/nativebpm/connectors/wasman/s3_store.go): S3-compatible object snapshot store with OCC.
-- [types.go](file:///Users/user/github.com/nativebpm/connectors/wasman/types.go): Common structures, interfaces, configurations, and error mappings.
-- [examples/](file:///Users/user/github.com/nativebpm/connectors/wasman/examples/):
-  - [process-csv/](file:///Users/user/github.com/nativebpm/connectors/wasman/examples/process-csv/): High-throughput CSV mapping with simulated crash recovery and $O(1)$ RAM usage.
-  - [camunda/](file:///Users/user/github.com/nativebpm/connectors/wasman/examples/camunda/): Integration with Camunda 7 External Tasks.
-  - [temporal/](file:///Users/user/github.com/nativebpm/connectors/wasman/examples/temporal/): CRM/Math activities in a simulated Temporal environment.
-  - [gotenberg-telegram/](file:///Users/user/github.com/nativebpm/connectors/wasman/examples/gotenberg-telegram/): Streaming PDF generation bot integration.
-  - [s3-store/](file:///Users/user/github.com/nativebpm/connectors/wasman/examples/s3-store/): Direct S3/MinIO snapshotting baseline demonstration.
+- [wasman.go](wasman.go): WASM compilation, runtime setup, and engine execution loops.
+- [compress.go](compress.go): Transparent Gzip compression utilities.
+- [fs_store.go](fs_store.go): Local file-system snapshot store with optional compression.
+- [s3_store.go](s3_store.go): S3-compatible object snapshot store with OCC.
+- [types.go](types.go): Common structures, interfaces, configurations, and error mappings.
+- [examples/](examples/):
+  - [process-csv/](examples/process-csv/): High-throughput CSV mapping with simulated crash recovery and $O(1)$ RAM usage.
+  - [camunda/](examples/camunda/): Integration with Camunda 7 External Tasks.
+  - [temporal/](examples/temporal/): CRM/Math activities in a simulated Temporal environment.
+  - [gotenberg-telegram/](examples/gotenberg-telegram/): Streaming PDF generation bot integration.
+  - [s3-store/](examples/s3-store/): Direct S3/MinIO snapshotting baseline demonstration.
 
 ---
 
@@ -188,5 +188,5 @@ func main() {
 
 ## Performance & Benchmarks
 
-Detailed CPU and memory benchmark profiles (including a comparison of cold starts vs. warm resume performance) are available in the [Benchmarks & Profiling Profile](file:///Users/user/github.com/nativebpm/connectors/wasman/docs/benchmarks.md) document.
+Detailed CPU and memory benchmark profiles (including a comparison of cold starts vs. warm resume performance) are available in the [Benchmarks & Profiling Profile](docs/benchmarks.md) document.
 

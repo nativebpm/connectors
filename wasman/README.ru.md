@@ -89,17 +89,17 @@ Wasman гарантирует надежное восстановление со
 
 ## Структура каталогов
 
-- [wasman.go](file:///Users/user/github.com/nativebpm/connectors/wasman/wasman.go): Инициализация, компиляция и основной цикл выполнения WASM.
-- [compress.go](file:///Users/user/github.com/nativebpm/connectors/wasman/compress.go): Вспомогательные утилиты для прозрачного gzip-сжатия.
-- [fs_store.go](file:///Users/user/github.com/nativebpm/connectors/wasman/fs_store.go): Файловое хранилище снимков с поддержкой сжатия.
-- [s3_store.go](file:///Users/user/github.com/nativebpm/connectors/wasman/s3_store.go): Хранилище снимков в S3 с поддержкой сжатия и OCC.
-- [types.go](file:///Users/user/github.com/nativebpm/connectors/wasman/types.go): Базовые интерфейсы, структуры и ошибки.
-- [examples/](file:///Users/user/github.com/nativebpm/connectors/wasman/examples/): Примеры интеграций:
-  - [process-csv/](file:///Users/user/github.com/nativebpm/connectors/wasman/examples/process-csv/): Стриминг и парсинг CSV с эмуляцией сбоя и восстановлением.
-  - [camunda/](file:///Users/user/github.com/nativebpm/connectors/wasman/examples/camunda/): Воркер для интеграции с внешними задачами Camunda 7.
-  - [temporal/](file:///Users/user/github.com/nativebpm/connectors/wasman/examples/temporal/): CRM/CRM-операции с чекпоинтами в Temporal.
-  - [gotenberg-telegram/](file:///Users/user/github.com/nativebpm/connectors/wasman/examples/gotenberg-telegram/): Потоковый бот конвертации файлов в PDF.
-  - [s3-store/](file:///Users/user/github.com/nativebpm/connectors/wasman/examples/s3-store/): Демонстрация сохранения снимков напрямую в S3/MinIO.
+- [wasman.go](wasman.go): Инициализация, компиляция и основной цикл выполнения WASM.
+- [compress.go](compress.go): Вспомогательные утилиты для прозрачного gzip-сжатия.
+- [fs_store.go](fs_store.go): Файловое хранилище снимков с поддержкой сжатия.
+- [s3_store.go](s3_store.go): Хранилище снимков в S3 с поддержкой сжатия и OCC.
+- [types.go](types.go): Базовые интерфейсы, структуры и ошибки.
+- [examples/](examples/): Примеры интеграций:
+  - [process-csv/](examples/process-csv/): Стриминг и парсинг CSV с эмуляцией сбоя и восстановлением.
+  - [camunda/](examples/camunda/): Воркер для интеграции с внешними задачами Camunda 7.
+  - [temporal/](examples/temporal/): CRM/CRM-операции с чекпоинтами в Temporal.
+  - [gotenberg-telegram/](examples/gotenberg-telegram/): Потоковый бот конвертации файлов в PDF.
+  - [s3-store/](examples/s3-store/): Демонстрация сохранения снимков напрямую в S3/MinIO.
 
 ---
 
@@ -187,5 +187,5 @@ func main() {
 
 ## Производительность и бенчмарки
 
-Подробные профили тестирования производительности CPU и памяти (включая сравнение холодного старта и горячего выполнения шагов) задокументированы в файле [Benchmarks & Profiling Profile](file:///Users/user/github.com/nativebpm/connectors/wasman/docs/benchmarks.md).
+Подробные профили тестирования производительности CPU и памяти (включая сравнение холодного старта и горячего выполнения шагов) задокументированы в файле [Benchmarks & Profiling Profile](docs/benchmarks.md).
 
