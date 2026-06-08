@@ -184,3 +184,8 @@ func main() {
 	}
 }
 ```
+
+## Performance & Benchmarks
+
+Detailed CPU and memory benchmark profiles (including a comparison of cold starts vs. warm resume performance) are available in the [Benchmarks & Profiling Profile](file:///Users/user/github.com/nativebpm/connectors/wasman/docs/benchmarks.md) document.
+

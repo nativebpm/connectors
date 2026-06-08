@@ -183,3 +183,8 @@ func main() {
 	}
 }
 ```
+
+## Производительность и бенчмарки
+
+Подробные профили тестирования производительности CPU и памяти (включая сравнение холодного старта и горячего выполнения шагов) задокументированы в файле [Benchmarks & Profiling Profile](file:///Users/user/github.com/nativebpm/connectors/wasman/docs/benchmarks.md).
+
