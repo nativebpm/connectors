@@ -146,21 +146,13 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
-
 	// 1. Initialize snapshot store with compression enabled
 	store := &wasman.FileSnapshotStore{
 		Dir:         "snapshots",
 		Compression: true,
 	}
 
-	// 2. Load and compile the WASM module
-	engine, err := wasman.NewEngine("worker.wasm", store)
-	if err != nil {
-		panic(err)
-	}
-
-	// 3. Define stream handlers
+	// 2. Define stream handlers
 	downloadHandler := func() ([]byte, error) {
 		return []byte("my input data stream"), nil
 	}
@@ -169,14 +161,16 @@ func main() {
 		return nil
 	}
 
-	// 4. Execute session.
+	// 3. Execute session using the high-level Fluent Runner API.
 	// If a snapshot exists under this session ID, memory is restored automatically.
-	crashed, err := engine.Session("my-session-id").
+	crashed, err := wasman.NewRunner().
+		WithWasmPath("worker.wasm").
+		WithStore(store).
+		WithSessionID("my-session-id").
 		WithEntrypoint("run").
 		WithDownloadHandler(downloadHandler).
 		WithUploadHandler(uploadHandler).
-		WithCrash(false).
-		Run(ctx)
+		Run()
 
 	if err != nil {
 		if crashed {

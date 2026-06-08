@@ -145,21 +145,13 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
-
 	// 1. Инициализируем хранилище со включенным сжатием
 	store := &wasman.FileSnapshotStore{
 		Dir:         "snapshots",
 		Compression: true,
 	}
 
-	// 2. Компилируем WASM-модуль
-	engine, err := wasman.NewEngine("worker.wasm", store)
-	if err != nil {
-		panic(err)
-	}
-
-	// 3. Определяем обработчики стриминга в памяти
+	// 2. Определяем обработчики стриминга в памяти
 	downloadHandler := func() ([]byte, error) {
 		return []byte("my input data stream"), nil
 	}
@@ -168,14 +160,16 @@ func main() {
 		return nil
 	}
 
-	// 4. Запускаем сессию.
+	// 3. Запускаем сессию с использованием высокоуровневого Fluent Runner API.
 	// Если снимок для "my-session-id" существует, память восстановится автоматически.
-	crashed, err := engine.Session("my-session-id").
+	crashed, err := wasman.NewRunner().
+		WithWasmPath("worker.wasm").
+		WithStore(store).
+		WithSessionID("my-session-id").
 		WithEntrypoint("run").
 		WithDownloadHandler(downloadHandler).
 		WithUploadHandler(uploadHandler).
-		WithCrash(false).
-		Run(ctx)
+		Run()
 
 	if err != nil {
 		if crashed {

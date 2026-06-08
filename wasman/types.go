@@ -139,7 +139,7 @@ type Session struct {
 	uploadBuffer []byte
 
 	// Download Stream-first context
-	downloadEOF  bool
+	downloadEOF bool
 
 	// In-memory handlers (bypassing loopback HTTP)
 	ApiHandler      func(apiName string, request []byte) ([]byte, error)

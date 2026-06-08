@@ -325,12 +325,12 @@ func NewEngineWithBytes(wasmBytes []byte, store SnapshotStore, opts ...EngineOpt
 	}
 
 	engine := &Engine{
-		runtime:          runtime,
-		compiled:         compiled,
-		store:            store,
-		wasmHash:         wasmHash,
-		compiledCache:    make(map[string]wazero.CompiledModule),
-		activeSessions:   make(map[string]*Session),
+		runtime:        runtime,
+		compiled:       compiled,
+		store:          store,
+		wasmHash:       wasmHash,
+		compiledCache:  make(map[string]wazero.CompiledModule),
+		activeSessions: make(map[string]*Session),
 	}
 	engine.compiledCache[wasmHash] = compiled
 
@@ -438,8 +438,6 @@ func (e *Engine) ExecuteWithArgs(ctx context.Context, instanceID string, entrypo
 		DownloadHandler:         getDownloadHandler(ctx),
 		UploadHandler:           getUploadHandler(ctx),
 	}
-
-
 
 	// Bind session to context
 	executeCtx := WithSession(ctx, session)
@@ -898,4 +896,3 @@ func (e *Engine) RunBPMN(
 
 	return false, respCopy, nil
 }
-

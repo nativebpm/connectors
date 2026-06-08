@@ -268,20 +268,19 @@ func TestDurableExecutionLifecycle(t *testing.T) {
 		return nil
 	}
 
-	// 3. Initialize engine
+	// 3. Initialize store and path
 	wasmPath := filepath.Join("examples", "s3-store", "worker", "worker.wasm")
-
 	store := newInMemorySnapshotStore()
 
-	engine, err := NewEngine(wasmPath, store)
-	require.NoError(t, err, "Failed to compile WASM module. Make sure worker.wasm is built.")
-
 	// 4. RUN 1: Execute with simulated crash
-	crashed, err := engine.Session(instanceID).
+	crashed, err := NewTestRunner().
+		WithWasmPath(wasmPath).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithDownloadHandler(downloadHandler).
 		WithUploadHandler(uploadHandler).
 		WithCrash(true).
-		Run(context.Background())
+		Run()
 	require.Error(t, err)
 	assert.True(t, crashed, "Expected run 1 to crash at checkpoint")
 
@@ -291,11 +290,14 @@ func TestDurableExecutionLifecycle(t *testing.T) {
 	assert.NotEmpty(t, snapshot, "Snapshot data should not be empty")
 
 	// 5. RUN 2: Restore from checkpoint and run to completion
-	crashed, err = engine.Session(instanceID).
+	crashed, err = NewTestRunner().
+		WithWasmPath(wasmPath).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithDownloadHandler(downloadHandler).
 		WithUploadHandler(uploadHandler).
 		WithCrash(false).
-		Run(context.Background())
+		Run()
 	require.NoError(t, err, "Run 2 should complete without errors")
 	assert.False(t, crashed, "Run 2 should not crash")
 
@@ -316,15 +318,15 @@ func TestDirtyPageAndOplog(t *testing.T) {
 
 	store := newInMemorySnapshotStore()
 
-	engine, err := NewEngine(wasmPath, store)
-	require.NoError(t, err)
-
 	// RUN 1: Run and crash on first checkpoint
-	crashed, err := engine.Session(instanceID).
+	crashed, err := NewTestRunner().
+		WithWasmPath(wasmPath).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithEntrypoint("run_test").
 		WithServer("localhost:0").
 		WithCrash(true).
-		Run(context.Background())
+		Run()
 	require.Error(t, err)
 	assert.True(t, crashed)
 
@@ -341,11 +343,14 @@ func TestDirtyPageAndOplog(t *testing.T) {
 	assert.Equal(t, "resp_for_hello_call_1", string(oplog[0].ResponsePayload))
 
 	// RUN 2: Resume, should replay first api call without crash, modify page 2, and complete second checkpoint without crash
-	crashed, err = engine.Session(instanceID).
+	crashed, err = NewTestRunner().
+		WithWasmPath(wasmPath).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithEntrypoint("run_test").
 		WithServer("localhost:0").
 		WithCrash(false).
-		Run(context.Background())
+		Run()
 	require.NoError(t, err)
 	assert.False(t, crashed)
 
@@ -361,7 +366,6 @@ func TestDirtyPageAndOplog(t *testing.T) {
 	assert.Len(t, oplog2, 2, "Oplog must contain 2 entries after complete run")
 	assert.Equal(t, "world", string(oplog2[1].RequestPayload))
 }
-
 
 func TestS3SnapshotStore(t *testing.T) {
 	// Try to connect to a local MinIO/S3 using environment variables
@@ -518,15 +522,15 @@ func TestHostGetTime(t *testing.T) {
 
 	store := newInMemorySnapshotStore()
 
-	engine, err := NewEngine(wasmPath, store)
-	require.NoError(t, err)
-
 	// RUN 1: Run and crash on first checkpoint
-	crashed, err := engine.Session(instanceID).
+	crashed, err := NewTestRunner().
+		WithWasmPath(wasmPath).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithEntrypoint("run_test").
 		WithServer("localhost:0").
 		WithCrash(true).
-		Run(context.Background())
+		Run()
 	require.Error(t, err)
 	assert.True(t, crashed)
 
@@ -544,11 +548,14 @@ func TestHostGetTime(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// RUN 2: Resume, it should replay time 1 from Oplog (same value) and record time 2 (new value)
-	crashed, err = engine.Session(instanceID).
+	crashed, err = NewTestRunner().
+		WithWasmPath(wasmPath).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithEntrypoint("run_test").
 		WithServer("localhost:0").
 		WithCrash(false).
-		Run(context.Background())
+		Run()
 	require.NoError(t, err)
 	assert.False(t, crashed)
 
@@ -577,17 +584,17 @@ func TestMultiCheckpointRecovery(t *testing.T) {
 
 	store := newInMemorySnapshotStore()
 
-	engine, err := NewEngine(wasmPath, store)
-	require.NoError(t, err)
-
 	// We will run and crash on checkpoints 1, 2, 3, 4 sequentially, verifying version increment
 	for expectedVal := 10; expectedVal <= 50; expectedVal += 10 {
 		shouldCrash := expectedVal < 50
-		crashed, err := engine.Session(instanceID).
+		crashed, err := NewTestRunner().
+			WithWasmPath(wasmPath).
+			WithStore(store).
+			WithSessionID(instanceID).
 			WithEntrypoint("run_test").
 			WithServer("localhost:0").
 			WithCrash(shouldCrash).
-			Run(context.Background())
+			Run()
 		if shouldCrash {
 			require.Error(t, err)
 			assert.True(t, crashed)
@@ -605,7 +612,7 @@ func TestMultiCheckpointRecovery(t *testing.T) {
 		require.NoError(t, err)
 
 		snapshot, err := store.Load(instanceID)
-		
+
 		val := int32(0)
 		if len(deltas) > 0 && len(deltas[0]) >= 12 {
 			val = int32(deltas[0][8]) | int32(deltas[0][9])<<8 | int32(deltas[0][10])<<16 | int32(deltas[0][11])<<24
@@ -634,14 +641,14 @@ func TestWasmModuleHashMismatch(t *testing.T) {
 	store := newInMemorySnapshotStore()
 
 	// 1. Run with module 1
-	engine1, err := NewEngine(wasmPath1, store)
-	require.NoError(t, err)
-
-	crashed, err := engine1.Session(instanceID).
+	crashed, err := NewTestRunner().
+		WithWasmPath(wasmPath1).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithEntrypoint("run_test").
 		WithServer("localhost:0").
 		WithCrash(true).
-		Run(context.Background())
+		Run()
 	require.Error(t, err)
 	assert.True(t, crashed)
 
@@ -649,21 +656,21 @@ func TestWasmModuleHashMismatch(t *testing.T) {
 	meta, err := store.LoadMetadata(instanceID)
 	require.NoError(t, err)
 	meta.WasmHash = "non-existent-wasm-hash"
-	
+
 	// Bypass OCC for test setup by updating metadata directly in store
 	store.mu.Lock()
 	store.meta[instanceID].WasmHash = meta.WasmHash
 	store.mu.Unlock()
 
 	// 3. Try to run with module 2 -> should return ErrWasmVersionMismatch because the required hash is not in the registry
-	engine2, err := NewEngine(wasmPath2, store)
-	require.NoError(t, err)
-
-	_, err = engine2.Session(instanceID).
+	_, err = NewTestRunner().
+		WithWasmPath(wasmPath2).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithEntrypoint("run_test").
 		WithServer("localhost:0").
 		WithCrash(false).
-		Run(context.Background())
+		Run()
 	assert.ErrorIs(t, err, ErrWasmVersionMismatch)
 }
 
@@ -679,9 +686,6 @@ func TestConcurrentExecution(t *testing.T) {
 
 	store := newInMemorySnapshotStore()
 
-	engine, err := NewEngine(wasmPath, store)
-	require.NoError(t, err)
-
 	apiHandler := func(apiName string, request []byte) ([]byte, error) {
 		if apiName == "trigger_race" {
 			store.mu.Lock()
@@ -693,21 +697,27 @@ func TestConcurrentExecution(t *testing.T) {
 	}
 
 	// 1. First run, crash at 1st checkpoint (version becomes 1 in db)
-	crashed, err := engine.Session(instanceID).
+	crashed, err := NewTestRunner().
+		WithWasmPath(wasmPath).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithEntrypoint("run_test").
 		WithApiHandler(apiHandler).
 		WithCrash(true).
-		Run(context.Background())
+		Run()
 	require.Error(t, err)
 	assert.True(t, crashed)
 
 	// 2. Try to resume. It will restore memory, call trigger_race (which pushes version to 11 in DB),
 	// and then attempt checkpoint 2. Local version is still 1, but DB is 11, so it must abort with ErrConcurrentExecution.
-	_, err = engine.Session(instanceID).
+	_, err = NewTestRunner().
+		WithWasmPath(wasmPath).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithEntrypoint("run_test").
 		WithApiHandler(apiHandler).
 		WithCrash(false).
-		Run(context.Background())
+		Run()
 	assert.ErrorIs(t, err, ErrConcurrentExecution)
 }
 
@@ -723,18 +733,18 @@ func TestOplogTruncation(t *testing.T) {
 
 	store := newInMemorySnapshotStore()
 
-	engine, err := NewEngine(wasmPath, store)
-	require.NoError(t, err)
-
 	// Run up to checkpoint 4 (version 4)
 	var crashed bool
 	for i := 0; i < 4; i++ {
 		var execErr error
-		crashed, execErr = engine.Session(instanceID).
+		crashed, execErr = NewTestRunner().
+			WithWasmPath(wasmPath).
+			WithStore(store).
+			WithSessionID(instanceID).
 			WithEntrypoint("run_test").
 			WithServer("localhost:0").
 			WithCrash(true).
-			Run(context.Background())
+			Run()
 		require.Error(t, execErr)
 		assert.True(t, crashed)
 	}
@@ -745,11 +755,14 @@ func TestOplogTruncation(t *testing.T) {
 	assert.Len(t, oplog, 4)
 
 	// Run again and crash on checkpoint 5 (version 5, which triggers full snapshot and truncation, then crashes)
-	crashed, err = engine.Session(instanceID).
+	crashed, err = NewTestRunner().
+		WithWasmPath(wasmPath).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithEntrypoint("run_test").
 		WithServer("localhost:0").
 		WithCrash(true).
-		Run(context.Background())
+		Run()
 	require.Error(t, err)
 	assert.True(t, crashed)
 
@@ -787,27 +800,27 @@ func TestMultiVersionWasmExecution(t *testing.T) {
 	store := newInMemorySnapshotStore()
 
 	// 1. Initialize engine 1 (wat1) and crash
-	engine1, err := NewEngine(wasmPath1, store)
-	require.NoError(t, err)
-
-	crashed, err := engine1.Session(instanceID).
+	crashed, err := NewTestRunner().
+		WithWasmPath(wasmPath1).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithEntrypoint("run_test").
 		WithServer("localhost:0").
 		WithCrash(true).
-		Run(context.Background())
+		Run()
 	require.Error(t, err)
 	assert.True(t, crashed)
 
 	// 2. Initialize engine 2 (wat2, new code version) and resume.
 	// It should transparently compile and run wat1 module, loading it from store.
-	engine2, err := NewEngine(wasmPath2, store)
-	require.NoError(t, err)
-
-	crashed, err = engine2.Session(instanceID).
+	crashed, err = NewTestRunner().
+		WithWasmPath(wasmPath2).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithEntrypoint("run_test").
 		WithServer("localhost:0").
 		WithCrash(false).
-		Run(context.Background())
+		Run()
 	require.NoError(t, err)
 	assert.False(t, crashed)
 
@@ -835,9 +848,6 @@ func TestExecuteCancellation(t *testing.T) {
 
 	store := newInMemorySnapshotStore()
 
-	engine, err := NewEngine(wasmPath, store)
-	require.NoError(t, err)
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	apiHandler := func(apiName string, request []byte) ([]byte, error) {
@@ -854,11 +864,15 @@ func TestExecuteCancellation(t *testing.T) {
 
 	errChan := make(chan error, 1)
 	go func() {
-		_, err := engine.Session(instanceID).
+		_, err := NewTestRunner().
+			WithContext(ctx).
+			WithWasmPath(wasmPath).
+			WithStore(store).
+			WithSessionID(instanceID).
 			WithEntrypoint("run_test").
 			WithApiHandler(apiHandler).
 			WithCrash(false).
-			Run(ctx)
+			Run()
 		errChan <- err
 	}()
 
@@ -911,27 +925,30 @@ func TestStorageErrorInjection(t *testing.T) {
 		SnapshotStore: sqliteStore,
 	}
 
-	engine, err := NewEngine(wasmPath, store)
-	require.NoError(t, err)
-
 	// Case 1: Injected metadata error during checkpoint
 	store.injectMetaErr = true
-	_, err = engine.Session(instanceID).
+	_, err = NewTestRunner().
+		WithWasmPath(wasmPath).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithEntrypoint("run_test").
 		WithServer("localhost:0").
 		WithCrash(false).
-		Run(context.Background())
+		Run()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to save metadata")
 
 	// Case 2: Injected snapshot error during checkpoint
 	store.injectMetaErr = false
 	store.injectSaveErr = true
-	_, err = engine.Session(instanceID).
+	_, err = NewTestRunner().
+		WithWasmPath(wasmPath).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithEntrypoint("run_test").
 		WithServer("localhost:0").
 		WithCrash(false).
-		Run(context.Background())
+		Run()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to write snapshot")
 }
@@ -946,9 +963,6 @@ func TestSoakStressTesting(t *testing.T) {
 
 	store := newInMemorySnapshotStore()
 
-	engine, err := NewEngine(wasmPath, store)
-	require.NoError(t, err)
-
 	const concurrency = 20
 	const iterations = 10 // 200 total runs
 
@@ -960,11 +974,14 @@ func TestSoakStressTesting(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
 				instanceID := "stress-instance-" + strconv.Itoa(workerID) + "-" + strconv.Itoa(j)
-				_, err := engine.Session(instanceID).
+				_, err := NewTestRunner().
+					WithWasmPath(wasmPath).
+					WithStore(store).
+					WithSessionID(instanceID).
 					WithEntrypoint("run_test").
 					WithServer("localhost:0").
 					WithCrash(false).
-					Run(context.Background())
+					Run()
 				if err != nil {
 					t.Errorf("Stress run failed: %v", err)
 				}
@@ -1055,10 +1072,6 @@ func TestNewEngineWithBytes_SafeTask(t *testing.T) {
 
 	store := newInMemorySnapshotStore()
 
-	// Initialize using NewEngineWithBytes
-	engine, err := NewEngineWithBytes(wasmBytes, store)
-	require.NoError(t, err)
-
 	downloadHandler := func() ([]byte, error) {
 		return json.Marshal(map[string]interface{}{
 			"item": "out_of_stock_item",
@@ -1069,12 +1082,15 @@ func TestNewEngineWithBytes_SafeTask(t *testing.T) {
 		return json.Unmarshal(payload, &receivedVars)
 	}
 
-	crashed, err := engine.Session(instanceID).
+	crashed, err := NewTestRunner().
+		WithWasmBytes(wasmBytes).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithEntrypoint("_start").
 		WithDownloadHandler(downloadHandler).
 		WithUploadHandler(uploadHandler).
 		WithCrash(false).
-		Run(context.Background())
+		Run()
 	require.NoError(t, err)
 	assert.False(t, crashed)
 
@@ -1087,7 +1103,7 @@ func TestNewEngineWithBytes_SafeTask(t *testing.T) {
 func TestFileSnapshotStore_Compression(t *testing.T) {
 	tempDir := t.TempDir()
 	store := &FileSnapshotStore{
-		Dir:         tempDir,
+		Dir: tempDir,
 	}
 
 	instanceID := "test-comp-inst"
@@ -1139,5 +1155,3 @@ func TestFileSnapshotStore_Compression(t *testing.T) {
 	require.Len(t, loadedOplog, 1)
 	assert.Equal(t, "test-api", loadedOplog[0].ApiName)
 }
-
-

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"os"
 	"testing"
 
@@ -41,15 +40,16 @@ func TestCSVProcessPipeline_Success_With_Retry(t *testing.T) {
 
 	// 4. Initialize Durable WASM Engine
 	wasmPath := "../worker/worker.wasm"
-	engine, err := wasman.NewEngine(wasmPath, store)
-	require.NoError(t, err)
 
 	// 5. RUN 1: Execute with simulated crash
-	crashed, err := engine.Session(instanceID).
+	crashed, err := wasman.NewTestRunner().
+		WithWasmPath(wasmPath).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithDownloadHandler(downloadHandler).
 		WithUploadHandler(uploadHandler).
 		WithCrash(true).
-		Run(context.Background())
+		Run()
 	require.Error(t, err)
 	assert.True(t, crashed, "First run should crash")
 
@@ -59,11 +59,14 @@ func TestCSVProcessPipeline_Success_With_Retry(t *testing.T) {
 	assert.NotEmpty(t, snapshot)
 
 	// 6. RUN 2: Restore from snapshot
-	crashed, err = engine.Session(instanceID).
+	crashed, err = wasman.NewTestRunner().
+		WithWasmPath(wasmPath).
+		WithStore(store).
+		WithSessionID(instanceID).
 		WithDownloadHandler(downloadHandler).
 		WithUploadHandler(uploadHandler).
 		WithCrash(false).
-		Run(context.Background())
+		Run()
 	require.NoError(t, err)
 	assert.False(t, crashed)
 
