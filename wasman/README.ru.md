@@ -100,7 +100,7 @@ Wasman гарантирует надежное восстановление со
   - [temporal/](examples/temporal/): CRM/CRM-операции с чекпоинтами в Temporal.
   - [gotenberg-telegram/](examples/gotenberg-telegram/): Потоковый бот конвертации файлов в PDF.
   - [s3-store/](examples/s3-store/): Демонстрация сохранения снимков напрямую в S3/MinIO.
-  - [in-memory-exchange/](examples/in-memory-exchange/): Исключительно внутрипамятый потоковый обмен данными между хостом и WASM-гостем, полностью исключающий сетевые вызовы по TCP loopback.
+  - [in-memory-channel/](examples/in-memory-channel/): Исключительно внутрипамятый потоковый обмен данными между хостом и WASM-гостем, полностью исключающий сетевые вызовы по TCP loopback.
   - [safe-task/](examples/safe-task/): Выполнение изолированных задач с использованием высокоуровневой и безопасной утилиты-раннера RunTask.
   - [wasm-inspector/](examples/wasm-inspector/): Низкоуровневая утилита для инспекции и запуска гостевых WASM-модулей с настраиваемыми параметрами WASI.
 
