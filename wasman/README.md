@@ -44,10 +44,11 @@ Modern distributed architectures often require executing long-running or multi-s
 
 ## Technical Features & Architectural Design
 
-### 1. Transparent Storage Compression
+### 1. Strict Storage Compression
 Checkpointing large WebAssembly modules generates snapshots of their linear memory (typically multiples of 64KB pages). To prevent S3/disk space bloat under high throughput:
-- **Gzip Compression**: Snapshots, page deltas, and oplogs are transparently compressed using standard gzip format.
-- **Sniffing & Backwards Compatibility**: Reads dynamically check for the gzip magic bytes (`0x1f 0x8b`). If present, the data is decompressed in-flight. If absent, it reads the legacy uncompressed data, ensuring full backwards compatibility.
+- **Gzip Compression**: Snapshots, page deltas, and oplogs are transparently compressed using the standard gzip format.
+- **Strict Format Enforcement**: All reads enforce the presence of gzip compression. Raw uncompressed snapshots are not supported, ensuring consistent storage compression benefits across all process states.
+
 
 ### 2. $O(1)$ RAM Stream-first I/O
 For high-performance data processing (e.g., streaming files, large JSON/CSV payloads):
