@@ -49,10 +49,11 @@ Checkpointing large WebAssembly modules generates snapshots of their linear memo
 - **Gzip Compression**: Snapshots, page deltas, and oplogs are transparently compressed using standard gzip format.
 - **Sniffing & Backwards Compatibility**: Reads dynamically check for the gzip magic bytes (`0x1f 0x8b`). If present, the data is decompressed in-flight. If absent, it reads the legacy uncompressed data, ensuring full backwards compatibility.
 
-### 2. $O(1)$ RAM Stream-first HTTP
+### 2. $O(1)$ RAM Stream-first I/O
 For high-performance data processing (e.g., streaming files, large JSON/CSV payloads):
 - Data is transferred directly to/from WASM linear memory in 4KB chunks using `io.Pipe`.
 - This guarantees constant memory footprint ($O(1)$ RAM) regardless of payload size, avoiding heap exhaustion and high GC pause times.
+- All communications are executed fully in-memory via user-provided download/upload stream handlers, entirely avoiding network loopbacks and TCP port exposures.
 
 ### 3. Page-Level Delta Snapshots
 Instead of writing a full multi-megabyte memory snapshot on every single checkpoint:
@@ -154,11 +155,21 @@ func main() {
 		panic(err)
 	}
 
-	// 3. Execute session.
+	// 3. Define stream handlers
+	downloadHandler := func() ([]byte, error) {
+		return []byte("my input data stream"), nil
+	}
+	uploadHandler := func(payload []byte) error {
+		fmt.Printf("Received output payload: %s\n", string(payload))
+		return nil
+	}
+
+	// 4. Execute session.
 	// If a snapshot exists under this session ID, memory is restored automatically.
 	crashed, err := engine.Session("my-session-id").
 		WithEntrypoint("run").
-		WithServer("localhost:8080").
+		WithDownloadHandler(downloadHandler).
+		WithUploadHandler(uploadHandler).
 		WithCrash(false).
 		Run(ctx)
 

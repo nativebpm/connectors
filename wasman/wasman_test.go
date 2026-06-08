@@ -4,9 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
-	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -260,42 +257,16 @@ var _ SnapshotStore = (*inMemorySnapshotStore)(nil)
 
 func TestDurableExecutionLifecycle(t *testing.T) {
 	instanceID := "test-worker-instance"
-	serverAddr := "localhost:18081"
-
-	// 2. Start mock HTTP server
-	mux := http.NewServeMux()
-	mux.HandleFunc("/download", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/octet-stream")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("hello from durable test stream!"))
-	})
 
 	var receivedBytes []byte
-	var uploadErr error
-	mux.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
-		receivedBytes, uploadErr = io.ReadAll(r.Body)
-		if uploadErr != nil {
-			http.Error(w, uploadErr.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-	})
-
-	server := &http.Server{
-		Addr:    serverAddr,
-		Handler: mux,
+	downloadHandler := func() ([]byte, error) {
+		return []byte("hello from durable test stream!"), nil
 	}
 
-	ln, err := net.Listen("tcp", serverAddr)
-	require.NoError(t, err)
-
-	go func() {
-		_ = server.Serve(ln)
-	}()
-	defer server.Shutdown(context.Background())
-
-	// Give the server a small moment to start
-	time.Sleep(50 * time.Millisecond)
+	uploadHandler := func(payload []byte) error {
+		receivedBytes = payload
+		return nil
+	}
 
 	// 3. Initialize engine
 	wasmPath := filepath.Join("examples", "s3-store", "worker", "worker.wasm")
@@ -307,7 +278,8 @@ func TestDurableExecutionLifecycle(t *testing.T) {
 
 	// 4. RUN 1: Execute with simulated crash
 	crashed, err := engine.Session(instanceID).
-		WithServer(serverAddr).
+		WithDownloadHandler(downloadHandler).
+		WithUploadHandler(uploadHandler).
 		WithCrash(true).
 		Run(context.Background())
 	require.Error(t, err)
@@ -320,7 +292,8 @@ func TestDurableExecutionLifecycle(t *testing.T) {
 
 	// 5. RUN 2: Restore from checkpoint and run to completion
 	crashed, err = engine.Session(instanceID).
-		WithServer(serverAddr).
+		WithDownloadHandler(downloadHandler).
+		WithUploadHandler(uploadHandler).
 		WithCrash(false).
 		Run(context.Background())
 	require.NoError(t, err, "Run 2 should complete without errors")
@@ -696,7 +669,6 @@ func TestWasmModuleHashMismatch(t *testing.T) {
 
 func TestConcurrentExecution(t *testing.T) {
 	instanceID := "test-concurrent-instance"
-	serverAddr := "localhost:18084"
 
 	wasmBytes := loadTestWasm(t, "concurrent_execution")
 
@@ -710,37 +682,20 @@ func TestConcurrentExecution(t *testing.T) {
 	engine, err := NewEngine(wasmPath, store)
 	require.NoError(t, err)
 
-	// Set up local server for API calls
-	mux := http.NewServeMux()
-	mux.HandleFunc("/trigger_race", func(w http.ResponseWriter, r *http.Request) {
-		// Increment version in DB to simulate another process taking over (split-brain)
-		store.mu.Lock()
-		store.meta[instanceID].Version = 10
-		store.mu.Unlock()
-
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
-
-	server := &http.Server{
-		Addr:    serverAddr,
-		Handler: mux,
+	apiHandler := func(apiName string, request []byte) ([]byte, error) {
+		if apiName == "trigger_race" {
+			store.mu.Lock()
+			store.meta[instanceID].Version = 10
+			store.mu.Unlock()
+			return []byte("ok"), nil
+		}
+		return nil, errors.New("unknown api")
 	}
-
-	ln, err := net.Listen("tcp", serverAddr)
-	require.NoError(t, err)
-
-	go func() {
-		_ = server.Serve(ln)
-	}()
-	defer server.Shutdown(context.Background())
-
-	time.Sleep(50 * time.Millisecond)
 
 	// 1. First run, crash at 1st checkpoint (version becomes 1 in db)
 	crashed, err := engine.Session(instanceID).
 		WithEntrypoint("run_test").
-		WithServer(serverAddr).
+		WithApiHandler(apiHandler).
 		WithCrash(true).
 		Run(context.Background())
 	require.Error(t, err)
@@ -750,7 +705,7 @@ func TestConcurrentExecution(t *testing.T) {
 	// and then attempt checkpoint 2. Local version is still 1, but DB is 11, so it must abort with ErrConcurrentExecution.
 	_, err = engine.Session(instanceID).
 		WithEntrypoint("run_test").
-		WithServer(serverAddr).
+		WithApiHandler(apiHandler).
 		WithCrash(false).
 		Run(context.Background())
 	assert.ErrorIs(t, err, ErrConcurrentExecution)
@@ -870,7 +825,6 @@ func TestMultiVersionWasmExecution(t *testing.T) {
 
 func TestExecuteCancellation(t *testing.T) {
 	instanceID := "test-cancel-instance"
-	serverAddr := "localhost:18085"
 
 	wasmBytes := loadTestWasm(t, "execute_cancellation")
 
@@ -884,46 +838,31 @@ func TestExecuteCancellation(t *testing.T) {
 	engine, err := NewEngine(wasmPath, store)
 	require.NoError(t, err)
 
-	// Local HTTP server that blocks for a while
-	mux := http.NewServeMux()
-	mux.HandleFunc("/long_call", func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case <-r.Context().Done():
-			// Request was canceled
-		case <-time.After(1 * time.Second):
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("ok"))
-		}
-	})
-
-	server := &http.Server{
-		Addr:    serverAddr,
-		Handler: mux,
-	}
-
-	ln, err := net.Listen("tcp", serverAddr)
-	require.NoError(t, err)
-
-	go func() {
-		_ = server.Serve(ln)
-	}()
-	defer server.Shutdown(context.Background())
-
-	time.Sleep(50 * time.Millisecond)
-
 	ctx, cancel := context.WithCancel(context.Background())
+
+	apiHandler := func(apiName string, request []byte) ([]byte, error) {
+		if apiName == "long_call" {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(2 * time.Second):
+				return []byte("ok"), nil
+			}
+		}
+		return nil, errors.New("unknown api")
+	}
 
 	errChan := make(chan error, 1)
 	go func() {
 		_, err := engine.Session(instanceID).
 			WithEntrypoint("run_test").
-			WithServer(serverAddr).
+			WithApiHandler(apiHandler).
 			WithCrash(false).
 			Run(ctx)
 		errChan <- err
 	}()
 
-	// Cancel context after 100ms (much faster than HTTP server 1s delay)
+	// Cancel context after 100ms
 	time.Sleep(100 * time.Millisecond)
 	cancel()
 
@@ -1105,44 +1044,9 @@ func testStoreActiveIndex(t *testing.T, store SnapshotStore) {
 
 func TestNewEngineWithBytes_SafeTask(t *testing.T) {
 	instanceID := "test-safe-task-instance"
-	serverAddr := "localhost:18099"
 
 	// Mock server state
 	var receivedVars map[string]interface{}
-
-	// Setup mock HTTP server
-	mux := http.NewServeMux()
-	mux.HandleFunc("/download", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"item": "out_of_stock_item",
-		})
-	})
-
-	mux.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
-		err := json.NewDecoder(r.Body).Decode(&receivedVars)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
-	})
-
-	server := &http.Server{
-		Addr:    serverAddr,
-		Handler: mux,
-	}
-
-	ln, err := net.Listen("tcp", serverAddr)
-	require.NoError(t, err)
-
-	go func() {
-		_ = server.Serve(ln)
-	}()
-	defer server.Shutdown(context.Background())
-
-	time.Sleep(50 * time.Millisecond)
 
 	// Read compiled task.wasm
 	wasmPath := filepath.Join("examples", "safe-task", "task.wasm")
@@ -1155,9 +1059,20 @@ func TestNewEngineWithBytes_SafeTask(t *testing.T) {
 	engine, err := NewEngineWithBytes(wasmBytes, store)
 	require.NoError(t, err)
 
+	downloadHandler := func() ([]byte, error) {
+		return json.Marshal(map[string]interface{}{
+			"item": "out_of_stock_item",
+		})
+	}
+
+	uploadHandler := func(payload []byte) error {
+		return json.Unmarshal(payload, &receivedVars)
+	}
+
 	crashed, err := engine.Session(instanceID).
 		WithEntrypoint("_start").
-		WithServer(serverAddr).
+		WithDownloadHandler(downloadHandler).
+		WithUploadHandler(uploadHandler).
 		WithCrash(false).
 		Run(context.Background())
 	require.NoError(t, err)
