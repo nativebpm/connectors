@@ -100,6 +100,10 @@ Wasman guarantees durable execution by checkpointing and restoring state across 
   - [temporal/](examples/temporal/): CRM/Math activities in a simulated Temporal environment.
   - [gotenberg-telegram/](examples/gotenberg-telegram/): Streaming PDF generation bot integration.
   - [s3-store/](examples/s3-store/): Direct S3/MinIO snapshotting baseline demonstration.
+  - [in-memory-exchange/](examples/in-memory-exchange/): Purely in-memory host-guest stream data exchange bypassing TCP loopbacks entirely.
+  - [safe-task/](examples/safe-task/): Execution of sandboxed tasks utilizing the safe, high-level RunTask runner utility.
+  - [wasm-inspector/](examples/wasm-inspector/): Low-level WebAssembly inspect utility executing guest WASM binaries under customized WASI settings.
+
 
 ---
 
