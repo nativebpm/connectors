@@ -8,7 +8,6 @@ use (
 	./gotenberg
 	./httpstream
 	./logger
-	./nativebpm
 	./sequin
 	./telegram
 	./temporal
