@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -17,15 +19,23 @@ type FileSnapshotStore struct {
 
 var _ SnapshotStore = (*FileSnapshotStore)(nil)
 
+func splitTenantID(id string) (string, string) {
+	if idx := strings.Index(id, ":"); idx != -1 {
+		return id[:idx], id[idx+1:]
+	}
+	return "default", id
+}
+
 // Save writes a full memory snapshot to a file.
 func (f *FileSnapshotStore) Save(id string, snapshot []byte) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	path := fmt.Sprintf("%s.bin", id)
+	tenant, inst := splitTenantID(id)
+	path := fmt.Sprintf("%s/%s.bin", tenant, inst)
 	if f.Dir != "" {
-		_ = os.MkdirAll(f.Dir, 0755)
-		path = fmt.Sprintf("%s/%s.bin", f.Dir, id)
+		path = fmt.Sprintf("%s/%s/%s.bin", f.Dir, tenant, inst)
 	}
+	_ = os.MkdirAll(filepath.Dir(path), 0755)
 	data, err := compressData(snapshot)
 	if err != nil {
 		return err
@@ -37,9 +47,10 @@ func (f *FileSnapshotStore) Save(id string, snapshot []byte) error {
 func (f *FileSnapshotStore) Load(id string) ([]byte, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	path := fmt.Sprintf("%s.bin", id)
+	tenant, inst := splitTenantID(id)
+	path := fmt.Sprintf("%s/%s.bin", tenant, inst)
 	if f.Dir != "" {
-		path = fmt.Sprintf("%s/%s.bin", f.Dir, id)
+		path = fmt.Sprintf("%s/%s/%s.bin", f.Dir, tenant, inst)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -51,11 +62,12 @@ func (f *FileSnapshotStore) Load(id string) ([]byte, error) {
 func (f *FileSnapshotStore) SaveDeltas(id string, deltas map[int][]byte) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	path := fmt.Sprintf("%s_deltas.json", id)
+	tenant, inst := splitTenantID(id)
+	path := fmt.Sprintf("%s/%s_deltas.json", tenant, inst)
 	if f.Dir != "" {
-		_ = os.MkdirAll(f.Dir, 0755)
-		path = fmt.Sprintf("%s/%s_deltas.json", f.Dir, id)
+		path = fmt.Sprintf("%s/%s/%s_deltas.json", f.Dir, tenant, inst)
 	}
+	_ = os.MkdirAll(filepath.Dir(path), 0755)
 	current := make(map[int][]byte)
 	data, err := os.ReadFile(path)
 	if err == nil {
@@ -81,9 +93,10 @@ func (f *FileSnapshotStore) SaveDeltas(id string, deltas map[int][]byte) error {
 func (f *FileSnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	path := fmt.Sprintf("%s_deltas.json", id)
+	tenant, inst := splitTenantID(id)
+	path := fmt.Sprintf("%s/%s_deltas.json", tenant, inst)
 	if f.Dir != "" {
-		path = fmt.Sprintf("%s/%s_deltas.json", f.Dir, id)
+		path = fmt.Sprintf("%s/%s/%s_deltas.json", f.Dir, tenant, inst)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -104,9 +117,10 @@ func (f *FileSnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
 func (f *FileSnapshotStore) TruncateDeltas(id string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	path := fmt.Sprintf("%s_deltas.json", id)
+	tenant, inst := splitTenantID(id)
+	path := fmt.Sprintf("%s/%s_deltas.json", tenant, inst)
 	if f.Dir != "" {
-		path = fmt.Sprintf("%s/%s_deltas.json", f.Dir, id)
+		path = fmt.Sprintf("%s/%s/%s_deltas.json", f.Dir, tenant, inst)
 	}
 	_ = os.Remove(path)
 	return nil
@@ -115,11 +129,12 @@ func (f *FileSnapshotStore) TruncateDeltas(id string) error {
 func (f *FileSnapshotStore) SaveOplog(id string, callIndex int, apiName string, request []byte, response []byte) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	path := fmt.Sprintf("%s_oplog.json", id)
+	tenant, inst := splitTenantID(id)
+	path := fmt.Sprintf("%s/%s_oplog.json", tenant, inst)
 	if f.Dir != "" {
-		_ = os.MkdirAll(f.Dir, 0755)
-		path = fmt.Sprintf("%s/%s_oplog.json", f.Dir, id)
+		path = fmt.Sprintf("%s/%s/%s_oplog.json", f.Dir, tenant, inst)
 	}
+	_ = os.MkdirAll(filepath.Dir(path), 0755)
 	var list []OplogEntry
 	data, err := os.ReadFile(path)
 	if err == nil {
@@ -148,9 +163,10 @@ func (f *FileSnapshotStore) SaveOplog(id string, callIndex int, apiName string, 
 func (f *FileSnapshotStore) LoadOplog(id string) ([]OplogEntry, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	path := fmt.Sprintf("%s_oplog.json", id)
+	tenant, inst := splitTenantID(id)
+	path := fmt.Sprintf("%s/%s_oplog.json", tenant, inst)
 	if f.Dir != "" {
-		path = fmt.Sprintf("%s/%s_oplog.json", f.Dir, id)
+		path = fmt.Sprintf("%s/%s/%s_oplog.json", f.Dir, tenant, inst)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -171,9 +187,10 @@ func (f *FileSnapshotStore) LoadOplog(id string) ([]OplogEntry, error) {
 func (f *FileSnapshotStore) TruncateOplog(id string, beforeCallIndex int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	path := fmt.Sprintf("%s_oplog.json", id)
+	tenant, inst := splitTenantID(id)
+	path := fmt.Sprintf("%s/%s_oplog.json", tenant, inst)
 	if f.Dir != "" {
-		path = fmt.Sprintf("%s/%s_oplog.json", f.Dir, id)
+		path = fmt.Sprintf("%s/%s/%s_oplog.json", f.Dir, tenant, inst)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -210,11 +227,12 @@ func (f *FileSnapshotStore) TruncateOplog(id string, beforeCallIndex int) error 
 func (f *FileSnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	path := fmt.Sprintf("%s_meta.json", meta.InstanceID)
+	tenant, inst := splitTenantID(meta.InstanceID)
+	path := fmt.Sprintf("%s/%s_meta.json", tenant, inst)
 	if f.Dir != "" {
-		_ = os.MkdirAll(f.Dir, 0755)
-		path = fmt.Sprintf("%s/%s_meta.json", f.Dir, meta.InstanceID)
+		path = fmt.Sprintf("%s/%s/%s_meta.json", f.Dir, tenant, inst)
 	}
+	_ = os.MkdirAll(filepath.Dir(path), 0755)
 	var existing InstanceMeta
 	data, err := os.ReadFile(path)
 	if err == nil {
@@ -246,9 +264,10 @@ func (f *FileSnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 func (f *FileSnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	path := fmt.Sprintf("%s_meta.json", id)
+	tenant, inst := splitTenantID(id)
+	path := fmt.Sprintf("%s/%s_meta.json", tenant, inst)
 	if f.Dir != "" {
-		path = fmt.Sprintf("%s/%s_meta.json", f.Dir, id)
+		path = fmt.Sprintf("%s/%s/%s_meta.json", f.Dir, tenant, inst)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -268,15 +287,16 @@ func (f *FileSnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
 func (f *FileSnapshotStore) Delete(id string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	path := fmt.Sprintf("%s.bin", id)
-	pathDeltas := fmt.Sprintf("%s_deltas.json", id)
-	pathOplog := fmt.Sprintf("%s_oplog.json", id)
-	pathMeta := fmt.Sprintf("%s_meta.json", id)
+	tenant, inst := splitTenantID(id)
+	path := fmt.Sprintf("%s/%s.bin", tenant, inst)
+	pathDeltas := fmt.Sprintf("%s/%s_deltas.json", tenant, inst)
+	pathOplog := fmt.Sprintf("%s/%s_oplog.json", tenant, inst)
+	pathMeta := fmt.Sprintf("%s/%s_meta.json", tenant, inst)
 	if f.Dir != "" {
-		path = fmt.Sprintf("%s/%s.bin", f.Dir, id)
-		pathDeltas = fmt.Sprintf("%s/%s_deltas.json", f.Dir, id)
-		pathOplog = fmt.Sprintf("%s/%s_oplog.json", f.Dir, id)
-		pathMeta = fmt.Sprintf("%s/%s_meta.json", f.Dir, id)
+		path = fmt.Sprintf("%s/%s/%s.bin", f.Dir, tenant, inst)
+		pathDeltas = fmt.Sprintf("%s/%s/%s_deltas.json", f.Dir, tenant, inst)
+		pathOplog = fmt.Sprintf("%s/%s/%s_oplog.json", f.Dir, tenant, inst)
+		pathMeta = fmt.Sprintf("%s/%s/%s_meta.json", f.Dir, tenant, inst)
 	}
 	_ = os.Remove(path)
 	_ = os.Remove(pathDeltas)
@@ -322,11 +342,12 @@ func (f *FileSnapshotStore) UpdateActiveIndex(id string, info []byte, completed 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	_, inst := splitTenantID(id)
 	path := "active_index.json"
 	if f.Dir != "" {
-		_ = os.MkdirAll(f.Dir, 0755)
 		path = fmt.Sprintf("%s/active_index.json", f.Dir)
 	}
+	_ = os.MkdirAll(filepath.Dir(path), 0755)
 
 	var index []map[string]interface{}
 	data, err := os.ReadFile(path)
@@ -342,7 +363,7 @@ func (f *FileSnapshotStore) UpdateActiveIndex(id string, info []byte, completed 
 	updated := false
 	nextIndex := make([]map[string]interface{}, 0)
 	for _, entry := range index {
-		if entry["instance_id"] == id {
+		if entry["instance_id"] == inst {
 			if !completed {
 				nextIndex = append(nextIndex, newInfo)
 				updated = true

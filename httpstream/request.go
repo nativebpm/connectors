@@ -1,6 +1,7 @@
 package httpstream
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"io"
@@ -24,6 +25,7 @@ type Request struct {
 	client     http.Client
 	body       requestPayload
 	cancelFunc context.CancelFunc
+	gzip       bool // Gzip compression flag
 }
 
 // NewRequest creates a new HTTP request builder.
@@ -33,6 +35,12 @@ func NewRequest(ctx context.Context, client http.Client, method string, url stri
 		Request: request,
 		client:  client,
 	}
+}
+
+// Gzip enables gzip compression for the request body stream on the fly.
+func (r *Request) Gzip() *Request {
+	r.gzip = true
+	return r
 }
 
 func (r *Request) Use(middleware func(http.RoundTripper) http.RoundTripper) *Request {
@@ -84,8 +92,26 @@ func (r *Request) Send() (*http.Response, error) {
 		}
 	}
 
+	// Apply dynamic gzip stream pipe if enabled
+	if r.gzip && r.Request.Body != nil {
+		r.Request.Header.Set("Content-Encoding", "gzip")
+		originalBody := r.Request.Body
+		pr, pw := io.Pipe()
+		r.Request.Body = pr
+
+		go func() {
+			defer pw.Close()
+			gw := gzip.NewWriter(pw)
+			defer gw.Close()
+
+			_, _ = io.Copy(gw, originalBody)
+			_ = originalBody.Close()
+		}()
+	}
+
 	return r.sendRequest()
 }
+
 
 func (r *Request) sendRequest() (*http.Response, error) {
 	resp, err := r.client.Do(r.Request)

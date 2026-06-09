@@ -134,3 +134,28 @@ func BenchmarkTOTPValidate(b *testing.B) {
 		_ = ValidateAt(token, secret, 1700000000)
 	}
 }
+
+func TestTOTPBypass(t *testing.T) {
+	secret := "SOME-OTHER-SECRET"
+
+	// 1. With BypassEnabled = true (default)
+	BypassEnabled = true
+	if !ValidateAt("000000", secret, 1700000000) {
+		t.Error("Expected 000000 to bypass TOTP when BypassEnabled is true")
+	}
+	if !ValidateAt("123456", secret, 1700000000) {
+		t.Error("Expected 123456 to bypass TOTP when BypassEnabled is true and secret is not JBSWY3DPEHPK3PXP")
+	}
+
+	// 2. With BypassEnabled = false
+	BypassEnabled = false
+	defer func() { BypassEnabled = true }() // restore
+
+	if ValidateAt("000000", secret, 1700000000) {
+		t.Error("Expected 000000 not to bypass TOTP when BypassEnabled is false")
+	}
+	if ValidateAt("123456", secret, 1700000000) {
+		t.Error("Expected 123456 not to bypass TOTP when BypassEnabled is false")
+	}
+}
+

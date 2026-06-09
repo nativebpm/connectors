@@ -42,7 +42,11 @@ func TestCamundaIntegration_RealServer(t *testing.T) {
 		t.Skip("Skipping integration test: Camunda Server is not running on http://localhost:8080/engine-rest")
 		return
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
+		t.Skip("Skipping integration test: port 8080 is occupied by a non-Camunda service")
+		return
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -111,7 +115,11 @@ func TestBPMNVSRealCamunda(t *testing.T) {
 		t.Skip("Skipping comparison test: Camunda Server is not running on http://localhost:8080/engine-rest")
 		return
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
+		t.Skip("Skipping comparison test: port 8080 is occupied by a non-Camunda service")
+		return
+	}
 
 	// 2. Read gateways.bpmn XML schema
 	xmlData, err := os.ReadFile("examples/bpmn-spec/bpmn/gateways.bpmn")

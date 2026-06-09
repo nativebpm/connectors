@@ -114,7 +114,8 @@ func (s *S3SnapshotStore) writeObject(key string, data []byte) (string, error) {
 
 // Save writes a full memory snapshot to S3.
 func (s *S3SnapshotStore) Save(id string, snapshot []byte) error {
-	key := fmt.Sprintf("instances/%s/snapshot.bin", id)
+	tenant, inst := splitTenantID(id)
+	key := fmt.Sprintf("instances/%s/%s/snapshot.bin", tenant, inst)
 	data, err := compressData(snapshot)
 	if err != nil {
 		return fmt.Errorf("failed to compress snapshot for '%s': %w", id, err)
@@ -128,7 +129,8 @@ func (s *S3SnapshotStore) Save(id string, snapshot []byte) error {
 
 // Load reads a full memory snapshot from S3.
 func (s *S3SnapshotStore) Load(id string) ([]byte, error) {
-	key := fmt.Sprintf("instances/%s/snapshot.bin", id)
+	tenant, inst := splitTenantID(id)
+	key := fmt.Sprintf("instances/%s/%s/snapshot.bin", tenant, inst)
 	data, _, err := s.readObject(key)
 	if err != nil {
 		return nil, err
@@ -138,7 +140,8 @@ func (s *S3SnapshotStore) Load(id string) ([]byte, error) {
 
 // SaveDeltas saves memory deltas to S3 by reading current, overlaying new ones and writing back.
 func (s *S3SnapshotStore) SaveDeltas(id string, deltas map[int][]byte) error {
-	key := fmt.Sprintf("instances/%s/deltas.json", id)
+	tenant, inst := splitTenantID(id)
+	key := fmt.Sprintf("instances/%s/%s/deltas.json", tenant, inst)
 	current := make(map[int][]byte)
 
 	data, _, err := s.readObject(key)
@@ -174,7 +177,8 @@ func (s *S3SnapshotStore) SaveDeltas(id string, deltas map[int][]byte) error {
 
 // LoadDeltas retrieves memory deltas from S3.
 func (s *S3SnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
-	key := fmt.Sprintf("instances/%s/deltas.json", id)
+	tenant, inst := splitTenantID(id)
+	key := fmt.Sprintf("instances/%s/%s/deltas.json", tenant, inst)
 	data, _, err := s.readObject(key)
 	if err != nil {
 		if isNotFound(err) {
@@ -198,7 +202,8 @@ func (s *S3SnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
 
 // TruncateDeltas deletes memory deltas for the instance from S3.
 func (s *S3SnapshotStore) TruncateDeltas(id string) error {
-	key := fmt.Sprintf("instances/%s/deltas.json", id)
+	tenant, inst := splitTenantID(id)
+	key := fmt.Sprintf("instances/%s/%s/deltas.json", tenant, inst)
 	_, err := s.Client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
@@ -211,7 +216,8 @@ func (s *S3SnapshotStore) TruncateDeltas(id string) error {
 
 // SaveOplog appends an API call to the oplog JSON on S3.
 func (s *S3SnapshotStore) SaveOplog(id string, callIndex int, apiName string, request []byte, response []byte) error {
-	key := fmt.Sprintf("instances/%s/oplog.json", id)
+	tenant, inst := splitTenantID(id)
+	key := fmt.Sprintf("instances/%s/%s/oplog.json", tenant, inst)
 	var list []OplogEntry
 
 	data, _, err := s.readObject(key)
@@ -250,7 +256,8 @@ func (s *S3SnapshotStore) SaveOplog(id string, callIndex int, apiName string, re
 
 // LoadOplog retrieves the oplog entries from S3.
 func (s *S3SnapshotStore) LoadOplog(id string) ([]OplogEntry, error) {
-	key := fmt.Sprintf("instances/%s/oplog.json", id)
+	tenant, inst := splitTenantID(id)
+	key := fmt.Sprintf("instances/%s/%s/oplog.json", tenant, inst)
 	data, _, err := s.readObject(key)
 	if err != nil {
 		if isNotFound(err) {
@@ -274,7 +281,8 @@ func (s *S3SnapshotStore) LoadOplog(id string) ([]OplogEntry, error) {
 
 // TruncateOplog deletes oplog entries at or below the given call index.
 func (s *S3SnapshotStore) TruncateOplog(id string, beforeCallIndex int) error {
-	key := fmt.Sprintf("instances/%s/oplog.json", id)
+	tenant, inst := splitTenantID(id)
+	key := fmt.Sprintf("instances/%s/%s/oplog.json", tenant, inst)
 	data, _, err := s.readObject(key)
 	if err != nil {
 		if isNotFound(err) {
@@ -319,7 +327,8 @@ func (s *S3SnapshotStore) TruncateOplog(id string, beforeCallIndex int) error {
 
 // SaveMetadata saves metadata or atomically updates version via CAS using ETag.
 func (s *S3SnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
-	key := fmt.Sprintf("instances/%s/meta.json", meta.InstanceID)
+	tenant, inst := splitTenantID(meta.InstanceID)
+	key := fmt.Sprintf("instances/%s/%s/meta.json", tenant, inst)
 
 	nextVersion := meta.Version + 1
 	if meta.Version == 0 {
@@ -365,7 +374,8 @@ func (s *S3SnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 
 // LoadMetadata retrieves the instance metadata from S3.
 func (s *S3SnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
-	key := fmt.Sprintf("instances/%s/meta.json", id)
+	tenant, inst := splitTenantID(id)
+	key := fmt.Sprintf("instances/%s/%s/meta.json", tenant, inst)
 	data, etag, err := s.readObject(key)
 	if err != nil {
 		if isNotFound(err) {
@@ -413,12 +423,13 @@ func (s *S3SnapshotStore) LoadWasm(hash string) ([]byte, error) {
 
 // Delete removes all data associated with the instance from S3.
 func (s *S3SnapshotStore) Delete(id string) error {
+	tenant, inst := splitTenantID(id)
 	keys := []string{
-		fmt.Sprintf("instances/%s/snapshot.bin", id),
-		fmt.Sprintf("instances/%s/deltas.json", id),
-		fmt.Sprintf("instances/%s/oplog.json", id),
-		fmt.Sprintf("instances/%s/meta.json", id),
-		fmt.Sprintf("instances/%s/active.json", id),
+		fmt.Sprintf("instances/%s/%s/snapshot.bin", tenant, inst),
+		fmt.Sprintf("instances/%s/%s/deltas.json", tenant, inst),
+		fmt.Sprintf("instances/%s/%s/oplog.json", tenant, inst),
+		fmt.Sprintf("instances/%s/%s/meta.json", tenant, inst),
+		fmt.Sprintf("instances/%s/%s/active.json", tenant, inst),
 	}
 
 	for _, key := range keys {
@@ -435,7 +446,8 @@ func (s *S3SnapshotStore) Delete(id string) error {
 
 // UpdateActiveIndex updates the active instance index status.
 func (s *S3SnapshotStore) UpdateActiveIndex(id string, info []byte, completed bool) error {
-	key := fmt.Sprintf("instances/%s/active.json", id)
+	tenant, inst := splitTenantID(id)
+	key := fmt.Sprintf("instances/%s/%s/active.json", tenant, inst)
 	if completed {
 		_, err := s.Client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
 			Bucket: aws.String(s.bucket),

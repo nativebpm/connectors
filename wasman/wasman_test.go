@@ -1,3 +1,5 @@
+//go:build !wasm
+
 package wasman
 
 import (
@@ -1108,22 +1110,22 @@ func TestFileSnapshotStore_Compression(t *testing.T) {
 
 	instanceID := "test-comp-inst"
 
-	// 1. Save snapshot & Verify gzip magic bytes on disk
+	// 1. Save snapshot & Verify it is encrypted on disk (not plain gzip)
 	snapshotData := []byte("a very repetitive string that compresses extremely well! a very repetitive string that compresses extremely well!")
 	err := store.Save(instanceID, snapshotData)
 	require.NoError(t, err)
 
-	diskPath := filepath.Join(tempDir, instanceID+".bin")
+	diskPath := filepath.Join(tempDir, "default", instanceID+".bin")
 	diskBytes, err := os.ReadFile(diskPath)
 	require.NoError(t, err)
-	assert.True(t, isGzipped(diskBytes), "Saved file must be gzipped")
+	assert.False(t, isGzipped(diskBytes), "Saved file must be encrypted (not plain gzip)")
 
-	// 2. Load snapshot & Verify decompression
+	// 2. Load snapshot & Verify decompression and decryption
 	loaded, err := store.Load(instanceID)
 	require.NoError(t, err)
 	assert.Equal(t, snapshotData, loaded)
 
-	// 3. Save & Load deltas with compression
+	// 3. Save & Load deltas with encryption
 	deltas := map[int][]byte{
 		1: []byte("delta-1-val"),
 		2: []byte("delta-2-val"),
@@ -1131,24 +1133,24 @@ func TestFileSnapshotStore_Compression(t *testing.T) {
 	err = store.SaveDeltas(instanceID, deltas)
 	require.NoError(t, err)
 
-	deltasPath := filepath.Join(tempDir, instanceID+"_deltas.json")
+	deltasPath := filepath.Join(tempDir, "default", instanceID+"_deltas.json")
 	deltasBytes, err := os.ReadFile(deltasPath)
 	require.NoError(t, err)
-	assert.True(t, isGzipped(deltasBytes), "Deltas file must be gzipped")
+	assert.False(t, isGzipped(deltasBytes), "Deltas file must be encrypted")
 
 	loadedDeltas, err := store.LoadDeltas(instanceID)
 	require.NoError(t, err)
 	assert.Len(t, loadedDeltas, 2)
 	assert.Equal(t, []byte("delta-1-val"), loadedDeltas[1])
 
-	// 4. Save & Load oplog with compression
+	// 4. Save & Load oplog with encryption
 	err = store.SaveOplog(instanceID, 1, "test-api", []byte("req"), []byte("resp"))
 	require.NoError(t, err)
 
-	oplogPath := filepath.Join(tempDir, instanceID+"_oplog.json")
+	oplogPath := filepath.Join(tempDir, "default", instanceID+"_oplog.json")
 	oplogBytes, err := os.ReadFile(oplogPath)
 	require.NoError(t, err)
-	assert.True(t, isGzipped(oplogBytes), "Oplog file must be gzipped")
+	assert.False(t, isGzipped(oplogBytes), "Oplog file must be encrypted")
 
 	loadedOplog, err := store.LoadOplog(instanceID)
 	require.NoError(t, err)
