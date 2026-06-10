@@ -73,6 +73,9 @@ type Authenticator struct {
 	Events        []*SecurityEvent
 	err           error // internal error tracking
 
+	// Safe password storage configurations
+	UsersDir      string
+
 	// Supabase integration fields
 	SupabaseJWTSecret []byte
 	SupabaseURL       string
@@ -116,6 +119,105 @@ func (a *Authenticator) WithSupabase(url, jwtSecret string) *Authenticator {
 		a.SupabaseJWTSecret = []byte(jwtSecret)
 	}
 	return a
+}
+
+// WithUsersDir configures the directory where user credentials and roles are stored.
+func (a *Authenticator) WithUsersDir(dir string) *Authenticator {
+	if a.err != nil {
+		return a
+	}
+	a.UsersDir = dir
+	return a
+}
+
+// ValidatePassword checks if the password meets the age-compatible length and safe character set criteria.
+func ValidatePassword(password string) error {
+	if len(password) < 8 {
+		return errors.New("password must be at least 8 characters long")
+	}
+	if len(password) > 72 {
+		return errors.New("password must be at most 72 characters long")
+	}
+	if strings.TrimSpace(password) != password {
+		return errors.New("password cannot start or end with a space")
+	}
+
+	// Safe character set check:
+	// Allowed: alphanumeric, space, and a safe list of symbols.
+	// Disallowed: $, \, `, ", ', |, &, <, >, control characters.
+	for _, char := range password {
+		if char < 32 || char > 126 {
+			return errors.New("password contains unsupported or non-printable characters")
+		}
+		switch char {
+		case '$', '\\', '`', '"', '\'', '|', '&', '<', '>':
+			return fmt.Errorf("password contains unsafe special character: %c", char)
+		}
+	}
+	return nil
+}
+
+// LoadUserRoleFromFile loads only the user's role from the plain text .role file.
+func (a *Authenticator) LoadUserRoleFromFile(usersDir, username string) error {
+	roleFilePath := filepath.Join(usersDir, username+".role")
+	data, err := os.ReadFile(roleFilePath)
+	if err != nil {
+		return err
+	}
+	var roleMeta struct {
+		Role string `yaml:"role"`
+	}
+	if err := yaml.Unmarshal(data, &roleMeta); err != nil {
+		return err
+	}
+
+	role := roleMeta.Role
+	if role == "" {
+		role = "viewer"
+	}
+
+	a.muUsers.Lock()
+	if _, exists := a.Users[username]; !exists {
+		a.Users[username] = &User{
+			Username: username,
+			Role:     role,
+		}
+	} else {
+		a.Users[username].Role = role
+	}
+	a.muUsers.Unlock()
+	return nil
+}
+
+func encryptAgeSymmetric(data []byte, passphrase string) ([]byte, error) {
+	recipient, err := age.NewScryptRecipient(passphrase)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	w, err := age.Encrypt(&buf, recipient)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := w.Write(data); err != nil {
+		return nil, err
+	}
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func decryptAgeSymmetric(encrypted []byte, passphrase string) ([]byte, error) {
+	identity, err := age.NewScryptIdentity(passphrase)
+	if err != nil {
+		return nil, err
+	}
+	r, err := age.Decrypt(bytes.NewReader(encrypted), identity)
+	if err != nil {
+		return nil, err
+	}
+	return io.ReadAll(r)
 }
 
 // WithGopassUser decrypts age-encrypted data using credentials, then parses and registers the user.
@@ -330,21 +432,88 @@ func (a *Authenticator) Authenticate(username, password, code string) (*User, er
 		return nil, errors.New("invalid username or password")
 	}
 
-	// Compare bcrypt password hash
-	err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
+	// Try in-memory check if credentials are already loaded
+	if user.PasswordHash != "" {
+		err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
+		if err == nil {
+			if user.TOTPSecret != "" {
+				if !totp.Validate(code, user.TOTPSecret) {
+					return nil, errors.New("invalid TOTP verification code")
+				}
+			} else {
+				return nil, errors.New("TOTP is not configured for this user")
+			}
+			return user, nil
+		}
+	}
+
+	// Read and decrypt [username].age dynamically using the provided password
+	filePath := filepath.Join(a.UsersDir, username+".age")
+	encryptedData, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, errors.New("invalid username or password")
+	}
+
+	decrypted, err := decryptAgeSymmetric(encryptedData, password)
+	if err != nil {
+		return nil, errors.New("invalid username or password")
+	}
+
+	content := string(decrypted)
+	parts := strings.SplitN(content, "---", 2)
+	passwordLine := strings.TrimSpace(parts[0])
+	lines := strings.Split(passwordLine, "\n")
+	passwordHash := strings.TrimSpace(lines[0])
+
+	var meta GopassMetadata
+	if len(parts) > 1 {
+		if errYaml := yaml.Unmarshal([]byte(parts[1]), &meta); errYaml != nil {
+			return nil, fmt.Errorf("failed to parse gopass metadata YAML: %w", errYaml)
+		}
+	}
+
+	totpSecret := strings.TrimSpace(meta.Totp)
+	if strings.HasPrefix(totpSecret, "otpauth://") {
+		parsedURL, errURL := url.Parse(totpSecret)
+		if errURL == nil {
+			secretVal := parsedURL.Query().Get("secret")
+			if secretVal != "" {
+				totpSecret = secretVal
+			}
+		}
+	}
+
+	role := strings.TrimSpace(meta.Role)
+	if role == "" {
+		role = "viewer"
+	}
+
+	// Verify the password hash
+	err = bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password))
 	if err != nil {
 		return nil, errors.New("invalid username or password")
 	}
 
 	// Validate TOTP token
-	if user.TOTPSecret != "" {
-		if !totp.Validate(code, user.TOTPSecret) {
+	if totpSecret != "" {
+		if !totp.Validate(code, totpSecret) {
 			return nil, errors.New("invalid TOTP verification code")
 		}
 	} else {
-		// If TOTP is required but not configured for user, raise error
 		return nil, errors.New("TOTP is not configured for this user")
 	}
+
+	// Populate in-memory user
+	a.muUsers.Lock()
+	user = &User{
+		Username:     username,
+		PasswordHash: passwordHash,
+		Role:         role,
+		TOTPSecret:   totpSecret,
+		RecoveryHash: meta.RecoveryHash,
+	}
+	a.Users[username] = user
+	a.muUsers.Unlock()
 
 	return user, nil
 }
@@ -352,6 +521,9 @@ func (a *Authenticator) Authenticate(username, password, code string) (*User, er
 // SignUp registers a new user with Supabase GoTrue. If Supabase is disabled,
 // it returns an error because self-service signup is not allowed without the MFA flow.
 func (a *Authenticator) SignUp(username, password string) error {
+	if err := ValidatePassword(password); err != nil {
+		return err
+	}
 	if !a.IsSupabase() {
 		return errors.New("self-service registration is disabled when running in local fallback mode")
 	}
@@ -760,8 +932,8 @@ func (a *Authenticator) SaveUserToGopassFile(usersDir, username, password, passp
 	if password == "" {
 		return errors.New("password cannot be empty")
 	}
-	if passphrase == "" {
-		return errors.New("encryption passphrase cannot be empty")
+	if err := ValidatePassword(password); err != nil {
+		return err
 	}
 	if role == "" {
 		role = "viewer"
@@ -802,34 +974,48 @@ func (a *Authenticator) SaveUserToGopassFile(usersDir, username, password, passp
 	content.WriteString("\n---\n")
 	content.Write(yamlData)
 
-	// 4. Encrypt using age symmetrically
-	recipient, err := age.NewScryptRecipient(passphrase)
+	// 4. Encrypt using age symmetrically using password
+	encryptedAge, err := encryptAgeSymmetric(content.Bytes(), password)
 	if err != nil {
-		return fmt.Errorf("failed to create scrypt recipient: %w", err)
+		return fmt.Errorf("failed to encrypt age file: %w", err)
 	}
 
-	var encryptedBuf bytes.Buffer
-	w, err := age.Encrypt(&encryptedBuf, recipient)
-	if err != nil {
-		return fmt.Errorf("failed to initialize age encryptor: %w", err)
-	}
-	if _, err := w.Write(content.Bytes()); err != nil {
-		return fmt.Errorf("failed to encrypt gopass content: %w", err)
-	}
-	if err := w.Close(); err != nil {
-		return fmt.Errorf("failed to close age encryptor: %w", err)
-	}
-
-	// 5. Ensure directory exists and save file
+	// Ensure directory exists and save file
 	if err := os.MkdirAll(usersDir, 0755); err != nil {
 		return fmt.Errorf("failed to create users directory: %w", err)
 	}
 	filePath := filepath.Join(usersDir, username+".age")
-	if err := os.WriteFile(filePath, encryptedBuf.Bytes(), 0600); err != nil {
+	if err := os.WriteFile(filePath, encryptedAge, 0600); err != nil {
 		return fmt.Errorf("failed to write encrypted user file: %w", err)
 	}
 
-	// 6. Register user in-memory
+	// 5. Encrypt and save recovery file if recoveryKey is provided
+	if recoveryKey != "" {
+		cleanRecovery := strings.ToUpper(strings.ReplaceAll(recoveryKey, "-", ""))
+		cleanRecovery = strings.TrimSpace(cleanRecovery)
+		encryptedRec, err := encryptAgeSymmetric(content.Bytes(), cleanRecovery)
+		if err != nil {
+			return fmt.Errorf("failed to encrypt recovery file: %w", err)
+		}
+		recFilePath := filepath.Join(usersDir, username+".recovery")
+		if err := os.WriteFile(recFilePath, encryptedRec, 0600); err != nil {
+			return fmt.Errorf("failed to write recovery file: %w", err)
+		}
+	}
+
+	// 6. Save role in plain text YAML
+	roleMeta := struct {
+		Role string `yaml:"role"`
+	}{
+		Role: role,
+	}
+	roleData, err := yaml.Marshal(roleMeta)
+	if err == nil {
+		roleFilePath := filepath.Join(usersDir, username+".role")
+		_ = os.WriteFile(roleFilePath, roleData, 0644)
+	}
+
+	// 7. Register user in-memory
 	a.muUsers.Lock()
 	a.Users[username] = &User{
 		Username:     username,
@@ -846,35 +1032,91 @@ func (a *Authenticator) SaveUserToGopassFile(usersDir, username, password, passp
 	return nil
 }
 
-// VerifyMnemonicRecovery checks the password and the recovery mnemonic key.
-func (a *Authenticator) VerifyMnemonicRecovery(username, password, recoveryKey string) error {
-	a.muUsers.RLock()
-	user, exists := a.Users[username]
-	a.muUsers.RUnlock()
-	if !exists {
-		return errors.New("invalid username or password")
+// RecoverUserFromMnemonic decrypts the recovery file using the recovery key, and returns the loaded User metadata.
+func (a *Authenticator) RecoverUserFromMnemonic(usersDir, username, recoveryKey string) (*User, error) {
+	if usersDir == "" {
+		return nil, errors.New("users directory cannot be empty")
 	}
-
-	// Compare bcrypt password hash
-	err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
-	if err != nil {
-		return errors.New("invalid username or password")
+	if username == "" {
+		return nil, errors.New("username cannot be empty")
 	}
-
-	// Validate Mnemonic Recovery Key
-	if user.RecoveryHash == "" {
-		return errors.New("recovery key is not configured for this user")
+	if recoveryKey == "" {
+		return nil, errors.New("recovery key cannot be empty")
 	}
 
 	cleanRecovery := strings.ToUpper(strings.ReplaceAll(recoveryKey, "-", ""))
 	cleanRecovery = strings.TrimSpace(cleanRecovery)
 
-	err = bcrypt.CompareHashAndPassword([]byte(user.RecoveryHash), []byte(cleanRecovery))
+	// Read [username].recovery
+	recFilePath := filepath.Join(usersDir, username+".recovery")
+	encryptedData, err := os.ReadFile(recFilePath)
 	if err != nil {
-		return errors.New("invalid recovery key")
+		return nil, errors.New("invalid recovery key or username")
 	}
 
-	return nil
+	// Decrypt using recovery key
+	decrypted, err := decryptAgeSymmetric(encryptedData, cleanRecovery)
+	if err != nil {
+		return nil, errors.New("invalid recovery key")
+	}
+
+	// Parse gopass content
+	content := string(decrypted)
+	parts := strings.SplitN(content, "---", 2)
+	passwordLine := strings.TrimSpace(parts[0])
+	lines := strings.Split(passwordLine, "\n")
+	passwordHash := strings.TrimSpace(lines[0])
+
+	var meta GopassMetadata
+	if len(parts) > 1 {
+		if errYaml := yaml.Unmarshal([]byte(parts[1]), &meta); errYaml != nil {
+			return nil, fmt.Errorf("failed to parse gopass metadata YAML: %w", errYaml)
+		}
+	}
+
+	totpSecret := strings.TrimSpace(meta.Totp)
+	if strings.HasPrefix(totpSecret, "otpauth://") {
+		parsedURL, errURL := url.Parse(totpSecret)
+		if errURL == nil {
+			secretVal := parsedURL.Query().Get("secret")
+			if secretVal != "" {
+				totpSecret = secretVal
+			}
+		}
+	}
+
+	role := strings.TrimSpace(meta.Role)
+	if role == "" {
+		role = "viewer"
+	}
+
+	// If we loaded the user's role from disk, use it as source of truth
+	a.muUsers.RLock()
+	existingUser, exists := a.Users[username]
+	a.muUsers.RUnlock()
+	if exists && existingUser.Role != "" {
+		role = existingUser.Role
+	}
+
+	user := &User{
+		Username:     username,
+		PasswordHash: passwordHash,
+		Role:         role,
+		TOTPSecret:   totpSecret,
+		RecoveryHash: meta.RecoveryHash,
+	}
+
+	return user, nil
+}
+
+// VerifyMnemonicRecovery checks if the recovery key is valid by attempting to decrypt the .recovery file.
+func (a *Authenticator) VerifyMnemonicRecovery(username, password, recoveryKey string) error {
+	// Check new password format first
+	if err := ValidatePassword(password); err != nil {
+		return err
+	}
+	_, err := a.RecoverUserFromMnemonic(a.UsersDir, username, recoveryKey)
+	return err
 }
 // UserExists checks if a user is registered, thread-safely.
 func (a *Authenticator) UserExists(username string) bool {
@@ -903,16 +1145,13 @@ func (a *Authenticator) GetUsers() []*User {
 	return users
 }
 
-// UpdateUserRole updates a user's role in memory and rewrites their encrypted credentials file.
+// UpdateUserRole updates a user's role in memory and rewrites their plain text .role file.
 func (a *Authenticator) UpdateUserRole(usersDir, username, passphrase, newRole string) error {
 	if usersDir == "" {
 		return errors.New("users directory cannot be empty")
 	}
 	if username == "" {
 		return errors.New("username cannot be empty")
-	}
-	if passphrase == "" {
-		return errors.New("encryption passphrase cannot be empty")
 	}
 	if newRole != "viewer" && newRole != "developer" && newRole != "admin" {
 		return fmt.Errorf("invalid role: %s", newRole)
@@ -927,50 +1166,23 @@ func (a *Authenticator) UpdateUserRole(usersDir, username, passphrase, newRole s
 
 	// Update role in memory
 	user.Role = newRole
-	passwordHash := user.PasswordHash
-	totpSecret := user.TOTPSecret
-	recoveryHash := user.RecoveryHash
 	a.muUsers.Unlock()
 
 	// Build YAML metadata payload using existing credentials
-	meta := GopassMetadata{
-		Role:         newRole,
-		Totp:         totpSecret,
-		RecoveryHash: recoveryHash,
+	roleMeta := struct {
+		Role string `yaml:"role"`
+	}{
+		Role: newRole,
 	}
-	yamlData, err := yaml.Marshal(meta)
+	roleData, err := yaml.Marshal(roleMeta)
 	if err != nil {
-		return fmt.Errorf("failed to marshal metadata: %w", err)
+		return fmt.Errorf("failed to marshal role metadata: %w", err)
 	}
 
-	// Assemble gopass content: passwordHash \n ---\n yamlData
-	var content bytes.Buffer
-	content.WriteString(passwordHash)
-	content.WriteString("\n---\n")
-	content.Write(yamlData)
-
-	// Encrypt using age symmetrically
-	recipient, err := age.NewScryptRecipient(passphrase)
-	if err != nil {
-		return fmt.Errorf("failed to create scrypt recipient: %w", err)
-	}
-
-	var encryptedBuf bytes.Buffer
-	w, err := age.Encrypt(&encryptedBuf, recipient)
-	if err != nil {
-		return fmt.Errorf("failed to initialize age encryptor: %w", err)
-	}
-	if _, err := w.Write(content.Bytes()); err != nil {
-		return fmt.Errorf("failed to encrypt gopass content: %w", err)
-	}
-	if err := w.Close(); err != nil {
-		return fmt.Errorf("failed to close age encryptor: %w", err)
-	}
-
-	// Overwrite the encrypted user file
-	filePath := filepath.Join(usersDir, username+".age")
-	if err := os.WriteFile(filePath, encryptedBuf.Bytes(), 0600); err != nil {
-		return fmt.Errorf("failed to write encrypted user file: %w", err)
+	// Overwrite the plain text role file
+	filePath := filepath.Join(usersDir, username+".role")
+	if err := os.WriteFile(filePath, roleData, 0644); err != nil {
+		return fmt.Errorf("failed to write role file: %w", err)
 	}
 
 	// Invalidate cached sessions for the user

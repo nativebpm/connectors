@@ -43,8 +43,11 @@ func ensureKeyInitialized() error {
 		return nil
 	}
 
-	// 1. Check if user configured a manual passphrase in environment
-	passphrase := os.Getenv("NATIVEBPM_SNAPSHOT_PASSPHRASE")
+	// 1. Check if user configured a master key or manual passphrase in environment
+	passphrase := os.Getenv("CRYPTENV_KEY")
+	if passphrase == "" {
+		passphrase = os.Getenv("NATIVEBPM_SNAPSHOT_PASSPHRASE")
+	}
 	if passphrase != "" {
 		snapshotKey = sha256.Sum256([]byte(passphrase))
 		keyInitialized = true

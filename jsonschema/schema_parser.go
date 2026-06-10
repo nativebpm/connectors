@@ -23,6 +23,7 @@ type JSONSchema struct {
 	Format      string                 `json:"format,omitempty"`
 	UIOrder     []string               `json:"ui:order,omitempty"`
 	UIWidget    string                 `json:"ui:widget,omitempty"`
+	XStep       int                    `json:"x-step,omitempty"`
 }
 
 type UIWidgetSpec struct {
@@ -39,6 +40,7 @@ type UIWidgetSpec struct {
 	Maximum      *float64
 	Pattern      string
 	Format       string
+	XStep        int
 }
 
 // ParseSchema parses a raw JSON Schema string and compiles it into an ordered list of UIWidgetSpecs.
@@ -147,6 +149,7 @@ func ParseSchema(schemaJSON string, variables map[string]interface{}) ([]*UIWidg
 			Maximum:   prop.Maximum,
 			Pattern:   prop.Pattern,
 			Format:    prop.Format,
+			XStep:     prop.XStep,
 		})
 	}
 
@@ -365,6 +368,14 @@ func (pb *JSONSchemaPropertyBuilder) UIWidget(widget string) *JSONSchemaProperty
 		return pb
 	}
 	pb.prop.UIWidget = widget
+	return pb
+}
+
+func (pb *JSONSchemaPropertyBuilder) XStep(step int) *JSONSchemaPropertyBuilder {
+	if pb.builder.err != nil {
+		return pb
+	}
+	pb.prop.XStep = step
 	return pb
 }
 
