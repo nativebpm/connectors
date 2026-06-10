@@ -4,8 +4,6 @@ go 1.26
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.9
-
-
 	github.com/aws/aws-sdk-go-v2/config v1.32.20
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.102.2
 	github.com/aws/smithy-go v1.26.0
@@ -17,6 +15,8 @@ require (
 	github.com/tetratelabs/wazero v1.12.0
 	go.temporal.io/sdk v1.33.0
 )
+
+require github.com/lib/pq v1.12.3
 
 require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.11 // indirect
@@ -40,12 +40,12 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.2 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
-	github.com/lib/pq v1.12.3 // indirect
 	github.com/nativebpm/httpstream v0.0.4 // indirect
 	github.com/nexus-rpc/sdk-go v0.3.0 // indirect
 	github.com/pborman/uuid v1.2.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/sequinstream/sequin-go v0.2.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	go.temporal.io/api v1.44.1 // indirect
@@ -60,5 +60,3 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-
