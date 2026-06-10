@@ -678,3 +678,32 @@ func TestAttachmentSizeLimits(t *testing.T) {
 	}
 }
 
+func TestProviderPresets(t *testing.T) {
+	// 1. Verify presets builder config
+	m := NewMessage().WithPreset(YandexPreset)
+	if m.maxAttachmentSize != YandexPreset.MaxAttachmentSize {
+		t.Errorf("expected maxAttachmentSize to be Yandex value %d, got %d", YandexPreset.MaxAttachmentSize, m.maxAttachmentSize)
+	}
+	if m.maxTotalAttachmentsSize != YandexPreset.MaxTotalAttachmentsSize {
+		t.Errorf("expected maxTotalAttachmentsSize to be Yandex value %d, got %d", YandexPreset.MaxTotalAttachmentsSize, m.maxTotalAttachmentsSize)
+	}
+
+	// 2. Verify config generation
+	cfg := YandexPreset.SMTPConfig("user@yandex.ru", "my-password")
+	if cfg.Host != "smtp.yandex.ru" || cfg.Port != 465 || cfg.UseSSL != true || cfg.Username != "user@yandex.ru" || cfg.Password != "my-password" {
+		t.Errorf("incorrect Yandex SMTPConfig: %+v", cfg)
+	}
+
+	// 3. Verify Gmail preset config
+	m2 := NewMessage().WithPreset(GmailPreset)
+	if m2.maxAttachmentSize != GmailPreset.MaxAttachmentSize {
+		t.Errorf("expected maxAttachmentSize to be Gmail value %d, got %d", GmailPreset.MaxAttachmentSize, m2.maxAttachmentSize)
+	}
+
+	cfg2 := GmailPreset.SMTPConfig("user@gmail.com", "pass")
+	if cfg2.Host != "smtp.gmail.com" || cfg2.Port != 587 || cfg2.UseSSL != false || cfg2.Username != "user@gmail.com" || cfg2.Password != "pass" {
+		t.Errorf("incorrect Gmail SMTPConfig: %+v", cfg2)
+	}
+}
+
+
