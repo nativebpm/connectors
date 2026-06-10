@@ -4,6 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"image/png"
+	"math/rand"
 	"net"
 	"strings"
 	"sync"
@@ -522,3 +527,154 @@ func TestSMTPDeliveryMockMultipart(t *testing.T) {
 		t.Error("expected Content-Disposition attachment for docs.pdf")
 	}
 }
+
+func generateLargeImage(width, height int, isPNG bool, transparent bool) []byte {
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	r := rand.New(rand.NewSource(42))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			if transparent && x < 10 && y < 10 {
+				img.Set(x, y, color.RGBA{R: 0, G: 0, B: 0, A: 128})
+			} else {
+				img.Set(x, y, color.RGBA{
+					R: uint8(r.Intn(256)),
+					G: uint8(r.Intn(256)),
+					B: uint8(r.Intn(256)),
+					A: 255,
+				})
+			}
+		}
+	}
+	var buf bytes.Buffer
+	if isPNG {
+		_ = png.Encode(&buf, img)
+	} else {
+		_ = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 95})
+	}
+	return buf.Bytes()
+}
+
+func TestImageOptimization(t *testing.T) {
+	// 1. Opaque JPEG > 100KB, width > 600px
+	opaqueData := generateLargeImage(800, 600, false, false)
+	if len(opaqueData) <= 100*1024 {
+		t.Fatalf("test setup error: generated opaque JPEG must be > 100KB, got %d bytes", len(opaqueData))
+	}
+
+	optData, _, optType := optimizeImage(opaqueData, "photo.jpg", "image/jpeg")
+	if len(optData) >= len(opaqueData) {
+		t.Errorf("expected optimization to reduce size, got original %d vs optimized %d", len(opaqueData), len(optData))
+	}
+	if optType != "image/jpeg" {
+		t.Errorf("expected content type image/jpeg, got %s", optType)
+	}
+
+	// Verify it was resized
+	decodedImg, _, err := image.Decode(bytes.NewReader(optData))
+	if err != nil {
+		t.Fatalf("failed to decode optimized image: %v", err)
+	}
+	if decodedImg.Bounds().Dx() != 600 {
+		t.Errorf("expected resized width 600, got %d", decodedImg.Bounds().Dx())
+	}
+
+	// 2. Transparent PNG > 100KB, width > 600px
+	transData := generateLargeImage(800, 600, true, true)
+	if len(transData) <= 100*1024 {
+		t.Fatalf("test setup error: generated transparent PNG must be > 100KB, got %d bytes", len(transData))
+	}
+
+	optDataPNG, _, optTypePNG := optimizeImage(transData, "logo.png", "image/png")
+	if len(optDataPNG) >= len(transData) {
+		t.Errorf("expected optimization to reduce size for PNG, got original %d vs optimized %d", len(transData), len(optDataPNG))
+	}
+	if optTypePNG != "image/png" {
+		t.Errorf("expected transparent PNG to keep image/png content type, got %s", optTypePNG)
+	}
+
+	// 3. Opaque PNG > 100KB, width > 600px -> should be converted to JPEG
+	opaquePNGData := generateLargeImage(800, 600, true, false)
+	if len(opaquePNGData) <= 100*1024 {
+		t.Fatalf("test setup error: generated opaque PNG must be > 100KB, got %d bytes", len(opaquePNGData))
+	}
+
+	_, optNameOpaquePNG, optTypeOpaquePNG := optimizeImage(opaquePNGData, "chart.png", "image/png")
+	if optTypeOpaquePNG != "image/jpeg" {
+		t.Errorf("expected opaque PNG to be optimized to image/jpeg, got %s", optTypeOpaquePNG)
+	}
+	if !strings.HasSuffix(optNameOpaquePNG, ".jpg") {
+		t.Errorf("expected filename to have .jpg suffix, got %s", optNameOpaquePNG)
+	}
+}
+
+func TestAttachmentSizeLimits(t *testing.T) {
+	// Test eager verification: individual attachment limit
+	builder := NewMessage().
+		WithMaxAttachmentSize(50).
+		WithMaxTotalAttachmentsSize(150)
+
+	// Adding a small attachment (10 bytes) - should pass
+	builder.AttachBytes(make([]byte, 10), "small.txt", "text/plain")
+	if builder.Error() != nil {
+		t.Fatalf("unexpected error adding small attachment: %v", builder.Error())
+	}
+
+	// Adding a large attachment (60 bytes) - should trigger eager error
+	builder.AttachBytes(make([]byte, 60), "large.txt", "text/plain")
+	if builder.Error() == nil {
+		t.Fatal("expected eager limit error for attachment exceeding 50 bytes limit")
+	}
+	if !strings.Contains(builder.Error().Error(), "exceeds the maximum allowed individual limit") {
+		t.Errorf("unexpected error message: %v", builder.Error())
+	}
+
+	// Reset builder and test total attachments size limit
+	builder = NewMessage().
+		WithMaxAttachmentSize(100).
+		WithMaxTotalAttachmentsSize(150)
+
+	builder.AttachBytes(make([]byte, 80), "file1.txt", "text/plain")
+	if builder.Error() != nil {
+		t.Fatalf("unexpected error adding file1: %v", builder.Error())
+	}
+
+	// Adding file2 of size 80 would make total 160 > 150
+	builder.AttachBytes(make([]byte, 80), "file2.txt", "text/plain")
+	if builder.Error() == nil {
+		t.Fatal("expected eager limit error for total attachments exceeding 150 bytes limit")
+	}
+
+	// Test late size limit validation in Send() after S3 resolution
+	store := NewMockStore()
+	smtpConfig := SMTPConfig{
+		Host: "localhost",
+		Port: 25,
+	}
+
+	builder = NewMessage().
+		From("sender@example.com", "Sender").
+		To("receiver@example.com").
+		WithStore(store).
+		WithMaxAttachmentSize(50)
+
+	// Simulate a pre-existing 60-byte encrypted S3 attachment manually uploaded
+	aesKey := []byte("aes_encryption_key_size_32_bytes") // 32 bytes
+	plaintext := make([]byte, 60)
+	encrypted, _ := EncryptAES(aesKey, plaintext)
+	_ = store.UploadAttachment("s3key_large", encrypted)
+
+	builder.AddQueuedAttachment("s3key_large", aesKey, "invoice.pdf", "application/pdf", false, "")
+	if builder.Error() != nil {
+		t.Fatalf("unexpected error from AddQueuedAttachment: %v", builder.Error())
+	}
+
+	// Send should fail due to decrypted size (60 bytes) > individual limit (50 bytes)
+	err := builder.Send(smtpConfig)
+	if err == nil {
+		t.Fatal("expected Send to fail because downloaded attachment exceeds individual limit")
+	}
+	if !strings.Contains(err.Error(), "exceeds the maximum allowed individual limit") {
+		t.Errorf("unexpected error message from Send: %v", err)
+	}
+}
+

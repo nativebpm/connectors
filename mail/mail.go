@@ -47,20 +47,63 @@ type Attachment struct {
 
 // MessageBuilder is a fluent builder for email messages.
 type MessageBuilder struct {
-	fromEmail   string
-	fromName    string
-	to          []string
-	subject     string
-	body        string
-	isHTML      bool
-	attachments []Attachment
-	store       AttachmentStore // S3 store for deferred loading and auto-cleanup
-	err         error           // Sticky error
+	fromEmail               string
+	fromName                string
+	to                      []string
+	subject                 string
+	body                    string
+	isHTML                  bool
+	attachments             []Attachment
+	store                   AttachmentStore // S3 store for deferred loading and auto-cleanup
+	maxAttachmentSize      int64           // Limit for single attachment (default: 10MB)
+	maxTotalAttachmentsSize int64           // Limit for all attachments combined (default: 25MB)
+	err                     error           // Sticky error
 }
 
 // NewMessage creates a new fluent MessageBuilder.
 func NewMessage() *MessageBuilder {
-	return &MessageBuilder{}
+	return &MessageBuilder{
+		maxAttachmentSize:      10 * 1024 * 1024, // 10MB
+		maxTotalAttachmentsSize: 25 * 1024 * 1024, // 25MB
+	}
+}
+
+// WithMaxAttachmentSize overrides the default 10MB limit for a single attachment.
+// A value of 0 or less disables the limit check for individual attachments.
+func (m *MessageBuilder) WithMaxAttachmentSize(size int64) *MessageBuilder {
+	if m.err != nil {
+		return m
+	}
+	m.maxAttachmentSize = size
+	return m
+}
+
+// WithMaxTotalAttachmentsSize overrides the default 25MB limit for the combined size of all attachments.
+// A value of 0 or less disables the limit check for total attachments.
+func (m *MessageBuilder) WithMaxTotalAttachmentsSize(size int64) *MessageBuilder {
+	if m.err != nil {
+		return m
+	}
+	m.maxTotalAttachmentsSize = size
+	return m
+}
+
+// validateLimits checks if a new attachment of the given size would exceed configured individual or total limits.
+func (m *MessageBuilder) validateLimits(newSize int64) error {
+	if m.maxAttachmentSize > 0 && newSize > m.maxAttachmentSize {
+		return fmt.Errorf("attachment size %d bytes exceeds the maximum allowed individual limit of %d bytes", newSize, m.maxAttachmentSize)
+	}
+
+	var currentTotal int64
+	for _, att := range m.attachments {
+		currentTotal += int64(len(att.Data))
+	}
+
+	if m.maxTotalAttachmentsSize > 0 && (currentTotal+newSize) > m.maxTotalAttachmentsSize {
+		return fmt.Errorf("total attachments size %d bytes exceeds the maximum allowed combined limit of %d bytes", currentTotal+newSize, m.maxTotalAttachmentsSize)
+	}
+
+	return nil
 }
 
 // WithStore sets the AttachmentStore for S3 queueing support.
@@ -178,11 +221,18 @@ func (m *MessageBuilder) EmbedBytes(data []byte, filename string, contentType st
 		contentType = "application/octet-stream"
 	}
 
+	optData, optFilename, optContentType := optimizeImage(data, filename, contentType)
+
+	if err := m.validateLimits(int64(len(optData))); err != nil {
+		m.err = err
+		return m
+	}
+
 	m.attachments = append(m.attachments, Attachment{
-		Filename:    filename,
-		ContentType: contentType,
+		Filename:    optFilename,
+		ContentType: optContentType,
 		ContentID:   cidName,
-		Data:        data,
+		Data:        optData,
 		IsInline:    true,
 	})
 	return m
@@ -223,10 +273,17 @@ func (m *MessageBuilder) AttachBytes(data []byte, filename string, contentType s
 		contentType = "application/octet-stream"
 	}
 
+	optData, optFilename, optContentType := optimizeImage(data, filename, contentType)
+
+	if err := m.validateLimits(int64(len(optData))); err != nil {
+		m.err = err
+		return m
+	}
+
 	m.attachments = append(m.attachments, Attachment{
-		Filename:    filename,
-		ContentType: contentType,
-		Data:        data,
+		Filename:    optFilename,
+		ContentType: optContentType,
+		Data:        optData,
 		IsInline:    false,
 	})
 	return m
@@ -248,18 +305,25 @@ func (m *MessageBuilder) QueueAttachment(store AttachmentStore, aesKey []byte, f
 		return "", fmt.Errorf("data cannot be empty")
 	}
 
-	encrypted, err := EncryptAES(aesKey, data)
+	optData, optFilename, optContentType := optimizeImage(data, filename, contentType)
+
+	if err := m.validateLimits(int64(len(optData))); err != nil {
+		m.err = err
+		return "", err
+	}
+
+	encrypted, err := EncryptAES(aesKey, optData)
 	if err != nil {
 		return "", fmt.Errorf("encryption failed: %w", err)
 	}
 
-	s3Key := fmt.Sprintf("mail/attachments/%d_%s", time.Now().UnixNano(), filename)
+	s3Key := fmt.Sprintf("mail/attachments/%d_%s", time.Now().UnixNano(), optFilename)
 	err = store.UploadAttachment(s3Key, encrypted)
 	if err != nil {
 		return "", fmt.Errorf("failed to upload encrypted attachment: %w", err)
 	}
 
-	m.AddQueuedAttachment(s3Key, aesKey, filename, contentType, isInline, cid)
+	m.AddQueuedAttachment(s3Key, aesKey, optFilename, optContentType, isInline, cid)
 	return s3Key, nil
 }
 
@@ -376,6 +440,19 @@ func (m *MessageBuilder) Send(config SMTPConfig) error {
 			}
 			m.attachments[i].Data = decrypted
 		}
+	}
+
+	// 1b. Validate attachment size limits (both individual and cumulative) after downloading S3 attachments
+	var totalSize int64
+	for _, att := range m.attachments {
+		size := int64(len(att.Data))
+		if m.maxAttachmentSize > 0 && size > m.maxAttachmentSize {
+			return fmt.Errorf("attachment %q size %d bytes exceeds the maximum allowed individual limit of %d bytes", att.Filename, size, m.maxAttachmentSize)
+		}
+		totalSize += size
+	}
+	if m.maxTotalAttachmentsSize > 0 && totalSize > m.maxTotalAttachmentsSize {
+		return fmt.Errorf("total attachments size %d bytes exceeds the maximum allowed combined limit of %d bytes", totalSize, m.maxTotalAttachmentsSize)
 	}
 
 	fromEmail := config.From
@@ -527,3 +604,4 @@ func (m *MessageBuilder) Send(config SMTPConfig) error {
 
 	return nil
 }
+
