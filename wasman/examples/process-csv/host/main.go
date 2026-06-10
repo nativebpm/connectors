@@ -29,14 +29,9 @@ func main() {
 	// Give the server a small moment to bind to the port
 	time.Sleep(100 * time.Millisecond)
 
-	// 2. Initialize the Reusable Durable WASM Engine with File store
+	// 2. Initialize the Reusable Durable WASM Engine with Memory store
 	wasmPath := filepath.Join("..", "worker", "worker.wasm")
-	_ = os.RemoveAll(snapshotsDir)
-	if err := os.MkdirAll(snapshotsDir, 0755); err != nil {
-		slog.Error("[HOST] Failed to create snapshots directory", "error", err)
-		os.Exit(1)
-	}
-	store := &wasman.FileSnapshotStore{Dir: snapshotsDir}
+	store := wasman.NewMemorySnapshotStore()
 
 	// Clear any leftover snapshot from previous runs in the database
 	_ = store.Delete(context.Background(), instanceID)
@@ -59,13 +54,13 @@ func main() {
 		}
 	}
 
-	// Verify snapshot exists in File store
+	// Verify snapshot exists in Memory store
 	_, err = store.Load(context.Background(), instanceID)
 	if err != nil {
-		slog.Error("[HOST] Snapshot was not found in File store", "error", err)
+		slog.Error("[HOST] Snapshot was not found in Memory store", "error", err)
 		os.Exit(1)
 	}
-	slog.Info("[HOST] Verified that snapshot was successfully written to File store")
+	slog.Info("[HOST] Verified that snapshot was successfully written to Memory store")
 
 	// 4. RUN 2: Restore from checkpoint and resume CSV processing to completion
 	slog.Info("[HOST] RUN 2: Restoring from snapshot and processing CSV stream")

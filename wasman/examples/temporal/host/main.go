@@ -27,6 +27,8 @@ const (
 	serverAddr   = "localhost:18085"
 )
 
+var testMemoryStore = wasman.NewMemorySnapshotStore()
+
 // GreetWorkflow coordinates execution of the greeting process.
 func DurableWasmWorkflow(ctx workflow.Context, instanceID string, serverAddr string) (string, error) {
 	options := workflow.ActivityOptions{
@@ -51,11 +53,7 @@ func ExecuteDurableWasmActivity(ctx context.Context, instanceID string, serverAd
 	slog.Info("[HOST ACTIVITY] Executing Durable WASM Activity", "attempt", attempt, "instance_id", instanceID)
 
 	wasmPath := filepath.Join("..", "worker", "worker.wasm")
-	snapshotsDir := "snapshots"
-	if err := os.MkdirAll(snapshotsDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create snapshots directory: %w", err)
-	}
-	store := &wasman.FileSnapshotStore{Dir: snapshotsDir}
+	store := testMemoryStore
 
 	// First attempt will simulate crash, second attempt will recover
 	simulateCrash := (attempt == 1)

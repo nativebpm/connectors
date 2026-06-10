@@ -998,11 +998,6 @@ func TestActiveIndex(t *testing.T) {
 	// 1. Test with InMemory Store
 	inMemStore := newInMemorySnapshotStore()
 	testStoreActiveIndex(t, inMemStore)
-
-	// 2. Test with FileSnapshotStore
-	tempDir := t.TempDir()
-	fsStore := &FileSnapshotStore{Dir: tempDir}
-	testStoreActiveIndex(t, fsStore)
 }
 
 func testStoreActiveIndex(t *testing.T, store SnapshotStore) {
@@ -1103,59 +1098,3 @@ func TestNewEngineWithBytes_SafeTask(t *testing.T) {
 	assert.Equal(t, false, receivedVars["in_stock"])
 }
 
-func TestFileSnapshotStore_Compression(t *testing.T) {
-	tempDir := t.TempDir()
-	store := &FileSnapshotStore{
-		Dir: tempDir,
-	}
-
-	instanceID := "test-comp-inst"
-
-	// 1. Save snapshot & Verify it is encrypted on disk (not plain gzip)
-	snapshotData := []byte("a very repetitive string that compresses extremely well! a very repetitive string that compresses extremely well!")
-	ctx := context.Background()
-	err := store.Save(ctx, instanceID, snapshotData)
-	require.NoError(t, err)
-
-	diskPath := filepath.Join(tempDir, "default", instanceID+".bin")
-	diskBytes, err := os.ReadFile(diskPath)
-	require.NoError(t, err)
-	assert.False(t, isGzipped(diskBytes), "Saved file must be encrypted (not plain gzip)")
-
-	// 2. Load snapshot & Verify decompression and decryption
-	loaded, err := store.Load(ctx, instanceID)
-	require.NoError(t, err)
-	assert.Equal(t, snapshotData, loaded)
-
-	// 3. Save & Load deltas with encryption
-	deltas := map[int][]byte{
-		1: []byte("delta-1-val"),
-		2: []byte("delta-2-val"),
-	}
-	err = store.SaveDeltas(ctx, instanceID, deltas)
-	require.NoError(t, err)
-
-	deltasPath := filepath.Join(tempDir, "default", instanceID+"_deltas.json")
-	deltasBytes, err := os.ReadFile(deltasPath)
-	require.NoError(t, err)
-	assert.False(t, isGzipped(deltasBytes), "Deltas file must be encrypted")
-
-	loadedDeltas, err := store.LoadDeltas(ctx, instanceID)
-	require.NoError(t, err)
-	assert.Len(t, loadedDeltas, 2)
-	assert.Equal(t, []byte("delta-1-val"), loadedDeltas[1])
-
-	// 4. Save & Load oplog with encryption
-	err = store.SaveOplog(ctx, instanceID, 1, "test-api", []byte("req"), []byte("resp"))
-	require.NoError(t, err)
-
-	oplogPath := filepath.Join(tempDir, "default", instanceID+"_oplog.json")
-	oplogBytes, err := os.ReadFile(oplogPath)
-	require.NoError(t, err)
-	assert.False(t, isGzipped(oplogBytes), "Oplog file must be encrypted")
-
-	loadedOplog, err := store.LoadOplog(ctx, instanceID)
-	require.NoError(t, err)
-	require.Len(t, loadedOplog, 1)
-	assert.Equal(t, "test-api", loadedOplog[0].ApiName)
-}

@@ -10,7 +10,7 @@ Modern distributed architectures often require executing long-running or multi-s
 
 **Wasman** addresses this by leveraging WebAssembly's sandboxed linear memory:
 1. **Host-Guest Isolation**: The guest business logic is compiled into a `.wasm` module (compiled via TinyGo/Go) and executed inside the pure-Go `wazero` runtime.
-2. **Stateless Host, Stateful Storage**: The execution host runs the virtual machine sandboxes. It remains stateless. All state (linear memory snapshots, execution logs) is persisted in S3 or local file snapshot stores.
+2. **Stateless Host, Stateful Storage**: The execution host runs the virtual machine sandboxes. It remains stateless. All state (linear memory snapshots, execution logs) is persisted in S3 or in-memory snapshot stores.
 3. **Black Box API**: Developers using the platform interact only with high-level client APIs (generated via Protobuf/GRPC or client SDKs). The underlying complexity of WebAssembly, snapshotting, and transaction control is entirely hidden.
 
 ```
@@ -35,9 +35,9 @@ Modern distributed architectures often require executing long-running or multi-s
        │  Snapshot Store  │ (Gzip-compressed Snapshots & Deltas)
        └─────────┬────────┘
                  │
-        ┌────────┴────────┐
-        ▼                 ▼
-   [ S3 Storage ]   [ File Storage ]
+         ┌────────┴────────┐
+         ▼                 ▼
+    [ S3 Storage ]   [ Memory Storage ]
 ```
 
 ---
@@ -91,7 +91,7 @@ Wasman guarantees durable execution by checkpointing and restoring state across 
 
 - [wasman.go](wasman.go): WASM compilation, runtime setup, and engine execution loops.
 - [compress.go](compress.go): Transparent Gzip compression utilities.
-- [fs_store.go](fs_store.go): Local file-system snapshot store with optional compression.
+- [memory_store.go](memory_store.go): In-memory snapshot store with thread-safe lock protection.
 - [s3_store.go](s3_store.go): S3-compatible object snapshot store with OCC.
 - [types.go](types.go): Common structures, interfaces, configurations, and error mappings.
 - [examples/](examples/):
@@ -146,11 +146,8 @@ import (
 )
 
 func main() {
-	// 1. Initialize snapshot store with compression enabled
-	store := &wasman.FileSnapshotStore{
-		Dir:         "snapshots",
-		Compression: true,
-	}
+	// 1. Initialize snapshot store
+	store := wasman.NewMemorySnapshotStore()
 
 	// 2. Define stream handlers
 	downloadHandler := func() ([]byte, error) {

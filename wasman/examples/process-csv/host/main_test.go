@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/nativebpm/connectors/wasman"
@@ -32,12 +31,8 @@ func TestCSVProcessPipeline_Success_With_Retry(t *testing.T) {
 		return nil
 	}
 
-	// 3. Initialize File Snapshot Store
-	_ = os.RemoveAll("snapshots_test")
-	err := os.MkdirAll("snapshots_test", 0755)
-	require.NoError(t, err)
-	store := &wasman.FileSnapshotStore{Dir: "snapshots_test"}
-	defer os.RemoveAll("snapshots_test")
+	// 3. Initialize Memory Snapshot Store
+	store := wasman.NewMemorySnapshotStore()
 
 	// 4. Initialize Durable WASM Engine
 	wasmPath := "../worker/worker.wasm"

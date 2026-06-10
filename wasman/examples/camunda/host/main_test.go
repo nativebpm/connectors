@@ -57,11 +57,7 @@ func TestCamundaWasmOrchestration_RealCamundaServer(t *testing.T) {
 
 	// 5. Initialize Durable Engine
 	wasmPath := "../worker/worker.wasm"
-	_ = os.RemoveAll("snapshots_test")
-	err = os.MkdirAll("snapshots_test", 0755)
-	require.NoError(t, err)
-	store := &wasman.FileSnapshotStore{Dir: "snapshots_test"}
-	defer os.RemoveAll("snapshots_test")
+	store := wasman.NewMemorySnapshotStore()
 
 	// 6. Create Camunda Worker
 	w := camunda.NewWorker(client, nil)

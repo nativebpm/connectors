@@ -52,14 +52,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 5. Initialize the Reusable Durable WASM Engine with File store
-	_ = os.RemoveAll(snapshotsDir)
-	if err := os.MkdirAll(snapshotsDir, 0755); err != nil {
-		slog.Error("[HOST] Failed to create snapshots directory", "error", err)
-		os.Exit(1)
-	}
+	// 5. Initialize the Reusable Durable WASM Engine with Memory store
 	wasmPath := filepath.Join("..", "worker", "worker.wasm")
-	store := &wasman.FileSnapshotStore{Dir: snapshotsDir}
+	store := wasman.NewMemorySnapshotStore()
 
 	// 6. Create and configure Camunda Worker
 	w := camunda.NewWorker(client, nil)
