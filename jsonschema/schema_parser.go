@@ -1,11 +1,14 @@
 package jsonschema
 
 import (
+	"bytes"
+	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
-	"sort"
 
-	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
 type JSONSchema struct {
@@ -27,20 +30,80 @@ type JSONSchema struct {
 }
 
 type UIWidgetSpec struct {
-	Name         string
-	Label        string
-	Type         string
-	Widget       string
-	Required     bool
-	Value        interface{}
-	Options      []string
-	MinLength    *int
-	MaxLength    *int
-	Minimum      *float64
-	Maximum      *float64
-	Pattern      string
-	Format       string
-	XStep        int
+	Name      string      `json:"name"`
+	Label     string      `json:"label"`
+	Type      string      `json:"type"`
+	Widget    string      `json:"widget"`
+	Required  bool        `json:"required"`
+	Value     interface{} `json:"value"`
+	Options   []string    `json:"options"`
+	MinLength *int        `json:"minLength,omitempty"`
+	MaxLength *int        `json:"maxLength,omitempty"`
+	Minimum   *float64    `json:"minimum,omitempty"`
+	Maximum   *float64    `json:"maximum,omitempty"`
+	Pattern   string      `json:"pattern,omitempty"`
+	Format    string      `json:"format,omitempty"`
+	XStep     int         `json:"xStep,omitempty"`
+}
+
+//go:embed jsonschema.wasm
+var jsonschemaWASM []byte
+
+// InputEnvelope defines the JSON envelope sent to standard input of the WASM binary.
+type InputEnvelope struct {
+	Action    string `json:"action"`
+	Schema    string `json:"schema"`
+	Data      string `json:"data,omitempty"`
+	Variables string `json:"variables,omitempty"`
+}
+
+// OutputEnvelope defines the JSON envelope received from standard output of the WASM binary.
+type OutputEnvelope struct {
+	Valid   *bool           `json:"valid,omitempty"`
+	Errors  []string        `json:"errors,omitempty"`
+	Widgets []*UIWidgetSpec `json:"widgets,omitempty"`
+}
+
+func runWasmAction(action string, schemaJSON string, dataJSON string, variablesJSON string) (*OutputEnvelope, error) {
+	ctx := context.Background()
+	r := wazero.NewRuntime(ctx)
+	defer r.Close(ctx)
+
+	// Instantiate WASI imports.
+	wasi_snapshot_preview1.MustInstantiate(ctx, r)
+
+	env := InputEnvelope{
+		Action:    action,
+		Schema:    schemaJSON,
+		Data:      dataJSON,
+		Variables: variablesJSON,
+	}
+
+	inputBytes, err := json.Marshal(env)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal input envelope: %w", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	config := wazero.NewModuleConfig().
+		WithStdin(bytes.NewReader(inputBytes)).
+		WithStdout(&stdout).
+		WithStderr(&stderr).
+		WithArgs("jsonschema")
+
+	_, err = r.InstantiateWithConfig(ctx, jsonschemaWASM, config)
+	if err != nil {
+		return nil, fmt.Errorf("wasm execution failed: %w (stderr: %s)", err, stderr.String())
+	}
+
+	var out OutputEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal WASM output: %w (stdout: %s, stderr: %s)", err, stdout.String(), stderr.String())
+	}
+
+	return &out, nil
 }
 
 // ParseSchema parses a raw JSON Schema string and compiles it into an ordered list of UIWidgetSpecs.
@@ -50,141 +113,47 @@ func ParseSchema(schemaJSON string, variables map[string]interface{}) ([]*UIWidg
 		return nil, nil
 	}
 
-	var schema JSONSchema
-	if err := json.Unmarshal([]byte(schemaJSON), &schema); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal schema: %w", err)
+	var variablesJSON string
+	if variables != nil {
+		bytes, err := json.Marshal(variables)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal variables: %w", err)
+		}
+		variablesJSON = string(bytes)
 	}
 
-	if schema.Type != "object" {
-		return nil, fmt.Errorf("root schema must be of type 'object'")
+	out, err := runWasmAction("parse_schema", schemaJSON, "", variablesJSON)
+	if err != nil {
+		return nil, err
 	}
 
-	// Create a helper map for quick lookup of required fields
-	requiredMap := make(map[string]bool)
-	for _, req := range schema.Required {
-		requiredMap[req] = true
+	if out.Errors != nil && len(out.Errors) > 0 {
+		return nil, fmt.Errorf("WASM parser error: %s", out.Errors[0])
 	}
 
-	// Build the keys in specified or alphabetical order
-	var orderedKeys []string
-	if len(schema.UIOrder) > 0 {
-		// Respect UI order first
-		seen := make(map[string]bool)
-		for _, key := range schema.UIOrder {
-			if _, exists := schema.Properties[key]; exists {
-				orderedKeys = append(orderedKeys, key)
-				seen[key] = true
-			}
-		}
-		// Append remaining properties that were not in UI order
-		var remainingKeys []string
-		for key := range schema.Properties {
-			if !seen[key] {
-				remainingKeys = append(remainingKeys, key)
-			}
-		}
-		sort.Strings(remainingKeys)
-		orderedKeys = append(orderedKeys, remainingKeys...)
-	} else {
-		// Fallback to pure alphabetical order
-		for key := range schema.Properties {
-			orderedKeys = append(orderedKeys, key)
-		}
-		sort.Strings(orderedKeys)
-	}
-
-	var widgets []*UIWidgetSpec
-	for _, key := range orderedKeys {
-		prop := schema.Properties[key]
-		if prop == nil {
-			continue
-		}
-
-		label := prop.Title
-		if label == "" {
-			label = key
-		}
-
-		// Resolve widget type
-		widget := "text"
-		if prop.UIWidget != "" {
-			widget = prop.UIWidget
-		} else {
-			switch prop.Type {
-			case "boolean":
-				widget = "switch"
-			case "number", "integer":
-				widget = "number"
-			case "string":
-				if len(prop.Enum) > 0 {
-					widget = "select"
-				} else if prop.Format == "textarea" {
-					widget = "textarea"
-				}
-			}
-		}
-
-		// Determine value (variables inject -> default value -> nil)
-		var val interface{}
-		if variables != nil {
-			if currVal, exists := variables[key]; exists {
-				val = currVal
-			}
-		}
-		if val == nil {
-			val = prop.Default
-		}
-
-		widgets = append(widgets, &UIWidgetSpec{
-			Name:      key,
-			Label:     label,
-			Type:      prop.Type,
-			Widget:    widget,
-			Required:  requiredMap[key],
-			Value:     val,
-			Options:   prop.Enum,
-			MinLength: prop.MinLength,
-			MaxLength: prop.MaxLength,
-			Minimum:   prop.Minimum,
-			Maximum:   prop.Maximum,
-			Pattern:   prop.Pattern,
-			Format:    prop.Format,
-			XStep:     prop.XStep,
-		})
-	}
-
-	return widgets, nil
+	return out.Widgets, nil
 }
 
 // ValidateJSON validates a raw JSON string (containing variables submitted by the user)
-// against the provided raw JSON Schema string using Google's jsonschema-go library.
+// against the provided raw JSON Schema string using the Google's jsonschema-go library.
 func ValidateJSON(schemaJSON string, payloadJSON string) (bool, []string, error) {
 	if schemaJSON == "" || schemaJSON == "{}" {
 		return true, nil, nil
 	}
 
-	var schema jsonschema.Schema
-	if err := json.Unmarshal([]byte(schemaJSON), &schema); err != nil {
-		return false, nil, fmt.Errorf("failed to parse schema: %w", err)
-	}
-
-	resolved, err := schema.Resolve(nil)
+	out, err := runWasmAction("validate", schemaJSON, payloadJSON, "")
 	if err != nil {
-		return false, nil, fmt.Errorf("failed to resolve schema: %w", err)
+		return false, nil, err
 	}
 
-	var data interface{}
-	if err := json.Unmarshal([]byte(payloadJSON), &data); err != nil {
-		return false, nil, fmt.Errorf("failed to parse payload: %w", err)
+	valid := false
+	if out.Valid != nil {
+		valid = *out.Valid
 	}
 
-	if err := resolved.Validate(data); err != nil {
-		// Extract validation error string description
-		return false, []string{err.Error()}, nil
-	}
-
-	return true, nil, nil
+	return valid, out.Errors, nil
 }
+
 
 // JSONSchemaBuilder builds JSONSchema structs fluently with sticky error tracking.
 type JSONSchemaBuilder struct {
