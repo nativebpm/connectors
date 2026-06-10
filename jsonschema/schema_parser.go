@@ -6,7 +6,9 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
 
+	"github.com/andybalholm/brotli"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
@@ -46,8 +48,20 @@ type UIWidgetSpec struct {
 	XStep     int         `json:"xStep,omitempty"`
 }
 
-//go:embed jsonschema.wasm
+//go:embed jsonschema.wasm.br
+var jsonschemaWASMBr []byte
+
 var jsonschemaWASM []byte
+
+func init() {
+	br := brotli.NewReader(bytes.NewReader(jsonschemaWASMBr))
+	var err error
+	jsonschemaWASM, err = io.ReadAll(br)
+	if err != nil {
+		panic(fmt.Sprintf("failed to decompress embedded jsonschema.wasm: %v", err))
+	}
+}
+
 
 // InputEnvelope defines the JSON envelope sent to standard input of the WASM binary.
 type InputEnvelope struct {
