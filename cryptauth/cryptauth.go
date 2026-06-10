@@ -84,6 +84,10 @@ type Authenticator struct {
 	cacheMu           sync.RWMutex
 	sessionCache      map[[32]byte]*cachedSession
 	userSessionHashes map[string][][32]byte
+
+	// Custom callbacks to retrieve age/recovery encrypted data from database/storage (local mode)
+	GetEncryptedAgeData      func(username string) ([]byte, error)
+	GetEncryptedRecoveryData func(username string) ([]byte, error)
 }
 
 // New creates a new, unconfigured Authenticator builder.
@@ -448,8 +452,14 @@ func (a *Authenticator) Authenticate(username, password, code string) (*User, er
 	}
 
 	// Read and decrypt [username].age dynamically using the provided password
-	filePath := filepath.Join(a.UsersDir, username+".age")
-	encryptedData, err := os.ReadFile(filePath)
+	var encryptedData []byte
+	var err error
+	if a.GetEncryptedAgeData != nil {
+		encryptedData, err = a.GetEncryptedAgeData(username)
+	} else {
+		filePath := filepath.Join(a.UsersDir, username+".age")
+		encryptedData, err = os.ReadFile(filePath)
+	}
 	if err != nil {
 		return nil, errors.New("invalid username or password")
 	}
@@ -923,26 +933,30 @@ func (eb *EventBuilder) Log() {
 		eb.auth.LogEvent(eb.event, eb.username, eb.ip, eb.details)
 	}
 }
-// SaveUserToGopassFile hashes the password, serializes metadata, encrypts the gopass file using age scrypt symmetric encryption,
-// and saves it to the target directory under the username.age filename. It also registers the user in the Authenticator's in-memory map.
-func (a *Authenticator) SaveUserToGopassFile(usersDir, username, password, passphrase, role, totpSecret, recoveryKey string) error {
+// GenerateGopassContent hashes the password, serializes metadata, encrypts the gopass file using age scrypt symmetric encryption,
+// and returns raw encrypted data: ageData (encrypted with password), recoveryData (encrypted with recoveryKey, optional), and plain text role YAML content.
+func (a *Authenticator) GenerateGopassContent(username, password, passphrase, role, totpSecret, recoveryKey string) (ageData []byte, recoveryData []byte, roleData []byte, err error) {
 	if username == "" {
-		return errors.New("username cannot be empty")
+		err = errors.New("username cannot be empty")
+		return
 	}
 	if password == "" {
-		return errors.New("password cannot be empty")
+		err = errors.New("password cannot be empty")
+		return
 	}
-	if err := ValidatePassword(password); err != nil {
-		return err
+	if errVal := ValidatePassword(password); errVal != nil {
+		err = errVal
+		return
 	}
 	if role == "" {
 		role = "viewer"
 	}
 
 	// 1. Hash password using bcrypt
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return fmt.Errorf("failed to generate password hash: %w", err)
+	hash, errHash := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if errHash != nil {
+		err = fmt.Errorf("failed to generate password hash: %w", errHash)
+		return
 	}
 
 	// Hash recovery key if provided
@@ -950,9 +964,10 @@ func (a *Authenticator) SaveUserToGopassFile(usersDir, username, password, passp
 	if recoveryKey != "" {
 		cleanRecovery := strings.ToUpper(strings.ReplaceAll(recoveryKey, "-", ""))
 		cleanRecovery = strings.TrimSpace(cleanRecovery)
-		hashedRecovery, err := bcrypt.GenerateFromPassword([]byte(cleanRecovery), bcrypt.DefaultCost)
-		if err != nil {
-			return fmt.Errorf("failed to generate recovery key hash: %w", err)
+		hashedRecovery, errH := bcrypt.GenerateFromPassword([]byte(cleanRecovery), bcrypt.DefaultCost)
+		if errH != nil {
+			err = fmt.Errorf("failed to generate recovery key hash: %w", errH)
+			return
 		}
 		recoveryHash = string(hashedRecovery)
 	}
@@ -963,9 +978,10 @@ func (a *Authenticator) SaveUserToGopassFile(usersDir, username, password, passp
 		Totp:         totpSecret,
 		RecoveryHash: recoveryHash,
 	}
-	yamlData, err := yaml.Marshal(meta)
-	if err != nil {
-		return fmt.Errorf("failed to marshal metadata: %w", err)
+	yamlData, errYaml := yaml.Marshal(meta)
+	if errYaml != nil {
+		err = fmt.Errorf("failed to marshal metadata: %w", errYaml)
+		return
 	}
 
 	// 3. Assemble gopass content: passwordHash \n ---\n yamlData
@@ -975,47 +991,79 @@ func (a *Authenticator) SaveUserToGopassFile(usersDir, username, password, passp
 	content.Write(yamlData)
 
 	// 4. Encrypt using age symmetrically using password
-	encryptedAge, err := encryptAgeSymmetric(content.Bytes(), password)
+	ageData, err = encryptAgeSymmetric(content.Bytes(), password)
 	if err != nil {
-		return fmt.Errorf("failed to encrypt age file: %w", err)
+		err = fmt.Errorf("failed to encrypt age data: %w", err)
+		return
+	}
+
+	// 5. Encrypt recovery file if recoveryKey is provided
+	if recoveryKey != "" {
+		cleanRecovery := strings.ToUpper(strings.ReplaceAll(recoveryKey, "-", ""))
+		cleanRecovery = strings.TrimSpace(cleanRecovery)
+		recoveryData, err = encryptAgeSymmetric(content.Bytes(), cleanRecovery)
+		if err != nil {
+			err = fmt.Errorf("failed to encrypt recovery data: %w", err)
+			return
+		}
+	}
+
+	// 6. Plain text YAML role
+	roleMeta := struct {
+		Role string `yaml:"role"`
+	}{
+		Role: role,
+	}
+	roleData, err = yaml.Marshal(roleMeta)
+	if err != nil {
+		err = fmt.Errorf("failed to marshal role data: %w", err)
+		return
+	}
+
+	return
+}
+
+// SaveUserToGopassFile hashes the password, serializes metadata, encrypts the gopass file using age scrypt symmetric encryption,
+// and saves it to the target directory under the username.age filename. It also registers the user in the Authenticator's in-memory map.
+func (a *Authenticator) SaveUserToGopassFile(usersDir, username, password, passphrase, role, totpSecret, recoveryKey string) error {
+	ageData, recoveryData, roleData, err := a.GenerateGopassContent(username, password, passphrase, role, totpSecret, recoveryKey)
+	if err != nil {
+		return err
 	}
 
 	// Ensure directory exists and save file
 	if err := os.MkdirAll(usersDir, 0755); err != nil {
 		return fmt.Errorf("failed to create users directory: %w", err)
 	}
+
 	filePath := filepath.Join(usersDir, username+".age")
-	if err := os.WriteFile(filePath, encryptedAge, 0600); err != nil {
+	if err := os.WriteFile(filePath, ageData, 0600); err != nil {
 		return fmt.Errorf("failed to write encrypted user file: %w", err)
 	}
 
-	// 5. Encrypt and save recovery file if recoveryKey is provided
+	// Encrypt and save recovery file if recoveryKey is provided
 	if recoveryKey != "" {
-		cleanRecovery := strings.ToUpper(strings.ReplaceAll(recoveryKey, "-", ""))
-		cleanRecovery = strings.TrimSpace(cleanRecovery)
-		encryptedRec, err := encryptAgeSymmetric(content.Bytes(), cleanRecovery)
-		if err != nil {
-			return fmt.Errorf("failed to encrypt recovery file: %w", err)
-		}
 		recFilePath := filepath.Join(usersDir, username+".recovery")
-		if err := os.WriteFile(recFilePath, encryptedRec, 0600); err != nil {
+		if err := os.WriteFile(recFilePath, recoveryData, 0600); err != nil {
 			return fmt.Errorf("failed to write recovery file: %w", err)
 		}
 	}
 
-	// 6. Save role in plain text YAML
-	roleMeta := struct {
-		Role string `yaml:"role"`
-	}{
-		Role: role,
-	}
-	roleData, err := yaml.Marshal(roleMeta)
-	if err == nil {
-		roleFilePath := filepath.Join(usersDir, username+".role")
-		_ = os.WriteFile(roleFilePath, roleData, 0644)
+	// Save role in plain text YAML
+	roleFilePath := filepath.Join(usersDir, username+".role")
+	_ = os.WriteFile(roleFilePath, roleData, 0644)
+
+	// Hash password using bcrypt for registering in-memory User
+	hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	var recoveryHash string
+	if recoveryKey != "" {
+		cleanRecovery := strings.ToUpper(strings.ReplaceAll(recoveryKey, "-", ""))
+		cleanRecovery = strings.TrimSpace(cleanRecovery)
+		hashedRecovery, _ := bcrypt.GenerateFromPassword([]byte(cleanRecovery), bcrypt.DefaultCost)
+		recoveryHash = string(hashedRecovery)
 	}
 
-	// 7. Register user in-memory
+	// Register user in-memory
 	a.muUsers.Lock()
 	a.Users[username] = &User{
 		Username:     username,
@@ -1048,8 +1096,14 @@ func (a *Authenticator) RecoverUserFromMnemonic(usersDir, username, recoveryKey 
 	cleanRecovery = strings.TrimSpace(cleanRecovery)
 
 	// Read [username].recovery
-	recFilePath := filepath.Join(usersDir, username+".recovery")
-	encryptedData, err := os.ReadFile(recFilePath)
+	var encryptedData []byte
+	var err error
+	if a.GetEncryptedRecoveryData != nil {
+		encryptedData, err = a.GetEncryptedRecoveryData(username)
+	} else {
+		recFilePath := filepath.Join(usersDir, username+".recovery")
+		encryptedData, err = os.ReadFile(recFilePath)
+	}
 	if err != nil {
 		return nil, errors.New("invalid recovery key or username")
 	}
