@@ -60,7 +60,7 @@ func main() {
 	// Since checkpoint() was called inside the WASM core (dirty_page_oplog.go),
 	// the engine automatically saved full and delta memory snapshots to the store.
 	fmt.Println("[HOST] Loading saved session metadata from store to verify checkpointing...")
-	meta, err := store.LoadMetadata(instanceID)
+	meta, err := store.LoadMetadata(ctx, instanceID)
 	if err != nil {
 		fmt.Printf("Failed to load metadata: %v\n", err)
 		os.Exit(1)

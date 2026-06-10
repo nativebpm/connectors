@@ -62,7 +62,7 @@ func ExecuteDurableWasmActivity(ctx context.Context, instanceID string, serverAd
 	if simulateCrash {
 		slog.Info("[HOST ACTIVITY] Attempt 1: Running WASM worker with simulated crash")
 		// Clean up any old snapshots before starting first run
-		_ = store.Delete(instanceID)
+		_ = store.Delete(ctx, instanceID)
 	} else {
 		slog.Info("[HOST ACTIVITY] Attempt 2: Resuming WASM worker from snapshot")
 	}
@@ -89,7 +89,7 @@ func ExecuteDurableWasmActivity(ctx context.Context, instanceID string, serverAd
 	}
 
 	// Clean up database snapshot since transaction is completed
-	_ = store.Delete(instanceID)
+	_ = store.Delete(ctx, instanceID)
 
 	return string(dbBytes), nil
 }

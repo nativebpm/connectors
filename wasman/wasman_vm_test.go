@@ -155,11 +155,11 @@ func TestWasmVMDurableExecution(t *testing.T) {
 
 	// 2. SIMULATE CRASH & RESTORE STATE
 	// The snapshot is saved in `store` because checkpoint() was invoked inside the WASM core.
-	snapBytes, err := store.Load(instanceID)
+	snapBytes, err := store.Load(ctx, instanceID)
 	require.NoError(t, err)
 	assert.NotEmpty(t, snapBytes)
 
-	meta2, err := store.LoadMetadata(instanceID)
+	meta2, err := store.LoadMetadata(ctx, instanceID)
 	require.NoError(t, err)
 	require.NotNil(t, meta2)
 

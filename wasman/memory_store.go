@@ -3,6 +3,7 @@
 package wasman
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"sync"
@@ -33,7 +34,7 @@ func NewMemorySnapshotStore() *MemorySnapshotStore {
 	}
 }
 
-func (s *MemorySnapshotStore) Save(id string, snapshot []byte) error {
+func (s *MemorySnapshotStore) Save(ctx context.Context, id string, snapshot []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	copied := make([]byte, len(snapshot))
@@ -42,7 +43,7 @@ func (s *MemorySnapshotStore) Save(id string, snapshot []byte) error {
 	return nil
 }
 
-func (s *MemorySnapshotStore) Load(id string) ([]byte, error) {
+func (s *MemorySnapshotStore) Load(ctx context.Context, id string) ([]byte, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	snap, ok := s.snapshots[id]
@@ -52,7 +53,7 @@ func (s *MemorySnapshotStore) Load(id string) ([]byte, error) {
 	return snap, nil
 }
 
-func (s *MemorySnapshotStore) Delete(id string) error {
+func (s *MemorySnapshotStore) Delete(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.snapshots, id)
@@ -62,7 +63,7 @@ func (s *MemorySnapshotStore) Delete(id string) error {
 	return nil
 }
 
-func (s *MemorySnapshotStore) SaveDeltas(id string, deltas map[int][]byte) error {
+func (s *MemorySnapshotStore) SaveDeltas(ctx context.Context, id string, deltas map[int][]byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, ok := s.deltas[id]
@@ -78,7 +79,7 @@ func (s *MemorySnapshotStore) SaveDeltas(id string, deltas map[int][]byte) error
 	return nil
 }
 
-func (s *MemorySnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
+func (s *MemorySnapshotStore) LoadDeltas(ctx context.Context, id string) (map[int][]byte, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	current, ok := s.deltas[id]
@@ -92,14 +93,14 @@ func (s *MemorySnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
 	return copied, nil
 }
 
-func (s *MemorySnapshotStore) TruncateDeltas(id string) error {
+func (s *MemorySnapshotStore) TruncateDeltas(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.deltas, id)
 	return nil
 }
 
-func (s *MemorySnapshotStore) SaveOplog(id string, callIndex int, apiName string, request []byte, response []byte) error {
+func (s *MemorySnapshotStore) SaveOplog(ctx context.Context, id string, callIndex int, apiName string, request []byte, response []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -117,7 +118,7 @@ func (s *MemorySnapshotStore) SaveOplog(id string, callIndex int, apiName string
 	return nil
 }
 
-func (s *MemorySnapshotStore) LoadOplog(id string) ([]OplogEntry, error) {
+func (s *MemorySnapshotStore) LoadOplog(ctx context.Context, id string) ([]OplogEntry, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	list, ok := s.oplogs[id]
@@ -127,7 +128,7 @@ func (s *MemorySnapshotStore) LoadOplog(id string) ([]OplogEntry, error) {
 	return list, nil
 }
 
-func (s *MemorySnapshotStore) TruncateOplog(id string, beforeCallIndex int) error {
+func (s *MemorySnapshotStore) TruncateOplog(ctx context.Context, id string, beforeCallIndex int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	list := s.oplogs[id]
@@ -141,7 +142,7 @@ func (s *MemorySnapshotStore) TruncateOplog(id string, beforeCallIndex int) erro
 	return nil
 }
 
-func (s *MemorySnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
+func (s *MemorySnapshotStore) SaveMetadata(ctx context.Context, meta *InstanceMeta) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	existing, ok := s.meta[meta.InstanceID]
@@ -166,7 +167,7 @@ func (s *MemorySnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 	return true, nil
 }
 
-func (s *MemorySnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
+func (s *MemorySnapshotStore) LoadMetadata(ctx context.Context, id string) (*InstanceMeta, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	meta, ok := s.meta[id]
@@ -181,7 +182,7 @@ func (s *MemorySnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
 	return &copied, nil
 }
 
-func (s *MemorySnapshotStore) SaveWasm(hash string, wasmBytes []byte) error {
+func (s *MemorySnapshotStore) SaveWasm(ctx context.Context, hash string, wasmBytes []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	copied := make([]byte, len(wasmBytes))
@@ -190,7 +191,7 @@ func (s *MemorySnapshotStore) SaveWasm(hash string, wasmBytes []byte) error {
 	return nil
 }
 
-func (s *MemorySnapshotStore) LoadWasm(hash string) ([]byte, error) {
+func (s *MemorySnapshotStore) LoadWasm(ctx context.Context, hash string) ([]byte, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	w, ok := s.wasm[hash]
@@ -200,7 +201,7 @@ func (s *MemorySnapshotStore) LoadWasm(hash string) ([]byte, error) {
 	return w, nil
 }
 
-func (s *MemorySnapshotStore) UpdateActiveIndex(id string, info []byte, completed bool) error {
+func (s *MemorySnapshotStore) UpdateActiveIndex(ctx context.Context, id string, info []byte, completed bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -238,7 +239,7 @@ func (s *MemorySnapshotStore) UpdateActiveIndex(id string, info []byte, complete
 	return nil
 }
 
-func (s *MemorySnapshotStore) LoadActiveIndex() ([]byte, error) {
+func (s *MemorySnapshotStore) LoadActiveIndex(ctx context.Context) ([]byte, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if len(s.activeIndex) == 0 {

@@ -78,33 +78,48 @@ type OplogEntry struct {
 	ResponsePayload []byte `json:"response_payload"`
 }
 
+type tenantCtxKey struct{}
+
+// WithTenantID binds the tenant ID to the context.
+func WithTenantID(ctx context.Context, tenantID string) context.Context {
+	return context.WithValue(ctx, tenantCtxKey{}, tenantID)
+}
+
+// GetTenantID extracts the tenant ID from the context, defaulting to "default".
+func GetTenantID(ctx context.Context) string {
+	if val, ok := ctx.Value(tenantCtxKey{}).(string); ok && val != "" {
+		return val
+	}
+	return "default"
+}
+
 // SnapshotStore abstracts the storage backend for linear memory snapshots, deltas, and oplog.
 type SnapshotStore interface {
-	Save(id string, snapshot []byte) error
-	Load(id string) ([]byte, error)
-	Delete(id string) error
+	Save(ctx context.Context, id string, snapshot []byte) error
+	Load(ctx context.Context, id string) ([]byte, error)
+	Delete(ctx context.Context, id string) error
 
 	// Delta Snapshots
-	SaveDeltas(id string, deltas map[int][]byte) error
-	LoadDeltas(id string) (map[int][]byte, error)
-	TruncateDeltas(id string) error
+	SaveDeltas(ctx context.Context, id string, deltas map[int][]byte) error
+	LoadDeltas(ctx context.Context, id string) (map[int][]byte, error)
+	TruncateDeltas(ctx context.Context, id string) error
 
 	// Oplog
-	SaveOplog(id string, callIndex int, apiName string, request []byte, response []byte) error
-	LoadOplog(id string) ([]OplogEntry, error)
-	TruncateOplog(id string, beforeCallIndex int) error
+	SaveOplog(ctx context.Context, id string, callIndex int, apiName string, request []byte, response []byte) error
+	LoadOplog(ctx context.Context, id string) ([]OplogEntry, error)
+	TruncateOplog(ctx context.Context, id string, beforeCallIndex int) error
 
 	// Metadata & OCC
-	SaveMetadata(meta *InstanceMeta) (bool, error)
-	LoadMetadata(id string) (*InstanceMeta, error)
+	SaveMetadata(ctx context.Context, meta *InstanceMeta) (bool, error)
+	LoadMetadata(ctx context.Context, id string) (*InstanceMeta, error)
 
 	// WASM Registry for Multi-Version Support
-	SaveWasm(hash string, wasmBytes []byte) error
-	LoadWasm(hash string) ([]byte, error)
+	SaveWasm(ctx context.Context, hash string, wasmBytes []byte) error
+	LoadWasm(ctx context.Context, hash string) ([]byte, error)
 
 	// Active Index for Console visualization
-	UpdateActiveIndex(id string, info []byte, completed bool) error
-	LoadActiveIndex() ([]byte, error)
+	UpdateActiveIndex(ctx context.Context, id string, info []byte, completed bool) error
+	LoadActiveIndex(ctx context.Context) ([]byte, error)
 }
 
 // Engine coordinates execution, compilation, and snapshotting of WASM modules.

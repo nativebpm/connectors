@@ -76,7 +76,7 @@ func main() {
 
 			slog.Info("[WORKER HANDLER] Received task from Camunda", "task_id", task.ID, "business_key", businessKey)
 
-			_, err := store.Load(businessKey)
+			_, err := store.Load(ctx, businessKey)
 			hasSnapshot := err == nil
 
 			var shouldCrash bool
@@ -118,7 +118,7 @@ func main() {
 			}
 
 			// Clean up snapshot using the store interface
-			_ = store.Delete(businessKey)
+			_ = store.Delete(ctx, businessKey)
 			slog.Info("[WORKER HANDLER] Cleaned up temporary WASM snapshot from store.")
 			return nil
 		},

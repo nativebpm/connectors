@@ -3,6 +3,7 @@
 package wasman
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -184,13 +185,14 @@ func TestPostgresSnapshotStore_Lifecycle(t *testing.T) {
 
 	instanceID := "test-instance-123"
 	insertDummyDefinitionAndInstance(t, db, instanceID)
+	ctx := context.Background()
 
 	// 1. Test Save & Load Snapshot
 	snapData := []byte("full-binary-snapshot-state-data-content")
-	err = store.Save(instanceID, snapData)
+	err = store.Save(ctx, instanceID, snapData)
 	require.NoError(t, err)
 
-	loadedSnap, err := store.Load(instanceID)
+	loadedSnap, err := store.Load(ctx, instanceID)
 	require.NoError(t, err)
 	assert.Equal(t, snapData, loadedSnap)
 
@@ -205,10 +207,10 @@ func TestPostgresSnapshotStore_Lifecycle(t *testing.T) {
 		0: []byte("delta-page-0-bytes"),
 		4: []byte("delta-page-4-bytes"),
 	}
-	err = store.SaveDeltas(instanceID, deltas)
+	err = store.SaveDeltas(ctx, instanceID, deltas)
 	require.NoError(t, err)
 
-	loadedDeltas, err := store.LoadDeltas(instanceID)
+	loadedDeltas, err := store.LoadDeltas(ctx, instanceID)
 	require.NoError(t, err)
 	assert.Len(t, loadedDeltas, 2)
 	assert.Equal(t, []byte("delta-page-0-bytes"), loadedDeltas[0])
@@ -221,10 +223,10 @@ func TestPostgresSnapshotStore_Lifecycle(t *testing.T) {
 	assert.NotEqual(t, []byte("delta-page-0-bytes"), rawDeltaBytes, "Raw delta bytes in DB must be encrypted/compressed")
 
 	// 3. Test Save & Load Oplog
-	err = store.SaveOplog(instanceID, 1, "test_call", []byte("request-data"), []byte("response-data"))
+	err = store.SaveOplog(ctx, instanceID, 1, "test_call", []byte("request-data"), []byte("response-data"))
 	require.NoError(t, err)
 
-	oplog, err := store.LoadOplog(instanceID)
+	oplog, err := store.LoadOplog(ctx, instanceID)
 	require.NoError(t, err)
 	require.Len(t, oplog, 1)
 	assert.Equal(t, 1, oplog[0].CallIndex)
@@ -251,7 +253,7 @@ func TestPostgresSnapshotStore_Lifecycle(t *testing.T) {
 	}
 
 	// First insert
-	ok, err := store.SaveMetadata(meta)
+	ok, err := store.SaveMetadata(ctx, meta)
 	require.NoError(t, err)
 	assert.True(t, ok)
 	assert.Equal(t, 1, meta.Version)
@@ -263,12 +265,12 @@ func TestPostgresSnapshotStore_Lifecycle(t *testing.T) {
 		WasmHash:   "wasm-hash-dup",
 		Version:    0,
 	}
-	ok, err = store.SaveMetadata(metaDup)
+	ok, err = store.SaveMetadata(ctx, metaDup)
 	require.NoError(t, err)
 	assert.False(t, ok)
 
 	// Load metadata and check values
-	loadedMeta, err := store.LoadMetadata(instanceID)
+	loadedMeta, err := store.LoadMetadata(ctx, instanceID)
 	require.NoError(t, err)
 	require.NotNil(t, loadedMeta)
 	assert.Equal(t, 1, loadedMeta.Version)
@@ -277,19 +279,19 @@ func TestPostgresSnapshotStore_Lifecycle(t *testing.T) {
 
 	// Normal update
 	loadedMeta.WasmHash = "wasm-hash-999-updated"
-	ok, err = store.SaveMetadata(loadedMeta)
+	ok, err = store.SaveMetadata(ctx, loadedMeta)
 	require.NoError(t, err)
 	assert.True(t, ok)
 	assert.Equal(t, 2, loadedMeta.Version)
 
 	// Stale update (using old meta version)
 	meta.WasmHash = "wasm-hash-stale"
-	ok, err = store.SaveMetadata(meta) // meta has version 1
+	ok, err = store.SaveMetadata(ctx, meta) // meta has version 1
 	require.NoError(t, err)
 	assert.False(t, ok)
 
 	// Verify final metadata state
-	finalMeta, err := store.LoadMetadata(instanceID)
+	finalMeta, err := store.LoadMetadata(ctx, instanceID)
 	require.NoError(t, err)
 	assert.Equal(t, 2, finalMeta.Version)
 	assert.Equal(t, "wasm-hash-999-updated", finalMeta.WasmHash)
@@ -297,10 +299,10 @@ func TestPostgresSnapshotStore_Lifecycle(t *testing.T) {
 	// 5. Test WASM Registry
 	wasmHash := "wasm-sha256-hash-value"
 	wasmBytes := []byte("compiled-wasm-binary-mock-bytes")
-	err = store.SaveWasm(wasmHash, wasmBytes)
+	err = store.SaveWasm(ctx, wasmHash, wasmBytes)
 	require.NoError(t, err)
 
-	loadedWasm, err := store.LoadWasm(wasmHash)
+	loadedWasm, err := store.LoadWasm(ctx, wasmHash)
 	require.NoError(t, err)
 	assert.Equal(t, wasmBytes, loadedWasm)
 
@@ -319,10 +321,10 @@ func TestPostgresSnapshotStore_Lifecycle(t *testing.T) {
 	infoBytes, err := json.Marshal(info)
 	require.NoError(t, err)
 
-	err = store.UpdateActiveIndex(instanceID, infoBytes, false)
+	err = store.UpdateActiveIndex(ctx, instanceID, infoBytes, false)
 	require.NoError(t, err)
 
-	activeIndexBytes, err := store.LoadActiveIndex()
+	activeIndexBytes, err := store.LoadActiveIndex(ctx)
 	require.NoError(t, err)
 
 	var activeList []map[string]interface{}
@@ -334,32 +336,32 @@ func TestPostgresSnapshotStore_Lifecycle(t *testing.T) {
 	assert.Equal(t, false, activeList[0]["completed"])
 
 	// Test Active Index Completed (removal)
-	err = store.UpdateActiveIndex(instanceID, infoBytes, true)
+	err = store.UpdateActiveIndex(ctx, instanceID, infoBytes, true)
 	require.NoError(t, err)
 
-	activeIndexBytes2, err := store.LoadActiveIndex()
+	activeIndexBytes2, err := store.LoadActiveIndex(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "[]", string(activeIndexBytes2))
 
 	// 7. Test Truncations & Delete
 	// Re-add active index and deltas/oplog to check delete cascade
-	err = store.UpdateActiveIndex(instanceID, infoBytes, false)
+	err = store.UpdateActiveIndex(ctx, instanceID, infoBytes, false)
 	require.NoError(t, err)
 
-	err = store.TruncateDeltas(instanceID)
+	err = store.TruncateDeltas(ctx, instanceID)
 	require.NoError(t, err)
-	loadedDeltasTrunc, err := store.LoadDeltas(instanceID)
+	loadedDeltasTrunc, err := store.LoadDeltas(ctx, instanceID)
 	require.NoError(t, err)
 	assert.Empty(t, loadedDeltasTrunc)
 
-	err = store.TruncateOplog(instanceID, 1)
+	err = store.TruncateOplog(ctx, instanceID, 1)
 	require.NoError(t, err)
-	loadedOplogTrunc, err := store.LoadOplog(instanceID)
+	loadedOplogTrunc, err := store.LoadOplog(ctx, instanceID)
 	require.NoError(t, err)
 	assert.Empty(t, loadedOplogTrunc)
 
 	// Explicit delete from store
-	err = store.Delete(instanceID)
+	err = store.Delete(ctx, instanceID)
 	require.NoError(t, err)
 
 	// Check all tables are empty for this instanceID

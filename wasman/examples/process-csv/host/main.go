@@ -39,7 +39,7 @@ func main() {
 	store := &wasman.FileSnapshotStore{Dir: snapshotsDir}
 
 	// Clear any leftover snapshot from previous runs in the database
-	_ = store.Delete(instanceID)
+	_ = store.Delete(context.Background(), instanceID)
 
 	// 3. RUN 1: Execute with simulated crash on the first checkpoint (Step 0)
 	slog.Info("[HOST] RUN 1: Executing WASM CSV pipeline with simulated crash")
@@ -60,7 +60,7 @@ func main() {
 	}
 
 	// Verify snapshot exists in File store
-	_, err = store.Load(instanceID)
+	_, err = store.Load(context.Background(), instanceID)
 	if err != nil {
 		slog.Error("[HOST] Snapshot was not found in File store", "error", err)
 		os.Exit(1)
@@ -87,7 +87,7 @@ func main() {
 	}
 
 	// 5. Final Clean up
-	_ = store.Delete(instanceID)
+	_ = store.Delete(context.Background(), instanceID)
 	slog.Info("[HOST] Durable WASM CSV pipeline example completed successfully")
 	os.Exit(0)
 }

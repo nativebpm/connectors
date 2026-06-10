@@ -19,9 +19,10 @@ func BenchmarkSnapshotStore_SaveFull(b *testing.B) {
 	data := make([]byte, memorySize)
 	_, _ = rand.Read(data)
 
+	ctx := context.Background()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err := store.Save("bench-instance", data)
+		err := store.Save(ctx, "bench-instance", data)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -39,9 +40,10 @@ func BenchmarkSnapshotStore_SaveDeltas(b *testing.B) {
 	_, _ = rand.Read(deltas[12])
 	_, _ = rand.Read(deltas[85])
 
+	ctx := context.Background()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err := store.SaveDeltas("bench-instance", deltas)
+		err := store.SaveDeltas(ctx, "bench-instance", deltas)
 		if err != nil {
 			b.Fatal(err)
 		}

@@ -79,7 +79,7 @@ func main() {
 	}
 
 	// Clear any leftover snapshot from previous runs
-	_ = store.Delete(instanceID)
+	_ = store.Delete(ctx, instanceID)
 
 	// 6. RUN 1: Execute with simulated crash on the first checkpoint
 	slog.Info("[HOST] RUN 1: Executing WASM from scratch with simulated crash")
@@ -100,7 +100,7 @@ func main() {
 	}
 
 	// Verify snapshot exists in S3
-	snapshot, err := store.Load(instanceID)
+	snapshot, err := store.Load(ctx, instanceID)
 	if err != nil || len(snapshot) == 0 {
 		slog.Error("[HOST] Snapshot was not found in S3", "error", err)
 		os.Exit(1)

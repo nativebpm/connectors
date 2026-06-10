@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"sync/atomic"
 	"testing"
@@ -59,7 +60,7 @@ func TestGotenbergTelegramPipeline_Success_With_Retry(t *testing.T) {
 	assert.True(t, crashed, "First run should crash")
 
 	// Verify snapshot exists
-	snapshot, err := store.Load(instanceID)
+	snapshot, err := store.Load(context.Background(), instanceID)
 	require.NoError(t, err)
 	assert.NotEmpty(t, snapshot)
 
@@ -81,5 +82,5 @@ func TestGotenbergTelegramPipeline_Success_With_Retry(t *testing.T) {
 	assert.Contains(t, string(receivedPdfBytes), "[MOCK GENERATED PDF INVOICE CONTENTS]")
 
 	// Cleanup snapshot
-	_ = store.Delete(instanceID)
+	_ = store.Delete(context.Background(), instanceID)
 }

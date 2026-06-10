@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -54,7 +55,7 @@ func TestCSVProcessPipeline_Success_With_Retry(t *testing.T) {
 	assert.True(t, crashed, "First run should crash")
 
 	// Verify snapshot exists
-	snapshot, err := store.Load(instanceID)
+	snapshot, err := store.Load(context.Background(), instanceID)
 	require.NoError(t, err)
 	assert.NotEmpty(t, snapshot)
 
@@ -80,7 +81,7 @@ func TestCSVProcessPipeline_Success_With_Retry(t *testing.T) {
 	assert.Contains(t, resultStr, `"name":"Eve Adams"`)
 
 	// Check that snapshot was deleted
-	_ = store.Delete(instanceID)
-	_, err = store.Load(instanceID)
+	_ = store.Delete(context.Background(), instanceID)
+	_, err = store.Load(context.Background(), instanceID)
 	assert.Error(t, err)
 }

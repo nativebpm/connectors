@@ -80,7 +80,7 @@ func TestCamundaWasmOrchestration_RealCamundaServer(t *testing.T) {
 				return nil
 			}
 
-			_, err := store.Load(uniqueKey)
+			_, err := store.Load(ctx, uniqueKey)
 			hasSnapshot := err == nil
 
 			shouldCrash := !hasSnapshot
@@ -115,7 +115,7 @@ func TestCamundaWasmOrchestration_RealCamundaServer(t *testing.T) {
 				return err
 			}
 
-			_ = store.Delete(uniqueKey)
+			_ = store.Delete(ctx, uniqueKey)
 			slog.Info("[WORKER HANDLER] Cleaned up temporary WASM snapshot from store.")
 			return nil
 		},
@@ -143,7 +143,7 @@ func TestCamundaWasmOrchestration_RealCamundaServer(t *testing.T) {
 
 	// Snapshot should be cleaned up
 	assert.Eventually(t, func() bool {
-		_, err = store.Load(uniqueKey)
+		_, err = store.Load(context.Background(), uniqueKey)
 		return err != nil
 	}, 3*time.Second, 50*time.Millisecond, "Snapshot should be deleted")
 }

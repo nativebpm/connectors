@@ -49,7 +49,7 @@ func NewEngineWithBytes(wasmBytes []byte, store SnapshotStore, opts ...EngineOpt
 	wasmHash := hex.EncodeToString(hash[:])
 
 	// Save WASM module in registry for future multi-version execution
-	err := store.SaveWasm(wasmHash, wasmBytes)
+	err := store.SaveWasm(context.Background(), wasmHash, wasmBytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save WASM module in registry: %w", err)
 	}
@@ -96,7 +96,7 @@ func NewEngineWithBytes(wasmBytes []byte, store SnapshotStore, opts ...EngineOpt
 
 			// 1. Compare-And-Swap version metadata (OCC)
 			s.meta.WasmHash = s.engine.wasmHash
-			ok, err := s.engine.store.SaveMetadata(s.meta)
+			ok, err := s.engine.store.SaveMetadata(ctx, s.meta)
 			if err != nil {
 				slog.Error("[ENGINE] Failed to save metadata", "error", err)
 				panic("failed to save metadata")
@@ -125,7 +125,7 @@ func NewEngineWithBytes(wasmBytes []byte, store SnapshotStore, opts ...EngineOpt
 				slog.Info("[ENGINE] Writing Full Memory Snapshot", "version", s.meta.Version)
 				snapshotCopy := make([]byte, len(memoryBytes))
 				copy(snapshotCopy, memoryBytes)
-				err := s.engine.store.Save(s.instanceID, snapshotCopy)
+				err := s.engine.store.Save(ctx, s.instanceID, snapshotCopy)
 				if err != nil {
 					slog.Error("[ENGINE] Failed to save full snapshot", "error", err)
 					panic("failed to write snapshot")
@@ -133,8 +133,8 @@ func NewEngineWithBytes(wasmBytes []byte, store SnapshotStore, opts ...EngineOpt
 
 				if s.meta.Version > 1 {
 					slog.Info("[ENGINE] Truncating Oplog and memory deltas", "before_call_index", s.callIndex)
-					_ = s.engine.store.TruncateOplog(s.instanceID, s.callIndex)
-					_ = s.engine.store.TruncateDeltas(s.instanceID)
+					_ = s.engine.store.TruncateOplog(ctx, s.instanceID, s.callIndex)
+					_ = s.engine.store.TruncateDeltas(ctx, s.instanceID)
 				}
 			} else {
 				// Incremental checkpoint (Dirty-Page deltas)
@@ -163,7 +163,7 @@ func NewEngineWithBytes(wasmBytes []byte, store SnapshotStore, opts ...EngineOpt
 				}
 
 				if len(deltas) > 0 {
-					err = s.engine.store.SaveDeltas(s.instanceID, deltas)
+					err = s.engine.store.SaveDeltas(ctx, s.instanceID, deltas)
 					if err != nil {
 						slog.Error("[ENGINE] Failed to save memory deltas", "error", err)
 						panic("failed to write memory deltas")
@@ -189,7 +189,7 @@ func NewEngineWithBytes(wasmBytes []byte, store SnapshotStore, opts ...EngineOpt
 			callIdx := s.callIndex
 
 			// Check Oplog Replay
-			oplog, err := s.engine.store.LoadOplog(s.instanceID)
+			oplog, err := s.engine.store.LoadOplog(ctx, s.instanceID)
 			if err == nil {
 				for _, entry := range oplog {
 					if entry.CallIndex == callIdx && entry.ApiName == "host_get_time" {
@@ -208,7 +208,7 @@ func NewEngineWithBytes(wasmBytes []byte, store SnapshotStore, opts ...EngineOpt
 			slog.Info("[ENGINE] Oplog Execution: host_get_time", "call_index", callIdx, "time", nowNano)
 
 			payload := []byte(strconv.FormatInt(nowNano, 10))
-			err = s.engine.store.SaveOplog(s.instanceID, callIdx, "host_get_time", nil, payload)
+			err = s.engine.store.SaveOplog(ctx, s.instanceID, callIdx, "host_get_time", nil, payload)
 			if err != nil {
 				slog.Error("[ENGINE] Failed to save Oplog for host_get_time", "error", err)
 			}
@@ -246,7 +246,7 @@ func NewEngineWithBytes(wasmBytes []byte, store SnapshotStore, opts ...EngineOpt
 			callIdx := s.callIndex
 
 			// Check Oplog Replay
-			oplog, err := s.engine.store.LoadOplog(s.instanceID)
+			oplog, err := s.engine.store.LoadOplog(ctx, s.instanceID)
 			if err == nil {
 				for _, entry := range oplog {
 					if entry.CallIndex == callIdx && entry.ApiName == apiName {
@@ -284,7 +284,7 @@ func NewEngineWithBytes(wasmBytes []byte, store SnapshotStore, opts ...EngineOpt
 			}
 
 			// Save response to Oplog
-			err = s.engine.store.SaveOplog(s.instanceID, callIdx, apiName, request, response)
+			err = s.engine.store.SaveOplog(ctx, s.instanceID, callIdx, apiName, request, response)
 			if err != nil {
 				slog.Error("[ENGINE] Failed to save Oplog", "error", err)
 				return -1
@@ -380,7 +380,7 @@ func (e *Engine) Execute(ctx context.Context, instanceID string, entrypoint stri
 // ExecuteWithArgs runs the WASM instance with a given entrypoint, session context, and variadic parameters.
 func (e *Engine) ExecuteWithArgs(ctx context.Context, instanceID string, entrypoint string, serverAddr string, shouldCrash bool, params ...uint64) (bool, error) {
 	// Load or initialize metadata (WASM Module Versioning & OCC)
-	meta, err := e.store.LoadMetadata(instanceID)
+	meta, err := e.store.LoadMetadata(ctx, instanceID)
 	if err != nil {
 		return false, fmt.Errorf("failed to load metadata: %w", err)
 	}
@@ -397,7 +397,7 @@ func (e *Engine) ExecuteWithArgs(ctx context.Context, instanceID string, entrypo
 				runModule = cachedModule
 			} else {
 				slog.Info("[ENGINE] Instance requires a different WASM module version", "instance_id", instanceID, "required_hash", meta.WasmHash, "current_hash", e.wasmHash)
-				loadedBytes, err := e.store.LoadWasm(meta.WasmHash)
+				loadedBytes, err := e.store.LoadWasm(ctx, meta.WasmHash)
 				if err != nil {
 					return false, fmt.Errorf("failed to load required WASM version %s from registry: %w: %w", meta.WasmHash, err, ErrWasmVersionMismatch)
 				}
@@ -483,7 +483,7 @@ func (e *Engine) ExecuteWithArgs(ctx context.Context, instanceID string, entrypo
 	session.pageHashes = make(map[int]uint64)
 
 	// 1. Load full snapshot if exists
-	snapshot, err := e.store.Load(instanceID)
+	snapshot, err := e.store.Load(ctx, instanceID)
 	if err == nil && len(snapshot) > 0 {
 		slog.Info("[ENGINE] Found saved full snapshot. Restoring memory...", "instance_id", instanceID)
 		currentPages, _ := session.memory.Grow(0)
@@ -519,7 +519,7 @@ func (e *Engine) ExecuteWithArgs(ctx context.Context, instanceID string, entrypo
 	}
 
 	// 2. Load memory deltas if exists, and overlay them
-	deltas, err := e.store.LoadDeltas(instanceID)
+	deltas, err := e.store.LoadDeltas(ctx, instanceID)
 	if err == nil && len(deltas) > 0 {
 		slog.Info("[ENGINE] Found saved memory deltas. Applying to memory...", "instance_id", instanceID)
 		maxPageIndex := 0
@@ -605,7 +605,7 @@ func (e *Engine) RunBPMN(
 ) (bool, []byte, error) {
 	// Load or initialize metadata (WASM Module Versioning & OCC)
 	var err error
-	meta, err := e.store.LoadMetadata(instanceID)
+	meta, err := e.store.LoadMetadata(ctx, instanceID)
 	if err != nil {
 		return false, nil, fmt.Errorf("failed to load metadata: %w", err)
 	}
@@ -622,7 +622,7 @@ func (e *Engine) RunBPMN(
 				runModule = cachedModule
 			} else {
 				slog.Info("[ENGINE] Instance requires a different WASM module version", "instance_id", instanceID, "required_hash", meta.WasmHash, "current_hash", e.wasmHash)
-				loadedBytes, err := e.store.LoadWasm(meta.WasmHash)
+				loadedBytes, err := e.store.LoadWasm(ctx, meta.WasmHash)
 				if err != nil {
 					return false, nil, fmt.Errorf("failed to load required WASM version %s from registry: %w: %w", meta.WasmHash, err, ErrWasmVersionMismatch)
 				}
@@ -736,7 +736,7 @@ func (e *Engine) RunBPMN(
 
 	if !alreadyInstantiated {
 		// Restore memory snapshot
-		snapshot, err := e.store.Load(instanceID)
+		snapshot, err := e.store.Load(ctx, instanceID)
 		if err == nil && len(snapshot) > 0 {
 			slog.Info("[ENGINE] Found saved full snapshot. Restoring memory...", "instance_id", instanceID)
 			currentPages, _ := session.memory.Grow(0)
@@ -769,7 +769,7 @@ func (e *Engine) RunBPMN(
 		}
 
 		// Apply deltas
-		deltas, err := e.store.LoadDeltas(instanceID)
+		deltas, err := e.store.LoadDeltas(ctx, instanceID)
 		if err == nil && len(deltas) > 0 {
 			slog.Info("[ENGINE] Found saved memory deltas. Applying to memory...", "instance_id", instanceID)
 			maxPageIndex := 0

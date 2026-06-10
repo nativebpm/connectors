@@ -49,7 +49,7 @@ func newInMemorySnapshotStore() *inMemorySnapshotStore {
 	}
 }
 
-func (s *inMemorySnapshotStore) Save(id string, snapshot []byte) error {
+func (s *inMemorySnapshotStore) Save(ctx context.Context, id string, snapshot []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	copied := make([]byte, len(snapshot))
@@ -58,7 +58,7 @@ func (s *inMemorySnapshotStore) Save(id string, snapshot []byte) error {
 	return nil
 }
 
-func (s *inMemorySnapshotStore) Load(id string) ([]byte, error) {
+func (s *inMemorySnapshotStore) Load(ctx context.Context, id string) ([]byte, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	snap, ok := s.snapshots[id]
@@ -68,7 +68,7 @@ func (s *inMemorySnapshotStore) Load(id string) ([]byte, error) {
 	return snap, nil
 }
 
-func (s *inMemorySnapshotStore) Delete(id string) error {
+func (s *inMemorySnapshotStore) Delete(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.snapshots, id)
@@ -78,7 +78,7 @@ func (s *inMemorySnapshotStore) Delete(id string) error {
 	return nil
 }
 
-func (s *inMemorySnapshotStore) SaveDeltas(id string, deltas map[int][]byte) error {
+func (s *inMemorySnapshotStore) SaveDeltas(ctx context.Context, id string, deltas map[int][]byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, ok := s.deltas[id]
@@ -94,7 +94,7 @@ func (s *inMemorySnapshotStore) SaveDeltas(id string, deltas map[int][]byte) err
 	return nil
 }
 
-func (s *inMemorySnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
+func (s *inMemorySnapshotStore) LoadDeltas(ctx context.Context, id string) (map[int][]byte, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	current, ok := s.deltas[id]
@@ -108,14 +108,14 @@ func (s *inMemorySnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
 	return copied, nil
 }
 
-func (s *inMemorySnapshotStore) TruncateDeltas(id string) error {
+func (s *inMemorySnapshotStore) TruncateDeltas(ctx context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.deltas, id)
 	return nil
 }
 
-func (s *inMemorySnapshotStore) SaveOplog(id string, callIndex int, apiName string, request []byte, response []byte) error {
+func (s *inMemorySnapshotStore) SaveOplog(ctx context.Context, id string, callIndex int, apiName string, request []byte, response []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -133,7 +133,7 @@ func (s *inMemorySnapshotStore) SaveOplog(id string, callIndex int, apiName stri
 	return nil
 }
 
-func (s *inMemorySnapshotStore) LoadOplog(id string) ([]OplogEntry, error) {
+func (s *inMemorySnapshotStore) LoadOplog(ctx context.Context, id string) ([]OplogEntry, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	list, ok := s.oplogs[id]
@@ -143,7 +143,7 @@ func (s *inMemorySnapshotStore) LoadOplog(id string) ([]OplogEntry, error) {
 	return list, nil
 }
 
-func (s *inMemorySnapshotStore) TruncateOplog(id string, beforeCallIndex int) error {
+func (s *inMemorySnapshotStore) TruncateOplog(ctx context.Context, id string, beforeCallIndex int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	list := s.oplogs[id]
@@ -157,7 +157,7 @@ func (s *inMemorySnapshotStore) TruncateOplog(id string, beforeCallIndex int) er
 	return nil
 }
 
-func (s *inMemorySnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
+func (s *inMemorySnapshotStore) SaveMetadata(ctx context.Context, meta *InstanceMeta) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	existing, ok := s.meta[meta.InstanceID]
@@ -178,7 +178,7 @@ func (s *inMemorySnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 	return true, nil
 }
 
-func (s *inMemorySnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
+func (s *inMemorySnapshotStore) LoadMetadata(ctx context.Context, id string) (*InstanceMeta, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	meta, ok := s.meta[id]
@@ -189,7 +189,7 @@ func (s *inMemorySnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
 	return &copied, nil
 }
 
-func (s *inMemorySnapshotStore) SaveWasm(hash string, wasmBytes []byte) error {
+func (s *inMemorySnapshotStore) SaveWasm(ctx context.Context, hash string, wasmBytes []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	copied := make([]byte, len(wasmBytes))
@@ -198,7 +198,7 @@ func (s *inMemorySnapshotStore) SaveWasm(hash string, wasmBytes []byte) error {
 	return nil
 }
 
-func (s *inMemorySnapshotStore) LoadWasm(hash string) ([]byte, error) {
+func (s *inMemorySnapshotStore) LoadWasm(ctx context.Context, hash string) ([]byte, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	w, ok := s.wasm[hash]
@@ -208,7 +208,7 @@ func (s *inMemorySnapshotStore) LoadWasm(hash string) ([]byte, error) {
 	return w, nil
 }
 
-func (s *inMemorySnapshotStore) UpdateActiveIndex(id string, info []byte, completed bool) error {
+func (s *inMemorySnapshotStore) UpdateActiveIndex(ctx context.Context, id string, info []byte, completed bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -246,7 +246,7 @@ func (s *inMemorySnapshotStore) UpdateActiveIndex(id string, info []byte, comple
 	return nil
 }
 
-func (s *inMemorySnapshotStore) LoadActiveIndex() ([]byte, error) {
+func (s *inMemorySnapshotStore) LoadActiveIndex(ctx context.Context) ([]byte, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if len(s.activeIndex) == 0 {
@@ -287,7 +287,7 @@ func TestDurableExecutionLifecycle(t *testing.T) {
 	assert.True(t, crashed, "Expected run 1 to crash at checkpoint")
 
 	// Verify snapshot exists in in-memory database
-	snapshot, err := store.Load(instanceID)
+	snapshot, err := store.Load(context.Background(), instanceID)
 	require.NoError(t, err, "Snapshot should exist in SQLite database")
 	assert.NotEmpty(t, snapshot, "Snapshot data should not be empty")
 
@@ -333,11 +333,11 @@ func TestDirtyPageAndOplog(t *testing.T) {
 	assert.True(t, crashed)
 
 	// Verify full snapshot and oplog saved on first checkpoint (Version = 1)
-	snapshot, err := store.Load(instanceID)
+	snapshot, err := store.Load(context.Background(), instanceID)
 	require.NoError(t, err)
 	assert.NotEmpty(t, snapshot, "Full snapshot should be saved on version 1")
 
-	oplog, err := store.LoadOplog(instanceID)
+	oplog, err := store.LoadOplog(context.Background(), instanceID)
 	require.NoError(t, err)
 	require.Len(t, oplog, 1, "Should have exactly 1 oplog entry")
 	assert.Equal(t, "test_api", oplog[0].ApiName)
@@ -357,13 +357,13 @@ func TestDirtyPageAndOplog(t *testing.T) {
 	assert.False(t, crashed)
 
 	// Verify memory delta has dirty pages saved (Version = 2 check, since only deltas are written)
-	deltas2, err := store.LoadDeltas(instanceID)
+	deltas2, err := store.LoadDeltas(context.Background(), instanceID)
 	require.NoError(t, err)
 	// Block size is 4KB, offset 70000 lies in page index 70000/4096 = 17
 	assert.Contains(t, deltas2, 17, "Delta snapshot must contain dirty page index 17 (offset 70000)")
 
 	// Verify oplog contains 2 calls
-	oplog2, err := store.LoadOplog(instanceID)
+	oplog2, err := store.LoadOplog(context.Background(), instanceID)
 	require.NoError(t, err)
 	assert.Len(t, oplog2, 2, "Oplog must contain 2 entries after complete run")
 	assert.Equal(t, "world", string(oplog2[1].RequestPayload))
@@ -397,13 +397,13 @@ func TestS3SnapshotStore(t *testing.T) {
 	})
 
 	instanceID := "s3-test-instance-" + uuid.New().String()
-	defer store.Delete(instanceID)
+	defer store.Delete(ctx, instanceID)
 
 	// Test Save & Load Snapshot
-	err = store.Save(instanceID, []byte("s3-full-snapshot-data"))
+	err = store.Save(ctx, instanceID, []byte("s3-full-snapshot-data"))
 	require.NoError(t, err)
 
-	snapshot, err := store.Load(instanceID)
+	snapshot, err := store.Load(ctx, instanceID)
 	require.NoError(t, err)
 	assert.Equal(t, "s3-full-snapshot-data", string(snapshot))
 
@@ -412,20 +412,20 @@ func TestS3SnapshotStore(t *testing.T) {
 		0: []byte("s3-page-0-data"),
 		9: []byte("s3-page-9-data"),
 	}
-	err = store.SaveDeltas(instanceID, deltas)
+	err = store.SaveDeltas(ctx, instanceID, deltas)
 	require.NoError(t, err)
 
-	loadedDeltas, err := store.LoadDeltas(instanceID)
+	loadedDeltas, err := store.LoadDeltas(ctx, instanceID)
 	require.NoError(t, err)
 	assert.Len(t, loadedDeltas, 2)
 	assert.Equal(t, "s3-page-0-data", string(loadedDeltas[0]))
 	assert.Equal(t, "s3-page-9-data", string(loadedDeltas[9]))
 
 	// Test Save & Load Oplog
-	err = store.SaveOplog(instanceID, 1, "test_s3_call", []byte("s3-req"), []byte("s3-resp"))
+	err = store.SaveOplog(ctx, instanceID, 1, "test_s3_call", []byte("s3-req"), []byte("s3-resp"))
 	require.NoError(t, err)
 
-	oplog, err := store.LoadOplog(instanceID)
+	oplog, err := store.LoadOplog(ctx, instanceID)
 	require.NoError(t, err)
 	require.Len(t, oplog, 1)
 	assert.Equal(t, 1, oplog[0].CallIndex)
@@ -441,7 +441,7 @@ func TestS3SnapshotStore(t *testing.T) {
 	}
 
 	// First insert
-	ok, err := store.SaveMetadata(meta)
+	ok, err := store.SaveMetadata(ctx, meta)
 	require.NoError(t, err)
 	assert.True(t, ok)
 	assert.Equal(t, 1, meta.Version)
@@ -453,12 +453,12 @@ func TestS3SnapshotStore(t *testing.T) {
 		WasmHash:   "wasm-hash-val-dup",
 		Version:    0,
 	}
-	ok, err = store.SaveMetadata(metaDup)
+	ok, err = store.SaveMetadata(ctx, metaDup)
 	require.NoError(t, err)
 	assert.False(t, ok)
 
 	// Load metadata and check values
-	loadedMeta, err := store.LoadMetadata(instanceID)
+	loadedMeta, err := store.LoadMetadata(ctx, instanceID)
 	require.NoError(t, err)
 	require.NotNil(t, loadedMeta)
 	assert.Equal(t, 1, loadedMeta.Version)
@@ -467,19 +467,19 @@ func TestS3SnapshotStore(t *testing.T) {
 
 	// Normal update
 	loadedMeta.WasmHash = "wasm-hash-val-updated"
-	ok, err = store.SaveMetadata(loadedMeta)
+	ok, err = store.SaveMetadata(ctx, loadedMeta)
 	require.NoError(t, err)
 	assert.True(t, ok)
 	assert.Equal(t, 2, loadedMeta.Version)
 
 	// Stale update (using old meta ETag)
 	meta.WasmHash = "wasm-hash-stale"
-	ok, err = store.SaveMetadata(meta) // meta still has version 1 and old ETag
+	ok, err = store.SaveMetadata(ctx, meta) // meta still has version 1 and old ETag
 	require.NoError(t, err)
 	assert.False(t, ok) // should fail OCC since ETag on S3 is already updated by loadedMeta
 
 	// Verify final metadata state
-	finalMeta, err := store.LoadMetadata(instanceID)
+	finalMeta, err := store.LoadMetadata(ctx, instanceID)
 	require.NoError(t, err)
 	assert.Equal(t, 2, finalMeta.Version)
 	assert.Equal(t, "wasm-hash-val-updated", finalMeta.WasmHash)
@@ -487,10 +487,10 @@ func TestS3SnapshotStore(t *testing.T) {
 	// Test WASM Registry
 	wasmHash := "wasm-sha256-hash-s3"
 	wasmBytes := []byte("wasm-dummy-binary-bytes")
-	err = store.SaveWasm(wasmHash, wasmBytes)
+	err = store.SaveWasm(ctx, wasmHash, wasmBytes)
 	require.NoError(t, err)
 
-	loadedWasm, err := store.LoadWasm(wasmHash)
+	loadedWasm, err := store.LoadWasm(ctx, wasmHash)
 	require.NoError(t, err)
 	assert.Equal(t, wasmBytes, loadedWasm)
 
@@ -537,7 +537,7 @@ func TestHostGetTime(t *testing.T) {
 	assert.True(t, crashed)
 
 	// Recover oplog
-	oplog1, err := store.LoadOplog(instanceID)
+	oplog1, err := store.LoadOplog(context.Background(), instanceID)
 	require.NoError(t, err)
 	require.Len(t, oplog1, 1)
 	assert.Equal(t, "host_get_time", oplog1[0].ApiName)
@@ -561,7 +561,7 @@ func TestHostGetTime(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, crashed)
 
-	oplog2, err := store.LoadOplog(instanceID)
+	oplog2, err := store.LoadOplog(context.Background(), instanceID)
 	require.NoError(t, err)
 	require.Len(t, oplog2, 2)
 
@@ -606,14 +606,14 @@ func TestMultiCheckpointRecovery(t *testing.T) {
 		}
 
 		// Verify state of memory (should be expectedVal)
-		meta, err := store.LoadMetadata(instanceID)
+		meta, err := store.LoadMetadata(context.Background(), instanceID)
 		require.NoError(t, err)
 		assert.Equal(t, expectedVal/10, meta.Version)
 
-		deltas, err := store.LoadDeltas(instanceID)
+		deltas, err := store.LoadDeltas(context.Background(), instanceID)
 		require.NoError(t, err)
 
-		snapshot, err := store.Load(instanceID)
+		snapshot, err := store.Load(context.Background(), instanceID)
 
 		val := int32(0)
 		if len(deltas) > 0 && len(deltas[0]) >= 12 {
@@ -655,7 +655,7 @@ func TestWasmModuleHashMismatch(t *testing.T) {
 	assert.True(t, crashed)
 
 	// 2. Manually alter the saved metadata in SQLite to point to a non-existent WASM hash
-	meta, err := store.LoadMetadata(instanceID)
+	meta, err := store.LoadMetadata(context.Background(), instanceID)
 	require.NoError(t, err)
 	meta.WasmHash = "non-existent-wasm-hash"
 
@@ -752,7 +752,7 @@ func TestOplogTruncation(t *testing.T) {
 	}
 
 	// Verify oplog has 4 entries
-	oplog, err := store.LoadOplog(instanceID)
+	oplog, err := store.LoadOplog(context.Background(), instanceID)
 	require.NoError(t, err)
 	assert.Len(t, oplog, 4)
 
@@ -769,17 +769,17 @@ func TestOplogTruncation(t *testing.T) {
 	assert.True(t, crashed)
 
 	// Verify oplog was truncated! It should have 0 entries now (since all 5 calls occurred before or at checkpoint 5)
-	oplogTruncated, err := store.LoadOplog(instanceID)
+	oplogTruncated, err := store.LoadOplog(context.Background(), instanceID)
 	require.NoError(t, err)
 	assert.Empty(t, oplogTruncated, "Oplog must be empty after truncation at checkpoint 5")
 
 	// Verify deltas table is empty
-	deltas, err := store.LoadDeltas(instanceID)
+	deltas, err := store.LoadDeltas(context.Background(), instanceID)
 	require.NoError(t, err)
 	assert.Empty(t, deltas, "Deltas must be empty after truncation")
 
 	// Verify full snapshot still exists in db
-	snapshot, err := store.Load(instanceID)
+	snapshot, err := store.Load(context.Background(), instanceID)
 	require.NoError(t, err)
 	assert.NotEmpty(t, snapshot, "Full snapshot must exist")
 }
@@ -828,7 +828,7 @@ func TestMultiVersionWasmExecution(t *testing.T) {
 
 	// 3. Verify that the memory actually reflects wat1's execution (val == 888, not 222)
 	// We check deltas because checkpoint 2 (Version=2) was executed and recorded delta for page 0
-	deltas, err := store.LoadDeltas(instanceID)
+	deltas, err := store.LoadDeltas(context.Background(), instanceID)
 	require.NoError(t, err)
 
 	val := int32(0)
@@ -897,18 +897,18 @@ type ErrorInjectingStore struct {
 	injectMetaErr bool
 }
 
-func (e *ErrorInjectingStore) Save(id string, snapshot []byte) error {
+func (e *ErrorInjectingStore) Save(ctx context.Context, id string, snapshot []byte) error {
 	if e.injectSaveErr {
 		return errors.New("injected storage save error")
 	}
-	return e.SnapshotStore.Save(id, snapshot)
+	return e.SnapshotStore.Save(ctx, id, snapshot)
 }
 
-func (e *ErrorInjectingStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
+func (e *ErrorInjectingStore) SaveMetadata(ctx context.Context, meta *InstanceMeta) (bool, error) {
 	if e.injectMetaErr {
 		return false, errors.New("injected metadata save error")
 	}
-	return e.SnapshotStore.SaveMetadata(meta)
+	return e.SnapshotStore.SaveMetadata(ctx, meta)
 }
 
 func TestStorageErrorInjection(t *testing.T) {
@@ -1006,17 +1006,18 @@ func TestActiveIndex(t *testing.T) {
 }
 
 func testStoreActiveIndex(t *testing.T, store SnapshotStore) {
+	ctx := context.Background()
 	// Initial load should be empty array
-	data, err := store.LoadActiveIndex()
+	data, err := store.LoadActiveIndex(ctx)
 	require.NoError(t, err)
 	assert.JSONEq(t, "[]", string(data))
 
 	// Add instance 1
 	info1 := []byte(`{"instance_id":"inst-1","process_id":"p1","status":"active"}`)
-	err = store.UpdateActiveIndex("inst-1", info1, false)
+	err = store.UpdateActiveIndex(ctx, "inst-1", info1, false)
 	require.NoError(t, err)
 
-	data, err = store.LoadActiveIndex()
+	data, err = store.LoadActiveIndex(ctx)
 	require.NoError(t, err)
 	var list []map[string]interface{}
 	err = json.Unmarshal(data, &list)
@@ -1028,10 +1029,10 @@ func testStoreActiveIndex(t *testing.T, store SnapshotStore) {
 
 	// Update instance 1
 	info1Updated := []byte(`{"instance_id":"inst-1","process_id":"p1","status":"running"}`)
-	err = store.UpdateActiveIndex("inst-1", info1Updated, false)
+	err = store.UpdateActiveIndex(ctx, "inst-1", info1Updated, false)
 	require.NoError(t, err)
 
-	data, err = store.LoadActiveIndex()
+	data, err = store.LoadActiveIndex(ctx)
 	require.NoError(t, err)
 	err = json.Unmarshal(data, &list)
 	require.NoError(t, err)
@@ -1040,20 +1041,20 @@ func testStoreActiveIndex(t *testing.T, store SnapshotStore) {
 
 	// Add instance 2
 	info2 := []byte(`{"instance_id":"inst-2","process_id":"p2","status":"active"}`)
-	err = store.UpdateActiveIndex("inst-2", info2, false)
+	err = store.UpdateActiveIndex(ctx, "inst-2", info2, false)
 	require.NoError(t, err)
 
-	data, err = store.LoadActiveIndex()
+	data, err = store.LoadActiveIndex(ctx)
 	require.NoError(t, err)
 	err = json.Unmarshal(data, &list)
 	require.NoError(t, err)
 	require.Len(t, list, 2)
 
 	// Complete instance 1 (should remove it from active index)
-	err = store.UpdateActiveIndex("inst-1", info1Updated, true)
+	err = store.UpdateActiveIndex(ctx, "inst-1", info1Updated, true)
 	require.NoError(t, err)
 
-	data, err = store.LoadActiveIndex()
+	data, err = store.LoadActiveIndex(ctx)
 	require.NoError(t, err)
 	err = json.Unmarshal(data, &list)
 	require.NoError(t, err)
@@ -1112,7 +1113,8 @@ func TestFileSnapshotStore_Compression(t *testing.T) {
 
 	// 1. Save snapshot & Verify it is encrypted on disk (not plain gzip)
 	snapshotData := []byte("a very repetitive string that compresses extremely well! a very repetitive string that compresses extremely well!")
-	err := store.Save(instanceID, snapshotData)
+	ctx := context.Background()
+	err := store.Save(ctx, instanceID, snapshotData)
 	require.NoError(t, err)
 
 	diskPath := filepath.Join(tempDir, "default", instanceID+".bin")
@@ -1121,7 +1123,7 @@ func TestFileSnapshotStore_Compression(t *testing.T) {
 	assert.False(t, isGzipped(diskBytes), "Saved file must be encrypted (not plain gzip)")
 
 	// 2. Load snapshot & Verify decompression and decryption
-	loaded, err := store.Load(instanceID)
+	loaded, err := store.Load(ctx, instanceID)
 	require.NoError(t, err)
 	assert.Equal(t, snapshotData, loaded)
 
@@ -1130,7 +1132,7 @@ func TestFileSnapshotStore_Compression(t *testing.T) {
 		1: []byte("delta-1-val"),
 		2: []byte("delta-2-val"),
 	}
-	err = store.SaveDeltas(instanceID, deltas)
+	err = store.SaveDeltas(ctx, instanceID, deltas)
 	require.NoError(t, err)
 
 	deltasPath := filepath.Join(tempDir, "default", instanceID+"_deltas.json")
@@ -1138,13 +1140,13 @@ func TestFileSnapshotStore_Compression(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, isGzipped(deltasBytes), "Deltas file must be encrypted")
 
-	loadedDeltas, err := store.LoadDeltas(instanceID)
+	loadedDeltas, err := store.LoadDeltas(ctx, instanceID)
 	require.NoError(t, err)
 	assert.Len(t, loadedDeltas, 2)
 	assert.Equal(t, []byte("delta-1-val"), loadedDeltas[1])
 
 	// 4. Save & Load oplog with encryption
-	err = store.SaveOplog(instanceID, 1, "test-api", []byte("req"), []byte("resp"))
+	err = store.SaveOplog(ctx, instanceID, 1, "test-api", []byte("req"), []byte("resp"))
 	require.NoError(t, err)
 
 	oplogPath := filepath.Join(tempDir, "default", instanceID+"_oplog.json")
@@ -1152,7 +1154,7 @@ func TestFileSnapshotStore_Compression(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, isGzipped(oplogBytes), "Oplog file must be encrypted")
 
-	loadedOplog, err := store.LoadOplog(instanceID)
+	loadedOplog, err := store.LoadOplog(ctx, instanceID)
 	require.NoError(t, err)
 	require.Len(t, loadedOplog, 1)
 	assert.Equal(t, "test-api", loadedOplog[0].ApiName)

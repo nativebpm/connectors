@@ -75,8 +75,8 @@ func isPreconditionFailed(err error) bool {
 	return false
 }
 
-func (s *S3SnapshotStore) readObject(key string) ([]byte, string, error) {
-	out, err := s.Client.GetObject(context.Background(), &s3.GetObjectInput{
+func (s *S3SnapshotStore) readObject(ctx context.Context, key string) ([]byte, string, error) {
+	out, err := s.Client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
 	})
@@ -97,8 +97,8 @@ func (s *S3SnapshotStore) readObject(key string) ([]byte, string, error) {
 	return data, etag, nil
 }
 
-func (s *S3SnapshotStore) writeObject(key string, data []byte) (string, error) {
-	out, err := s.Client.PutObject(context.Background(), &s3.PutObjectInput{
+func (s *S3SnapshotStore) writeObject(ctx context.Context, key string, data []byte) (string, error) {
+	out, err := s.Client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
 		Body:   bytes.NewReader(data),
@@ -113,14 +113,14 @@ func (s *S3SnapshotStore) writeObject(key string, data []byte) (string, error) {
 }
 
 // Save writes a full memory snapshot to S3.
-func (s *S3SnapshotStore) Save(id string, snapshot []byte) error {
-	tenant, inst := splitTenantID(id)
-	key := fmt.Sprintf("instances/%s/%s/snapshot.bin", tenant, inst)
+func (s *S3SnapshotStore) Save(ctx context.Context, id string, snapshot []byte) error {
+	tenant := GetTenantID(ctx)
+	key := fmt.Sprintf("instances/%s/%s/snapshot.bin", tenant, id)
 	data, err := compressData(snapshot)
 	if err != nil {
 		return fmt.Errorf("failed to compress snapshot for '%s': %w", id, err)
 	}
-	_, err = s.writeObject(key, data)
+	_, err = s.writeObject(ctx, key, data)
 	if err != nil {
 		return fmt.Errorf("failed to save snapshot for '%s': %w", id, err)
 	}
@@ -128,10 +128,10 @@ func (s *S3SnapshotStore) Save(id string, snapshot []byte) error {
 }
 
 // Load reads a full memory snapshot from S3.
-func (s *S3SnapshotStore) Load(id string) ([]byte, error) {
-	tenant, inst := splitTenantID(id)
-	key := fmt.Sprintf("instances/%s/%s/snapshot.bin", tenant, inst)
-	data, _, err := s.readObject(key)
+func (s *S3SnapshotStore) Load(ctx context.Context, id string) ([]byte, error) {
+	tenant := GetTenantID(ctx)
+	key := fmt.Sprintf("instances/%s/%s/snapshot.bin", tenant, id)
+	data, _, err := s.readObject(ctx, key)
 	if err != nil {
 		return nil, err
 	}
@@ -139,12 +139,12 @@ func (s *S3SnapshotStore) Load(id string) ([]byte, error) {
 }
 
 // SaveDeltas saves memory deltas to S3 by reading current, overlaying new ones and writing back.
-func (s *S3SnapshotStore) SaveDeltas(id string, deltas map[int][]byte) error {
-	tenant, inst := splitTenantID(id)
-	key := fmt.Sprintf("instances/%s/%s/deltas.json", tenant, inst)
+func (s *S3SnapshotStore) SaveDeltas(ctx context.Context, id string, deltas map[int][]byte) error {
+	tenant := GetTenantID(ctx)
+	key := fmt.Sprintf("instances/%s/%s/deltas.json", tenant, id)
 	current := make(map[int][]byte)
 
-	data, _, err := s.readObject(key)
+	data, _, err := s.readObject(ctx, key)
 	if err == nil {
 		decompressed, err := decompressData(data)
 		if err == nil {
@@ -168,7 +168,7 @@ func (s *S3SnapshotStore) SaveDeltas(id string, deltas map[int][]byte) error {
 		return fmt.Errorf("failed to compress deltas: %w", err)
 	}
 
-	_, err = s.writeObject(key, newData)
+	_, err = s.writeObject(ctx, key, newData)
 	if err != nil {
 		return fmt.Errorf("failed to write deltas to S3: %w", err)
 	}
@@ -176,10 +176,10 @@ func (s *S3SnapshotStore) SaveDeltas(id string, deltas map[int][]byte) error {
 }
 
 // LoadDeltas retrieves memory deltas from S3.
-func (s *S3SnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
-	tenant, inst := splitTenantID(id)
-	key := fmt.Sprintf("instances/%s/%s/deltas.json", tenant, inst)
-	data, _, err := s.readObject(key)
+func (s *S3SnapshotStore) LoadDeltas(ctx context.Context, id string) (map[int][]byte, error) {
+	tenant := GetTenantID(ctx)
+	key := fmt.Sprintf("instances/%s/%s/deltas.json", tenant, id)
+	data, _, err := s.readObject(ctx, key)
 	if err != nil {
 		if isNotFound(err) {
 			return nil, nil
@@ -200,65 +200,64 @@ func (s *S3SnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
 	return deltas, nil
 }
 
-// TruncateDeltas deletes memory deltas for the instance from S3.
-func (s *S3SnapshotStore) TruncateDeltas(id string) error {
-	tenant, inst := splitTenantID(id)
-	key := fmt.Sprintf("instances/%s/%s/deltas.json", tenant, inst)
-	_, err := s.Client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
+// TruncateDeltas removes deltas from S3.
+func (s *S3SnapshotStore) TruncateDeltas(ctx context.Context, id string) error {
+	tenant := GetTenantID(ctx)
+	key := fmt.Sprintf("instances/%s/%s/deltas.json", tenant, id)
+	_, err := s.Client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
 	})
 	if err != nil && !isNotFound(err) {
-		return fmt.Errorf("failed to truncate deltas on S3: %w", err)
+		return fmt.Errorf("failed to delete deltas from S3: %w", err)
 	}
 	return nil
 }
 
-// SaveOplog appends an API call to the oplog JSON on S3.
-func (s *S3SnapshotStore) SaveOplog(id string, callIndex int, apiName string, request []byte, response []byte) error {
-	tenant, inst := splitTenantID(id)
-	key := fmt.Sprintf("instances/%s/%s/oplog.json", tenant, inst)
-	var list []OplogEntry
-
-	data, _, err := s.readObject(key)
-	if err == nil {
-		decompressed, err := decompressData(data)
-		if err == nil {
-			_ = json.Unmarshal(decompressed, &list)
-		}
-	} else if !isNotFound(err) {
-		return fmt.Errorf("failed to read oplog from S3: %w", err)
+// SaveOplog appends an API call payload to the database oplog in S3.
+func (s *S3SnapshotStore) SaveOplog(ctx context.Context, id string, callIndex int, apiName string, request []byte, response []byte) error {
+	tenant := GetTenantID(ctx)
+	key := fmt.Sprintf("instances/%s/%s/oplog.json", tenant, id)
+	current, err := s.LoadOplog(ctx, id)
+	if err != nil && !errors.Is(err, io.EOF) {
+		// ignore not found
 	}
 
-	list = append(list, OplogEntry{
+	encRequest, err := compressData(request)
+	if err != nil {
+		return err
+	}
+	encResponse, err := compressData(response)
+	if err != nil {
+		return err
+	}
+
+	current = append(current, OplogEntry{
 		CallIndex:       callIndex,
 		ApiName:         apiName,
-		RequestPayload:  request,
-		ResponsePayload: response,
+		RequestPayload:  encRequest,
+		ResponsePayload: encResponse,
 	})
 
-	newData, err := json.Marshal(list)
+	data, err := json.Marshal(current)
 	if err != nil {
-		return fmt.Errorf("failed to marshal oplog: %w", err)
+		return err
 	}
 
-	newData, err = compressData(newData)
+	data, err = compressData(data)
 	if err != nil {
-		return fmt.Errorf("failed to compress oplog: %w", err)
+		return err
 	}
 
-	_, err = s.writeObject(key, newData)
-	if err != nil {
-		return fmt.Errorf("failed to write oplog to S3: %w", err)
-	}
-	return nil
+	_, err = s.writeObject(ctx, key, data)
+	return err
 }
 
 // LoadOplog retrieves the oplog entries from S3.
-func (s *S3SnapshotStore) LoadOplog(id string) ([]OplogEntry, error) {
-	tenant, inst := splitTenantID(id)
-	key := fmt.Sprintf("instances/%s/%s/oplog.json", tenant, inst)
-	data, _, err := s.readObject(key)
+func (s *S3SnapshotStore) LoadOplog(ctx context.Context, id string) ([]OplogEntry, error) {
+	tenant := GetTenantID(ctx)
+	key := fmt.Sprintf("instances/%s/%s/oplog.json", tenant, id)
+	data, _, err := s.readObject(ctx, key)
 	if err != nil {
 		if isNotFound(err) {
 			return nil, nil
@@ -279,11 +278,11 @@ func (s *S3SnapshotStore) LoadOplog(id string) ([]OplogEntry, error) {
 	return list, nil
 }
 
-// TruncateOplog deletes oplog entries at or below the given call index.
-func (s *S3SnapshotStore) TruncateOplog(id string, beforeCallIndex int) error {
-	tenant, inst := splitTenantID(id)
-	key := fmt.Sprintf("instances/%s/%s/oplog.json", tenant, inst)
-	data, _, err := s.readObject(key)
+// TruncateOplog removes oplog entries at or below the given call index from S3.
+func (s *S3SnapshotStore) TruncateOplog(ctx context.Context, id string, beforeCallIndex int) error {
+	tenant := GetTenantID(ctx)
+	key := fmt.Sprintf("instances/%s/%s/oplog.json", tenant, id)
+	data, _, err := s.readObject(ctx, key)
 	if err != nil {
 		if isNotFound(err) {
 			return nil
@@ -318,7 +317,7 @@ func (s *S3SnapshotStore) TruncateOplog(id string, beforeCallIndex int) error {
 		return fmt.Errorf("failed to compress truncated oplog: %w", err)
 	}
 
-	_, err = s.writeObject(key, newData)
+	_, err = s.writeObject(ctx, key, newData)
 	if err != nil {
 		return fmt.Errorf("failed to write truncated oplog to S3: %w", err)
 	}
@@ -326,9 +325,9 @@ func (s *S3SnapshotStore) TruncateOplog(id string, beforeCallIndex int) error {
 }
 
 // SaveMetadata saves metadata or atomically updates version via CAS using ETag.
-func (s *S3SnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
-	tenant, inst := splitTenantID(meta.InstanceID)
-	key := fmt.Sprintf("instances/%s/%s/meta.json", tenant, inst)
+func (s *S3SnapshotStore) SaveMetadata(ctx context.Context, meta *InstanceMeta) (bool, error) {
+	tenant := GetTenantID(ctx)
+	key := fmt.Sprintf("instances/%s/%s/meta.json", tenant, meta.InstanceID)
 
 	nextVersion := meta.Version + 1
 	if meta.Version == 0 {
@@ -357,7 +356,7 @@ func (s *S3SnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 		input.IfMatch = aws.String(meta.ETag)
 	}
 
-	out, err := s.Client.PutObject(context.Background(), input)
+	out, err := s.Client.PutObject(ctx, input)
 	if err != nil {
 		if isPreconditionFailed(err) {
 			return false, nil
@@ -373,10 +372,10 @@ func (s *S3SnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 }
 
 // LoadMetadata retrieves the instance metadata from S3.
-func (s *S3SnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
-	tenant, inst := splitTenantID(id)
-	key := fmt.Sprintf("instances/%s/%s/meta.json", tenant, inst)
-	data, etag, err := s.readObject(key)
+func (s *S3SnapshotStore) LoadMetadata(ctx context.Context, id string) (*InstanceMeta, error) {
+	tenant := GetTenantID(ctx)
+	key := fmt.Sprintf("instances/%s/%s/meta.json", tenant, id)
+	data, etag, err := s.readObject(ctx, key)
 	if err != nil {
 		if isNotFound(err) {
 			return nil, nil
@@ -395,13 +394,22 @@ func (s *S3SnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
 }
 
 // SaveWasm saves a WASM module binary by its SHA256 hash.
-func (s *S3SnapshotStore) SaveWasm(hash string, wasmBytes []byte) error {
+func (s *S3SnapshotStore) SaveWasm(ctx context.Context, hash string, wasmBytes []byte) error {
 	key := fmt.Sprintf("wasm/%s.wasm", hash)
+	var exists bool
+	_, _, err := s.readObject(ctx, key)
+	if err == nil {
+		exists = true
+	}
+	if exists {
+		return nil
+	}
+
 	data, err := compressData(wasmBytes)
 	if err != nil {
 		return fmt.Errorf("failed to compress WASM module %s: %w", hash, err)
 	}
-	_, err = s.writeObject(key, data)
+	_, err = s.writeObject(ctx, key, data)
 	if err != nil {
 		return fmt.Errorf("failed to save WASM module %s to S3: %w", hash, err)
 	}
@@ -409,9 +417,9 @@ func (s *S3SnapshotStore) SaveWasm(hash string, wasmBytes []byte) error {
 }
 
 // LoadWasm loads a WASM module binary by its SHA256 hash.
-func (s *S3SnapshotStore) LoadWasm(hash string) ([]byte, error) {
+func (s *S3SnapshotStore) LoadWasm(ctx context.Context, hash string) ([]byte, error) {
 	key := fmt.Sprintf("wasm/%s.wasm", hash)
-	data, _, err := s.readObject(key)
+	data, _, err := s.readObject(ctx, key)
 	if err != nil {
 		if isNotFound(err) {
 			return nil, fmt.Errorf("wasm module not found: %s", hash)
@@ -422,18 +430,18 @@ func (s *S3SnapshotStore) LoadWasm(hash string) ([]byte, error) {
 }
 
 // Delete removes all data associated with the instance from S3.
-func (s *S3SnapshotStore) Delete(id string) error {
-	tenant, inst := splitTenantID(id)
+func (s *S3SnapshotStore) Delete(ctx context.Context, id string) error {
+	tenant := GetTenantID(ctx)
 	keys := []string{
-		fmt.Sprintf("instances/%s/%s/snapshot.bin", tenant, inst),
-		fmt.Sprintf("instances/%s/%s/deltas.json", tenant, inst),
-		fmt.Sprintf("instances/%s/%s/oplog.json", tenant, inst),
-		fmt.Sprintf("instances/%s/%s/meta.json", tenant, inst),
-		fmt.Sprintf("instances/%s/%s/active.json", tenant, inst),
+		fmt.Sprintf("instances/%s/%s/snapshot.bin", tenant, id),
+		fmt.Sprintf("instances/%s/%s/deltas.json", tenant, id),
+		fmt.Sprintf("instances/%s/%s/oplog.json", tenant, id),
+		fmt.Sprintf("instances/%s/%s/meta.json", tenant, id),
+		fmt.Sprintf("instances/%s/%s/active.json", tenant, id),
 	}
 
 	for _, key := range keys {
-		_, err := s.Client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
+		_, err := s.Client.DeleteObject(ctx, &s3.DeleteObjectInput{
 			Bucket: aws.String(s.bucket),
 			Key:    aws.String(key),
 		})
@@ -445,11 +453,11 @@ func (s *S3SnapshotStore) Delete(id string) error {
 }
 
 // UpdateActiveIndex updates the active instance index status.
-func (s *S3SnapshotStore) UpdateActiveIndex(id string, info []byte, completed bool) error {
-	tenant, inst := splitTenantID(id)
-	key := fmt.Sprintf("instances/%s/%s/active.json", tenant, inst)
+func (s *S3SnapshotStore) UpdateActiveIndex(ctx context.Context, id string, info []byte, completed bool) error {
+	tenant := GetTenantID(ctx)
+	key := fmt.Sprintf("instances/%s/%s/active.json", tenant, id)
 	if completed {
-		_, err := s.Client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
+		_, err := s.Client.DeleteObject(ctx, &s3.DeleteObjectInput{
 			Bucket: aws.String(s.bucket),
 			Key:    aws.String(key),
 		})
@@ -459,7 +467,7 @@ func (s *S3SnapshotStore) UpdateActiveIndex(id string, info []byte, completed bo
 		return nil
 	}
 
-	_, err := s.Client.PutObject(context.Background(), &s3.PutObjectInput{
+	_, err := s.Client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
 		Body:   bytes.NewReader(info),
@@ -471,7 +479,7 @@ func (s *S3SnapshotStore) UpdateActiveIndex(id string, info []byte, completed bo
 }
 
 // LoadActiveIndex loads the compiled active index list from S3.
-func (s *S3SnapshotStore) LoadActiveIndex() ([]byte, error) {
+func (s *S3SnapshotStore) LoadActiveIndex(ctx context.Context) ([]byte, error) {
 	input := &s3.ListObjectsV2Input{
 		Bucket: aws.String(s.bucket),
 		Prefix: aws.String("instances/"),
@@ -480,7 +488,7 @@ func (s *S3SnapshotStore) LoadActiveIndex() ([]byte, error) {
 	var keys []string
 	paginator := s3.NewListObjectsV2Paginator(s.Client, input)
 	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(context.Background())
+		page, err := paginator.NextPage(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list instances prefix: %w", err)
 		}
@@ -504,7 +512,7 @@ func (s *S3SnapshotStore) LoadActiveIndex() ([]byte, error) {
 	resChan := make(chan result, len(keys))
 	for _, key := range keys {
 		go func(k string) {
-			data, _, err := s.readObject(k)
+			data, _, err := s.readObject(ctx, k)
 			resChan <- result{data: data, err: err}
 		}(key)
 	}
