@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sync"
+	"sync/atomic"
 
 	"github.com/andybalholm/brotli"
 	"github.com/tetratelabs/wazero"
@@ -78,13 +80,34 @@ type OutputEnvelope struct {
 	Widgets []*UIWidgetSpec `json:"widgets,omitempty"`
 }
 
+var (
+	wazeroRuntime wazero.Runtime
+	compiled      wazero.CompiledModule
+	initOnce      sync.Once
+	initErr       error
+	instanceId    uint64
+)
+
+func initEngine(ctx context.Context) error {
+	initOnce.Do(func() {
+		wazeroRuntime = wazero.NewRuntime(ctx)
+
+		// Instantiate WASI imports.
+		if _, err := wasi_snapshot_preview1.Instantiate(ctx, wazeroRuntime); err != nil {
+			initErr = fmt.Errorf("failed to instantiate WASI: %w", err)
+			return
+		}
+
+		compiled, initErr = wazeroRuntime.CompileModule(ctx, jsonschemaWASM)
+	})
+	return initErr
+}
+
 func runWasmAction(action string, schemaJSON string, dataJSON string, variablesJSON string) (*OutputEnvelope, error) {
 	ctx := context.Background()
-	r := wazero.NewRuntime(ctx)
-	defer r.Close(ctx)
-
-	// Instantiate WASI imports.
-	wasi_snapshot_preview1.MustInstantiate(ctx, r)
+	if err := initEngine(ctx); err != nil {
+		return nil, err
+	}
 
 	env := InputEnvelope{
 		Action:    action,
@@ -101,16 +124,21 @@ func runWasmAction(action string, schemaJSON string, dataJSON string, variablesJ
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
+	// Generate a unique name for the instantiated module to avoid namespace collisions.
+	name := fmt.Sprintf("jsonschema-%d", atomic.AddUint64(&instanceId, 1))
+
 	config := wazero.NewModuleConfig().
+		WithName(name).
 		WithStdin(bytes.NewReader(inputBytes)).
 		WithStdout(&stdout).
 		WithStderr(&stderr).
 		WithArgs("jsonschema")
 
-	_, err = r.InstantiateWithConfig(ctx, jsonschemaWASM, config)
+	mod, err := wazeroRuntime.InstantiateModule(ctx, compiled, config)
 	if err != nil {
 		return nil, fmt.Errorf("wasm execution failed: %w (stderr: %s)", err, stderr.String())
 	}
+	defer mod.Close(ctx)
 
 	var out OutputEnvelope
 	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {

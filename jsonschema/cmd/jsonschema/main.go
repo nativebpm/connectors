@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unsafe"
 )
 
 // Parser is a lightweight reflection-free JSON parser.
@@ -613,4 +614,69 @@ func writeError(msg string) {
 	}
 	outBytes, _ := json.Marshal(res)
 	os.Stdout.Write(outBytes)
+}
+
+var activeAllocations = make(map[uintptr][]byte)
+
+//go:wasmexport allocate
+func allocate(size uint32) *byte {
+	buf := make([]byte, size)
+	ptr := &buf[0]
+	activeAllocations[uintptr(unsafe.Pointer(ptr))] = buf
+	return ptr
+}
+
+//go:wasmexport deallocate
+func deallocate(ptr *byte, size uint32) {
+	delete(activeAllocations, uintptr(unsafe.Pointer(ptr)))
+}
+
+//go:wasmexport validateJSON
+func validateJSON(schemaPtr *byte, schemaSize uint32, dataPtr *byte, dataSize uint32) uint64 {
+	schemaBytes := unsafe.Slice(schemaPtr, schemaSize)
+	dataBytes := unsafe.Slice(dataPtr, dataSize)
+
+	schema, err := ParseSchema(string(schemaBytes))
+	if err != nil {
+		return packResult(false, []string{"Schema parse error: " + err.Error()}, nil)
+	}
+
+	valid, errors := Validate(schema, string(dataBytes))
+	return packResult(valid, errors, nil)
+}
+
+//go:wasmexport parseSchema
+func parseSchema(schemaPtr *byte, schemaSize uint32, variablesPtr *byte, variablesSize uint32) uint64 {
+	schemaBytes := unsafe.Slice(schemaPtr, schemaSize)
+	var variables map[string]any
+
+	if variablesSize > 0 {
+		varBytes := unsafe.Slice(variablesPtr, variablesSize)
+		pVar := &Parser{str: string(varBytes)}
+		if v, err := pVar.parseValue(); err == nil {
+			variables, _ = v.(map[string]any)
+		}
+	}
+
+	schema, err := ParseSchema(string(schemaBytes))
+	if err != nil {
+		return packResult(false, []string{"Schema parse error: " + err.Error()}, nil)
+	}
+
+	widgets := CompileWidgets(schema, variables)
+	return packResult(true, nil, widgets)
+}
+
+func packResult(valid bool, errors []string, widgets []*UIWidgetSpec) uint64 {
+	res := OutputEnvelope{
+		Valid:   &valid,
+		Errors:  errors,
+		Widgets: widgets,
+	}
+	resBytes, _ := json.Marshal(res)
+
+	ptr := allocate(uint32(len(resBytes)))
+	copy(unsafe.Slice(ptr, len(resBytes)), resBytes)
+
+	return (uint64(uintptr(unsafe.Pointer(ptr))) << 32) | uint64(len(resBytes))
 }

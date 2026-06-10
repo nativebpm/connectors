@@ -2,6 +2,7 @@ package jsonschema
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -245,3 +246,77 @@ func TestJSONSchemaBuilderStickyErrors(t *testing.T) {
 		t.Errorf("expected error for negative maxLength")
 	}
 }
+
+func TestValidateJSONComplex(t *testing.T) {
+	// A complex schema representing real-world forms from RJSF playground
+	schemaJSON := `{
+		"type": "object",
+		"title": "Comprehensive User Registration",
+		"required": ["email", "password", "age", "agree"],
+		"properties": {
+			"email": {
+				"type": "string",
+				"format": "email",
+				"pattern": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+			},
+			"password": {
+				"type": "string",
+				"minLength": 8,
+				"maxLength": 20
+			},
+			"age": {
+				"type": "integer",
+				"minimum": 18,
+				"maximum": 120
+			},
+			"agree": {
+				"type": "boolean"
+			},
+			"role": {
+				"type": "string",
+				"enum": ["admin", "user", "guest"],
+				"default": "user"
+			}
+		}
+	}`
+
+	// Test 1: Valid comprehensive registration payload
+	validPayload := `{"email": "test@example.com", "password": "securepassword123", "age": 25, "agree": true, "role": "admin"}`
+	ok, errs, err := ValidateJSON(schemaJSON, validPayload)
+	if err != nil {
+		t.Fatalf("unexpected execution error: %v", err)
+	}
+	if !ok {
+		t.Errorf("expected payload to be valid, got validation errors: %v", errs)
+	}
+
+	// Test 2: Validation errors for required fields and invalid formats
+	invalidPayload := `{"email": "invalid-email-format", "password": "short", "age": 15, "agree": false}`
+	ok, errs, err = ValidateJSON(schemaJSON, invalidPayload)
+	if err != nil {
+		t.Fatalf("unexpected execution error: %v", err)
+	}
+	if ok {
+		t.Errorf("expected validation to fail for invalid payload")
+	}
+
+	expectedErrors := []string{
+		"Field 'password' must have at least 8 characters",
+		"Field 'age' must be greater than or equal to minimum (18)",
+		"Field 'email' must match pattern ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
+	}
+
+	for _, expected := range expectedErrors {
+		found := false
+		for _, e := range errs {
+			if strings.Contains(e, expected) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected error containing %q, got: %v", expected, errs)
+		}
+	}
+}
+
