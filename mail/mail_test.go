@@ -706,4 +706,46 @@ func TestProviderPresets(t *testing.T) {
 	}
 }
 
+func TestHTMLSizeLimits(t *testing.T) {
+	// 1. Eager HTML limit validation
+	builder := NewMessage().WithMaxHTMLSize(10)
+	builder.HTML("1234567890") // 10 bytes (valid)
+	if builder.Error() != nil {
+		t.Fatalf("unexpected error setting valid HTML: %v", builder.Error())
+	}
+
+	builder = NewMessage().WithMaxHTMLSize(10)
+	builder.HTML("12345678901") // 11 bytes (invalid)
+	if builder.Error() == nil {
+		t.Fatal("expected error for HTML size exceeding 10 bytes limit")
+	}
+	if !strings.Contains(builder.Error().Error(), "exceeds the maximum allowed limit") {
+		t.Errorf("unexpected error message: %v", builder.Error())
+	}
+
+	// 2. Late HTML limit validation in Send()
+	builder = NewMessage().
+		From("sender@example.com", "Sender").
+		To("receiver@example.com").
+		WithMaxHTMLSize(10)
+
+	// Circumvent eager checks (e.g. modify body directly for testing purposes)
+	builder.body = "12345678901"
+	builder.isHTML = true
+
+	smtpConfig := SMTPConfig{
+		Host: "localhost",
+		Port: 25,
+	}
+
+	err := builder.Send(smtpConfig)
+	if err == nil {
+		t.Fatal("expected Send to fail because body exceeds HTML limit")
+	}
+	if !strings.Contains(err.Error(), "exceeds the maximum allowed limit") {
+		t.Errorf("unexpected error message from Send: %v", err)
+	}
+}
+
+
 

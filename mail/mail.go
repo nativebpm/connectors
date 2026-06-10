@@ -57,6 +57,7 @@ type MessageBuilder struct {
 	store                   AttachmentStore // S3 store for deferred loading and auto-cleanup
 	maxAttachmentSize      int64           // Limit for single attachment (default: 10MB)
 	maxTotalAttachmentsSize int64           // Limit for all attachments combined (default: 25MB)
+	maxHTMLSize             int64           // Limit for HTML body size to prevent Gmail clipping (default: 102KB)
 	err                     error           // Sticky error
 }
 
@@ -65,6 +66,7 @@ func NewMessage() *MessageBuilder {
 	return &MessageBuilder{
 		maxAttachmentSize:      10 * 1024 * 1024, // 10MB
 		maxTotalAttachmentsSize: 25 * 1024 * 1024, // 25MB
+		maxHTMLSize:             102 * 1024,       // 102KB
 	}
 }
 
@@ -85,6 +87,16 @@ func (m *MessageBuilder) WithMaxTotalAttachmentsSize(size int64) *MessageBuilder
 		return m
 	}
 	m.maxTotalAttachmentsSize = size
+	return m
+}
+
+// WithMaxHTMLSize overrides the default 102KB limit for the HTML body markup size.
+// A value of 0 or less disables the limit check.
+func (m *MessageBuilder) WithMaxHTMLSize(size int64) *MessageBuilder {
+	if m.err != nil {
+		return m
+	}
+	m.maxHTMLSize = size
 	return m
 }
 
@@ -171,6 +183,10 @@ func (m *MessageBuilder) Body(body string) *MessageBuilder {
 // HTML sets the HTML formatted mail body payload.
 func (m *MessageBuilder) HTML(htmlContent string) *MessageBuilder {
 	if m.err != nil {
+		return m
+	}
+	if m.maxHTMLSize > 0 && int64(len(htmlContent)) > m.maxHTMLSize {
+		m.err = fmt.Errorf("HTML body size %d bytes exceeds the maximum allowed limit of %d bytes", len(htmlContent), m.maxHTMLSize)
 		return m
 	}
 	m.body = htmlContent
@@ -453,6 +469,11 @@ func (m *MessageBuilder) Send(config SMTPConfig) error {
 	}
 	if m.maxTotalAttachmentsSize > 0 && totalSize > m.maxTotalAttachmentsSize {
 		return fmt.Errorf("total attachments size %d bytes exceeds the maximum allowed combined limit of %d bytes", totalSize, m.maxTotalAttachmentsSize)
+	}
+
+	// 1c. Validate HTML body size limit if isHTML is true
+	if m.isHTML && m.maxHTMLSize > 0 && int64(len(m.body)) > m.maxHTMLSize {
+		return fmt.Errorf("HTML body size %d bytes exceeds the maximum allowed limit of %d bytes", len(m.body), m.maxHTMLSize)
 	}
 
 	fromEmail := config.From
