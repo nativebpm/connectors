@@ -41,11 +41,12 @@ func (s *PostgresSnapshotStore) Save(id string, snapshot []byte) error {
 		return fmt.Errorf("failed to compress/encrypt snapshot for '%s': %w", id, err)
 	}
 
+	_, instID := splitTenantID(id)
 	query := `INSERT INTO bpmn_wasm_snapshots (instance_id, snapshot_data, updated_at)
               VALUES ($1, $2, NOW())
               ON CONFLICT (instance_id) DO UPDATE
               SET snapshot_data = EXCLUDED.snapshot_data, updated_at = NOW()`
-	_, err = s.db.Exec(query, id, compressed)
+	_, err = s.db.Exec(query, instID, compressed)
 	if err != nil {
 		return fmt.Errorf("failed to save snapshot for '%s': %w", id, err)
 	}
@@ -55,8 +56,9 @@ func (s *PostgresSnapshotStore) Save(id string, snapshot []byte) error {
 // Load reads a full memory snapshot from the database.
 func (s *PostgresSnapshotStore) Load(id string) ([]byte, error) {
 	var compressed []byte
+	_, instID := splitTenantID(id)
 	query := `SELECT snapshot_data FROM bpmn_wasm_snapshots WHERE instance_id = $1`
-	err := s.db.QueryRow(query, id).Scan(&compressed)
+	err := s.db.QueryRow(query, instID).Scan(&compressed)
 	if err != nil {
 		return nil, err
 	}
@@ -71,11 +73,12 @@ func (s *PostgresSnapshotStore) Delete(id string) error {
 	}
 	defer tx.Rollback()
 
-	_, _ = tx.Exec(`DELETE FROM bpmn_wasm_snapshots WHERE instance_id = $1`, id)
-	_, _ = tx.Exec(`DELETE FROM bpmn_wasm_deltas WHERE instance_id = $1`, id)
-	_, _ = tx.Exec(`DELETE FROM bpmn_wasm_oplog WHERE instance_id = $1`, id)
-	_, _ = tx.Exec(`DELETE FROM bpmn_wasm_metadata WHERE instance_id = $1`, id)
-	_, _ = tx.Exec(`DELETE FROM bpmn_wasm_active_index WHERE instance_id = $1`, id)
+	_, instID := splitTenantID(id)
+	_, _ = tx.Exec(`DELETE FROM bpmn_wasm_snapshots WHERE instance_id = $1`, instID)
+	_, _ = tx.Exec(`DELETE FROM bpmn_wasm_deltas WHERE instance_id = $1`, instID)
+	_, _ = tx.Exec(`DELETE FROM bpmn_wasm_oplog WHERE instance_id = $1`, instID)
+	_, _ = tx.Exec(`DELETE FROM bpmn_wasm_metadata WHERE instance_id = $1`, instID)
+	_, _ = tx.Exec(`DELETE FROM bpmn_wasm_active_index WHERE instance_id = $1`, instID)
 
 	return tx.Commit()
 }
@@ -93,12 +96,13 @@ func (s *PostgresSnapshotStore) SaveDeltas(id string, deltas map[int][]byte) err
               ON CONFLICT (instance_id, page_index) DO UPDATE
               SET delta_data = EXCLUDED.delta_data`
 
+	_, instID := splitTenantID(id)
 	for pageIdx, delta := range deltas {
 		compressed, err := compressData(delta)
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(query, id, pageIdx, compressed)
+		_, err = tx.Exec(query, instID, pageIdx, compressed)
 		if err != nil {
 			return err
 		}
@@ -109,7 +113,8 @@ func (s *PostgresSnapshotStore) SaveDeltas(id string, deltas map[int][]byte) err
 
 // LoadDeltas retrieves memory deltas from the database.
 func (s *PostgresSnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
-	rows, err := s.db.Query(`SELECT page_index, delta_data FROM bpmn_wasm_deltas WHERE instance_id = $1`, id)
+	_, instID := splitTenantID(id)
+	rows, err := s.db.Query(`SELECT page_index, delta_data FROM bpmn_wasm_deltas WHERE instance_id = $1`, instID)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +138,8 @@ func (s *PostgresSnapshotStore) LoadDeltas(id string) (map[int][]byte, error) {
 
 // TruncateDeltas deletes memory deltas for the instance from the database.
 func (s *PostgresSnapshotStore) TruncateDeltas(id string) error {
-	_, err := s.db.Exec(`DELETE FROM bpmn_wasm_deltas WHERE instance_id = $1`, id)
+	_, instID := splitTenantID(id)
+	_, err := s.db.Exec(`DELETE FROM bpmn_wasm_deltas WHERE instance_id = $1`, instID)
 	return err
 }
 
@@ -148,17 +154,19 @@ func (s *PostgresSnapshotStore) SaveOplog(id string, callIndex int, apiName stri
 		return err
 	}
 
+	_, instID := splitTenantID(id)
 	query := `INSERT INTO bpmn_wasm_oplog (instance_id, call_index, api_name, request_payload, response_payload)
               VALUES ($1, $2, $3, $4, $5)
               ON CONFLICT (instance_id, call_index) DO UPDATE
               SET api_name = EXCLUDED.api_name, request_payload = EXCLUDED.request_payload, response_payload = EXCLUDED.response_payload`
-	_, err = s.db.Exec(query, id, callIndex, apiName, encRequest, encResponse)
+	_, err = s.db.Exec(query, instID, callIndex, apiName, encRequest, encResponse)
 	return err
 }
 
 // LoadOplog retrieves the oplog entries from the database.
 func (s *PostgresSnapshotStore) LoadOplog(id string) ([]OplogEntry, error) {
-	rows, err := s.db.Query(`SELECT call_index, api_name, request_payload, response_payload FROM bpmn_wasm_oplog WHERE instance_id = $1 ORDER BY call_index ASC`, id)
+	_, instID := splitTenantID(id)
+	rows, err := s.db.Query(`SELECT call_index, api_name, request_payload, response_payload FROM bpmn_wasm_oplog WHERE instance_id = $1 ORDER BY call_index ASC`, instID)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +196,8 @@ func (s *PostgresSnapshotStore) LoadOplog(id string) ([]OplogEntry, error) {
 
 // TruncateOplog deletes oplog entries at or below the given call index.
 func (s *PostgresSnapshotStore) TruncateOplog(id string, beforeCallIndex int) error {
-	_, err := s.db.Exec(`DELETE FROM bpmn_wasm_oplog WHERE instance_id = $1 AND call_index <= $2`, id, beforeCallIndex)
+	_, instID := splitTenantID(id)
+	_, err := s.db.Exec(`DELETE FROM bpmn_wasm_oplog WHERE instance_id = $1 AND call_index <= $2`, instID, beforeCallIndex)
 	return err
 }
 
@@ -213,11 +222,13 @@ func (s *PostgresSnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 		return false, err
 	}
 
+	_, instID := splitTenantID(meta.InstanceID)
+
 	var res sql.Result
 	if meta.Version == 0 {
 		query := `INSERT INTO bpmn_wasm_metadata (instance_id, version, metadata_bytes, updated_at)
                   VALUES ($1, $2, $3, NOW())`
-		res, err = s.db.Exec(query, meta.InstanceID, nextVersion, encryptedBytes)
+		res, err = s.db.Exec(query, instID, nextVersion, encryptedBytes)
 		if err != nil {
 			if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "violates unique constraint") {
 				return false, nil
@@ -228,7 +239,7 @@ func (s *PostgresSnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 		query := `UPDATE bpmn_wasm_metadata
                   SET version = $1, metadata_bytes = $2, updated_at = NOW()
                   WHERE instance_id = $3 AND version = $4`
-		res, err = s.db.Exec(query, nextVersion, encryptedBytes, meta.InstanceID, meta.Version)
+		res, err = s.db.Exec(query, nextVersion, encryptedBytes, instID, meta.Version)
 		if err != nil {
 			return false, err
 		}
@@ -252,8 +263,9 @@ func (s *PostgresSnapshotStore) SaveMetadata(meta *InstanceMeta) (bool, error) {
 func (s *PostgresSnapshotStore) LoadMetadata(id string) (*InstanceMeta, error) {
 	var version int
 	var encryptedBytes []byte
+	_, instID := splitTenantID(id)
 	query := `SELECT version, metadata_bytes FROM bpmn_wasm_metadata WHERE instance_id = $1`
-	err := s.db.QueryRow(query, id).Scan(&version, &encryptedBytes)
+	err := s.db.QueryRow(query, instID).Scan(&version, &encryptedBytes)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -312,8 +324,9 @@ func (s *PostgresSnapshotStore) LoadWasm(hash string) ([]byte, error) {
 
 // UpdateActiveIndex updates the active instance status in the database.
 func (s *PostgresSnapshotStore) UpdateActiveIndex(id string, info []byte, completed bool) error {
+	_, instID := splitTenantID(id)
 	if completed {
-		_, err := s.db.Exec(`DELETE FROM bpmn_wasm_active_index WHERE instance_id = $1`, id)
+		_, err := s.db.Exec(`DELETE FROM bpmn_wasm_active_index WHERE instance_id = $1`, instID)
 		return err
 	}
 
@@ -321,7 +334,7 @@ func (s *PostgresSnapshotStore) UpdateActiveIndex(id string, info []byte, comple
               VALUES ($1, $2, NOW())
               ON CONFLICT (instance_id) DO UPDATE
               SET info = EXCLUDED.info, updated_at = NOW()`
-	_, err := s.db.Exec(query, id, info)
+	_, err := s.db.Exec(query, instID, info)
 	return err
 }
 
