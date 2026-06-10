@@ -49,6 +49,7 @@ type User struct {
 	Role         string
 	TOTPSecret   string
 	RecoveryHash string
+	AccessToken  string // JWT token if authenticated via Supabase
 }
 
 // Session represents the cryptographically signed user session.
@@ -242,8 +243,86 @@ func (a *Authenticator) LoadUserFromGopassContent(username string, encryptedData
 	return nil
 }
 
-// Authenticate verifies the user's password and TOTP code.
+// IsSupabase returns true if Supabase URL is configured.
+func (a *Authenticator) IsSupabase() bool {
+	return a.SupabaseURL != ""
+}
+
+// Authenticate verifies the user's credentials. If Supabase is enabled,
+// it authenticates against Supabase GoTrue endpoint, otherwise it uses
+// local bcrypt password comparison and TOTP validation.
 func (a *Authenticator) Authenticate(username, password, code string) (*User, error) {
+	if a.IsSupabase() {
+		tokenURL := fmt.Sprintf("%s/auth/v1/token?grant_type=password", strings.TrimSuffix(a.SupabaseURL, "/"))
+		payloadMap := map[string]string{
+			"email":    username,
+			"password": password,
+		}
+		jsonBytes, err := json.Marshal(payloadMap)
+		if err != nil {
+			return nil, fmt.Errorf("internal json error: %w", err)
+		}
+
+		req, err := http.NewRequest("POST", tokenURL, bytes.NewBuffer(jsonBytes))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		anonKey := os.Getenv("SUPABASE_ANON_KEY")
+		if anonKey != "" {
+			req.Header.Set("apiKey", anonKey)
+		} else if len(a.SupabaseJWTSecret) > 0 {
+			req.Header.Set("apiKey", string(a.SupabaseJWTSecret))
+		}
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("Supabase connection error: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			var errResp struct {
+				ErrorDescription string `json:"error_description"`
+				Error            string `json:"error"`
+				Message          string `json:"msg"`
+			}
+			_ = json.NewDecoder(resp.Body).Decode(&errResp)
+			errMsg := errResp.ErrorDescription
+			if errMsg == "" {
+				errMsg = errResp.Message
+			}
+			if errMsg == "" {
+				errMsg = errResp.Error
+			}
+			if errMsg == "" {
+				errMsg = fmt.Sprintf("HTTP %d", resp.StatusCode)
+			}
+			return nil, errors.New(errMsg)
+		}
+
+		var tokenResp struct {
+			AccessToken string `json:"access_token"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+			return nil, fmt.Errorf("invalid token response from Supabase: %w", err)
+		}
+
+		// Verify and parse JWT locally to extract role
+		sess, err := a.verifySupabaseJWT(tokenResp.AccessToken)
+		if err != nil {
+			return nil, fmt.Errorf("failed to verify Supabase JWT: %w", err)
+		}
+
+		return &User{
+			Username:    sess.Username,
+			Role:        sess.Role,
+			AccessToken: tokenResp.AccessToken,
+		}, nil
+	}
+
 	a.muUsers.RLock()
 	user, exists := a.Users[username]
 	a.muUsers.RUnlock()
@@ -269,6 +348,136 @@ func (a *Authenticator) Authenticate(username, password, code string) (*User, er
 
 	return user, nil
 }
+
+// SignUp registers a new user with Supabase GoTrue. If Supabase is disabled,
+// it returns an error because self-service signup is not allowed without the MFA flow.
+func (a *Authenticator) SignUp(username, password string) error {
+	if !a.IsSupabase() {
+		return errors.New("self-service registration is disabled when running in local fallback mode")
+	}
+
+	signupURL := fmt.Sprintf("%s/auth/v1/signup", strings.TrimSuffix(a.SupabaseURL, "/"))
+	payloadMap := map[string]string{
+		"email":    username,
+		"password": password,
+	}
+	jsonBytes, err := json.Marshal(payloadMap)
+	if err != nil {
+		return fmt.Errorf("failed to encode json: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", signupURL, bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	anonKey := os.Getenv("SUPABASE_ANON_KEY")
+	if anonKey != "" {
+		req.Header.Set("apiKey", anonKey)
+	} else if len(a.SupabaseJWTSecret) > 0 {
+		req.Header.Set("apiKey", string(a.SupabaseJWTSecret))
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("Supabase connection error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		var errResp struct {
+			Message string `json:"msg"`
+			Error   string `json:"error"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&errResp)
+		errMsg := errResp.Message
+		if errMsg == "" {
+			errMsg = errResp.Error
+		}
+		if errMsg == "" {
+			errMsg = fmt.Sprintf("HTTP %d", resp.StatusCode)
+		}
+		return errors.New(errMsg)
+	}
+
+	return nil
+}
+
+// InitiateSSO initiates the SAML/SSO authentication flow for a given domain
+// and returns the target redirection URL.
+func (a *Authenticator) InitiateSSO(domain, redirectURL string) (string, error) {
+	if !a.IsSupabase() {
+		return "", errors.New("Supabase SSO is not configured on this server")
+	}
+
+	ssoReqURL := fmt.Sprintf("%s/auth/v1/sso", strings.TrimSuffix(a.SupabaseURL, "/"))
+	payload := map[string]interface{}{
+		"domain":             domain,
+		"redirect_to":        redirectURL,
+		"skip_http_redirect": true, // We parse URL response ourselves
+	}
+	jsonBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to encode JSON payload: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", ssoReqURL, bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	anonKey := os.Getenv("SUPABASE_ANON_KEY")
+	if anonKey != "" {
+		req.Header.Set("apiKey", anonKey)
+	} else if len(a.SupabaseJWTSecret) > 0 {
+		req.Header.Set("apiKey", string(a.SupabaseJWTSecret))
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("Supabase connection error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errResp struct {
+			Message string `json:"msg"`
+			Error   string `json:"error"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&errResp)
+		errMsg := errResp.Message
+		if errMsg == "" {
+			errMsg = errResp.Error
+		}
+		if errMsg == "" {
+			errMsg = fmt.Sprintf("HTTP %d", resp.StatusCode)
+		}
+		return "", errors.New(errMsg)
+	}
+
+	var ssoResp struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&ssoResp); err != nil {
+		return "", fmt.Errorf("invalid SSO response from Supabase: %w", err)
+	}
+
+	return ssoResp.URL, nil
+}
+
+// GetSessionCookie retrieves the correct cookie value. If Supabase is enabled,
+// it returns the stored AccessToken. Otherwise, it generates a standard local session cookie.
+func (a *Authenticator) GetSessionCookie(user *User, duration time.Duration) (string, error) {
+	if a.IsSupabase() && user.AccessToken != "" {
+		return user.AccessToken, nil
+	}
+	return a.CreateSessionCookie(user.Username, user.Role, duration)
+}
+
 
 // CreateSessionCookie generates a signed session token.
 func (a *Authenticator) CreateSessionCookie(username, role string, duration time.Duration) (string, error) {
