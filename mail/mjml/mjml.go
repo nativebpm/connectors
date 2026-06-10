@@ -13,7 +13,6 @@ import (
 
 	"github.com/andybalholm/brotli"
 	"github.com/tetratelabs/wazero"
-	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
@@ -25,7 +24,6 @@ var (
 	compiled wazero.CompiledModule
 	initOnce sync.Once
 	initErr  error
-	results  sync.Map
 )
 
 func initEngine(ctx context.Context) error {
@@ -44,58 +42,6 @@ func initEngine(ctx context.Context) error {
 			return
 		}
 
-		// Register host functions with precise signatures matching the WASM module expectations
-		_, err = runtime.NewHostModuleBuilder("env").
-			NewFunctionBuilder().
-			WithFunc(returnResult).
-			WithParameterNames("ptr", "len", "ident").
-			Export("return_result").
-			NewFunctionBuilder().
-			WithFunc(dummyGetStaticFile).
-			Export("get_static_file").
-			NewFunctionBuilder().
-			WithFunc(dummyRequestSetField).
-			Export("request_set_field").
-			NewFunctionBuilder().
-			WithFunc(dummyRespSetHeader).
-			Export("resp_set_header").
-			NewFunctionBuilder().
-			WithFunc(dummyCacheGet).
-			Export("cache_get").
-			NewFunctionBuilder().
-			WithFunc(dummyAddFfiVar).
-			Export("add_ffi_var").
-			NewFunctionBuilder().
-			WithFunc(dummyGetFfiResult).
-			Export("get_ffi_result").
-			NewFunctionBuilder().
-			WithFunc(dummyReturnError).
-			Export("return_error").
-			NewFunctionBuilder().
-			WithFunc(dummyFetchUrl).
-			Export("fetch_url").
-			NewFunctionBuilder().
-			WithFunc(dummyGraphqlQuery).
-			Export("graphql_query").
-			NewFunctionBuilder().
-			WithFunc(dummyDbExec).
-			Export("db_exec").
-			NewFunctionBuilder().
-			WithFunc(dummyCacheSet).
-			Export("cache_set").
-			NewFunctionBuilder().
-			WithFunc(dummyRequestGetField).
-			Export("request_get_field").
-			NewFunctionBuilder().
-			WithFunc(dummyLogMsg).
-			Export("log_msg").
-			Instantiate(ctx)
-
-		if err != nil {
-			initErr = fmt.Errorf("failed to register host functions: %w", err)
-			return
-		}
-
 		compiled, err = runtime.CompileModule(ctx, decompressed)
 		if err != nil {
 			initErr = fmt.Errorf("failed to compile WASM module: %w", err)
@@ -103,31 +49,6 @@ func initEngine(ctx context.Context) error {
 		}
 	})
 	return initErr
-}
-
-func dummyGetStaticFile(_ uint32, _ uint32, _ uint32) uint32 { panic("unimplemented") }
-func dummyRequestSetField(_ uint32, _ uint32, _ uint32, _ uint32, _ uint32, _ uint32) uint32 { panic("unimplemented") }
-func dummyRespSetHeader(_ uint32, _ uint32, _ uint32, _ uint32, _ uint32) { panic("unimplemented") }
-func dummyCacheGet(_ uint32, _ uint32, _ uint32) uint32 { panic("unimplemented") }
-func dummyAddFfiVar(_ uint32, _ uint32, _ uint32, _ uint32, _ uint32) uint32 { panic("unimplemented") }
-func dummyGetFfiResult(_ uint32, _ uint32) uint32 { panic("unimplemented") }
-func dummyReturnError(_ uint32, _ uint32, _ uint32, _ uint32) { panic("unimplemented") }
-func dummyFetchUrl(_ uint32, _ uint32, _ uint32, _ uint32, _ uint32, _ uint32) uint32 { panic("unimplemented") }
-func dummyGraphqlQuery(_ uint32, _ uint32, _ uint32, _ uint32, _ uint32) uint32 { panic("unimplemented") }
-func dummyDbExec(_ uint32, _ uint32, _ uint32, _ uint32) uint32 { panic("unimplemented") }
-func dummyCacheSet(_ uint32, _ uint32, _ uint32, _ uint32, _ uint32, _ uint32) uint32 { panic("unimplemented") }
-func dummyRequestGetField(_ uint32, _ uint32, _ uint32, _ uint32) uint32 { panic("unimplemented") }
-func dummyLogMsg(_ uint32, _ uint32, _ uint32, _ uint32) { panic("unimplemented") }
-
-func returnResult(ctx context.Context, m api.Module, ptr uint32, len uint32, ident uint32) {
-	if ch, ok := results.Load(int32(ident)); ok {
-		result, okRead := m.Memory().Read(ptr, len)
-		if okRead {
-			if resultCh, okChan := ch.(chan []byte); okChan {
-				resultCh <- result
-			}
-		}
-	}
 }
 
 // Option represents functional options for MJML compilation.
@@ -160,9 +81,69 @@ func WithKeepComments(keepComments bool) Option {
 	}
 }
 
+// Compiler is a fluent builder for MJML template compilation.
+type Compiler struct {
+	ctx          context.Context
+	mjmlSrc      string
+	minify       bool
+	beautify     bool
+	keepComments bool
+	err          error
+}
+
+// Compile creates a new fluent Compiler with the provided MJML source.
+func Compile(ctx context.Context, mjmlSrc string) *Compiler {
+	c := &Compiler{
+		ctx:     ctx,
+		mjmlSrc: mjmlSrc,
+	}
+	if mjmlSrc == "" {
+		c.err = fmt.Errorf("mjml source cannot be empty")
+	}
+	return c
+}
+
+// WithMinify enables or disables HTML minification.
+func (c *Compiler) WithMinify(minify bool) *Compiler {
+	if c.err != nil {
+		return c
+	}
+	c.minify = minify
+	return c
+}
+
+// WithBeautify enables or disables HTML beautification.
+func (c *Compiler) WithBeautify(beautify bool) *Compiler {
+	if c.err != nil {
+		return c
+	}
+	c.beautify = beautify
+	return c
+}
+
+// WithKeepComments sets whether to keep XML/HTML comments in output.
+func (c *Compiler) WithKeepComments(keepComments bool) *Compiler {
+	if c.err != nil {
+		return c
+	}
+	c.keepComments = keepComments
+	return c
+}
+
+// Run executes the compilation and returns the generated HTML.
+func (c *Compiler) Run() (string, error) {
+	if c.err != nil {
+		return "", c.err
+	}
+	return ToHTML(c.ctx, c.mjmlSrc, WithMinify(c.minify), WithBeautify(c.beautify), WithKeepComments(c.keepComments))
+}
+
+
 type jsonResult struct {
 	HTML  string `json:"html"`
-	Error *string `json:"error,omitempty"`
+	Error *struct {
+		Message string `json:"message"`
+	} `json:"error,omitempty"`
 }
 
 // ToHTML compiles MJML markup template to standard email-compatible HTML.
@@ -191,63 +172,30 @@ func ToHTML(ctx context.Context, mjmlSrc string, opts ...Option) (string, error)
 		return "", fmt.Errorf("failed to marshal JSON payload: %w", err)
 	}
 
-	inputLen := uint64(len(inputBytes))
+	stdin := bytes.NewReader(inputBytes)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 
 	// Instantiate WASM module on-demand to guarantee complete isolation, thread safety, and resource cleanups
-	mod, err := runtime.InstantiateModule(ctx, compiled, wazero.NewModuleConfig().WithName(fmt.Sprintf("mjml-%d", rand.Int63())))
+	modConfig := wazero.NewModuleConfig().
+		WithName(fmt.Sprintf("mjml-%d", rand.Int63())).
+		WithStdin(stdin).
+		WithStdout(&stdout).
+		WithStderr(&stderr)
+
+	mod, err := runtime.InstantiateModule(ctx, compiled, modConfig)
 	if err != nil {
-		return "", fmt.Errorf("failed to instantiate WASM module: %w", err)
+		return "", fmt.Errorf("failed to run WASM compiler (stderr: %q): %w", stderr.String(), err)
 	}
 	defer mod.Close(ctx)
 
-	allocate := mod.ExportedFunction("allocate")
-	deallocate := mod.ExportedFunction("deallocate")
-	run := mod.ExportedFunction("run_e")
-	memory := mod.Memory()
-
-	if allocate == nil || deallocate == nil || run == nil || memory == nil {
-		return "", errors.New("exported WASM symbols are missing")
-	}
-
-	res, err := allocate.Call(ctx, inputLen)
-	if err != nil {
-		return "", fmt.Errorf("failed to allocate memory inside WASM: %w", err)
-	}
-	if len(res) == 0 {
-		return "", errors.New("allocate call returned empty slice")
-	}
-
-	inputPtr := res[0]
-	defer deallocate.Call(ctx, inputPtr)
-
-	if !memory.Write(uint32(inputPtr), inputBytes) {
-		return "", errors.New("failed to write input payload to WASM memory")
-	}
-
-	ident := rand.Int31()
-	resultCh := make(chan []byte, 1)
-	results.Store(ident, resultCh)
-	defer results.Delete(ident)
-
-	_, err = run.Call(ctx, inputPtr, inputLen, uint64(ident))
-	if err != nil {
-		return "", fmt.Errorf("failed to run WASM compiler: %w", err)
-	}
-
-	var resultBytes []byte
-	select {
-	case resultBytes = <-resultCh:
-	case <-ctx.Done():
-		return "", ctx.Err()
-	}
-
 	var parsed jsonResult
-	if err := json.Unmarshal(resultBytes, &parsed); err != nil {
-		return "", fmt.Errorf("failed to unmarshal WASM result: %w", err)
+	if err := json.Unmarshal(stdout.Bytes(), &parsed); err != nil {
+		return "", fmt.Errorf("failed to unmarshal WASM stdout (stderr: %q): %w", stderr.String(), err)
 	}
 
 	if parsed.Error != nil {
-		return "", errors.New(*parsed.Error)
+		return "", errors.New(parsed.Error.Message)
 	}
 
 	return parsed.HTML, nil

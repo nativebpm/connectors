@@ -19,7 +19,7 @@ func TestToHTML(t *testing.T) {
 </mjml>`
 
 	ctx := context.Background()
-	html, err := ToHTML(ctx, input, WithMinify(true))
+	html, err := Compile(ctx, input).WithMinify(true).Run()
 	if err != nil {
 		t.Fatalf("ToHTML failed: %v", err)
 	}
