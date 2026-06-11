@@ -1,0 +1,11 @@
+/workspace/connectors/mail/mjml/mrml-compiler/target/wasm32-wasip1/release/deps/htmlparser-6e6d997e65854c6e.d: /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/lib.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/error.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/stream.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/strspan.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/xmlchar.rs
+
+/workspace/connectors/mail/mjml/mrml-compiler/target/wasm32-wasip1/release/deps/libhtmlparser-6e6d997e65854c6e.rlib: /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/lib.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/error.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/stream.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/strspan.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/xmlchar.rs
+
+/workspace/connectors/mail/mjml/mrml-compiler/target/wasm32-wasip1/release/deps/libhtmlparser-6e6d997e65854c6e.rmeta: /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/lib.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/error.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/stream.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/strspan.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/xmlchar.rs
+
+/usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/lib.rs:
+/usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/error.rs:
+/usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/stream.rs:
+/usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/strspan.rs:
+/usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/htmlparser-0.2.1/src/xmlchar.rs:

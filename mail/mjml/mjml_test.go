@@ -34,3 +34,32 @@ func TestToHTML(t *testing.T) {
 
 	t.Logf("Compiled MJML successfully. Output length: %d", len(html))
 }
+
+func BenchmarkToHTML(b *testing.B) {
+	input := `
+<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text>Hello PONEN Team</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>`
+	ctx := context.Background()
+
+	// Run once to initialize the engine compiled cache
+	_, err := ToHTML(ctx, input)
+	if err != nil {
+		b.Fatalf("initial compilation failed: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := ToHTML(ctx, input, WithMinify(true))
+		if err != nil {
+			b.Fatalf("compilation failed at iteration %d: %v", i, err)
+		}
+	}
+}
+

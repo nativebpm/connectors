@@ -1,0 +1,14 @@
+/workspace/connectors/mail/mjml/mrml-compiler/target/wasm32-wasip1/release/deps/thiserror-00c414b2bfb53809.d: /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs /workspace/connectors/mail/mjml/mrml-compiler/target/wasm32-wasip1/release/build/thiserror-3d00d9156e5a7dfb/out/private.rs
+
+/workspace/connectors/mail/mjml/mrml-compiler/target/wasm32-wasip1/release/deps/libthiserror-00c414b2bfb53809.rlib: /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs /workspace/connectors/mail/mjml/mrml-compiler/target/wasm32-wasip1/release/build/thiserror-3d00d9156e5a7dfb/out/private.rs
+
+/workspace/connectors/mail/mjml/mrml-compiler/target/wasm32-wasip1/release/deps/libthiserror-00c414b2bfb53809.rmeta: /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs /workspace/connectors/mail/mjml/mrml-compiler/target/wasm32-wasip1/release/build/thiserror-3d00d9156e5a7dfb/out/private.rs
+
+/usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs:
+/usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs:
+/usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs:
+/usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs:
+/usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs:
+/workspace/connectors/mail/mjml/mrml-compiler/target/wasm32-wasip1/release/build/thiserror-3d00d9156e5a7dfb/out/private.rs:
+
+# env-dep:OUT_DIR=/workspace/connectors/mail/mjml/mrml-compiler/target/wasm32-wasip1/release/build/thiserror-3d00d9156e5a7dfb/out
