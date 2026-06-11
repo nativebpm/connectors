@@ -44,8 +44,8 @@ type SnapshotStore interface {
 	SaveWasm(hash string, wasmBytes []byte) error
 	LoadWasm(hash string) ([]byte, error)
 
-	UpdateActiveIndex(id string, info []byte, completed bool) error
-	LoadActiveIndex() ([]byte, error)
+	UpdateActiveIndex(ctx context.Context, id string, info []byte, completed bool) error
+	LoadActiveIndex(ctx context.Context) ([]byte, error)
 }
 
 type Engine struct {
