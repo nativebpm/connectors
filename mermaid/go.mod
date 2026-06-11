@@ -2,7 +2,7 @@ module github.com/nativebpm/connectors/mermaid
 
 go 1.26
 
-require github.com/nativebpm/connectors/bpmn v0.0.16
+require github.com/nativebpm/bpmn v0.0.16
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.9 // indirect

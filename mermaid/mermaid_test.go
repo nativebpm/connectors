@@ -3,7 +3,7 @@ package mermaid
 import (
 	"testing"
 
-	"github.com/nativebpm/connectors/bpmn"
+	"github.com/nativebpm/bpmn"
 )
 
 func TestGenerate(t *testing.T) {
@@ -18,10 +18,11 @@ func TestGenerate(t *testing.T) {
   </bpmn:process>
 </bpmn:definitions>`
 
-	pp, err := bpmn.ParseBPMN([]byte(xmlData))
+	processes, err := bpmn.ParseBPMN([]byte(xmlData))
 	if err != nil {
 		t.Fatalf("failed to parse BPMN: %v", err)
 	}
+	pp := processes["order_process"]
 
 	result, err := Generate(pp)
 	if err != nil {

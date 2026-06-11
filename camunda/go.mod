@@ -8,7 +8,7 @@ require (
 )
 
 require (
-	github.com/nativebpm/connectors/bpmn v0.0.10
+	github.com/nativebpm/bpmn v0.0.10
 	github.com/sequinstream/sequin-go v0.2.0
 	github.com/stretchr/testify v1.11.1
 )

@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/nativebpm/connectors/bpmn"
+	"github.com/nativebpm/bpmn"
 )
 
 const integrationBPMN = `<?xml version="1.0" encoding="UTF-8"?>
@@ -221,8 +221,10 @@ func TestBPMNVSRealCamunda(t *testing.T) {
 	// ==========================================
 	// RUNNING ON OUR OWN BPMN ENGINE
 	// ==========================================
-	pp, err := bpmn.ParseBPMN(xmlData)
+	processes, err := bpmn.ParseBPMN(xmlData)
 	require.NoError(t, err)
+	pp := processes["gateways_process"]
+	require.NotNil(t, pp)
 	assert.Equal(t, "gateways_process", pp.ID)
 
 	engine := bpmn.NewEngine(pp, nil)

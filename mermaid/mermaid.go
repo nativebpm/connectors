@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/nativebpm/connectors/bpmn"
+	"github.com/nativebpm/bpmn"
 )
 
 // Generate converts a parsed BPMN process to a Mermaid TD flowchart string.

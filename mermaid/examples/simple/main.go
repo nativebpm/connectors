@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/nativebpm/connectors/bpmn"
+	"github.com/nativebpm/bpmn"
 	"github.com/nativebpm/connectors/mermaid"
 )
 
@@ -35,11 +35,12 @@ func main() {
 	}
 
 	// 3. Parse XML using BPMN parser to generate execution graph
-	pp, err := bpmn.ParseBPMN(xmlData)
+	processes, err := bpmn.ParseBPMN(xmlData)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error parsing BPMN XML: %v\n", err)
 		os.Exit(1)
 	}
+	pp := processes["customer_onboarding"]
 
 	// 4. Translate parsed execution graph to Mermaid flowchart
 	mermaidMD, err := mermaid.Generate(pp)
