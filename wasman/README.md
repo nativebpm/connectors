@@ -24,8 +24,8 @@ Modern distributed architectures often require executing long-running or multi-s
       ┌──────────┴──────────┐
       ▼                     ▼
 ┌───────────┐         ┌───────────┐
-│ bpmn_vm   │ (WASM)  │  worker   │ (WASM Business Logic)
-│ Interpreter         │  Executor │
+│ guest_vm  │ (WASM)  │  worker   │ (WASM Business Logic)
+│ (e.g. DMN)│         │  Executor │
 └─────┬─────┘         └─────┬─────┘
       │                     │
       └──────────┬──────────┘
@@ -39,6 +39,10 @@ Modern distributed architectures often require executing long-running or multi-s
          ▼                 ▼
     [ S3 Storage ]   [ Memory Storage ]
 ```
+
+> [!NOTE]
+> The **wasman** core module is designed to be highly minimal, depending only on `S3` (via the S3 Snapshot Store) and `wasman/runner` (the guest-side runner SDK). All other modules under `examples/` (such as `camunda`, `temporal`, or `gotenberg-telegram`) are purely integration demonstration folders and not core dependencies of the execution engine.
+
 
 ---
 

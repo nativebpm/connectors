@@ -1,9 +1,9 @@
 go 1.26
 
 use (
-	./bpmn
 	./camunda
 	./cryptauth
+
 	./cryptenv
 	./gotenberg
 	./httpstream
