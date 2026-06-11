@@ -4,6 +4,7 @@ go 1.26
 
 require (
 	github.com/andybalholm/brotli v1.2.1
+	github.com/nativebpm/connectors/compress v0.0.1
 	github.com/tetratelabs/wazero v1.12.0
 )
 
