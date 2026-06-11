@@ -1,13 +1,17 @@
 go 1.26
 
 use (
+	./ai
 	./camunda
+	./compress
 	./cryptauth
 
 	./cryptenv
 	./gotenberg
 	./httpstream
+	./jsonschema
 	./logger
+	./mail
 	./sequin
 	./telegram
 	./temporal
