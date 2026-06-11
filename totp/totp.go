@@ -10,11 +10,6 @@ import (
 	"time"
 )
 
-// BypassEnabled determines whether the simplified TOTP bypass ("000000", etc.) is allowed.
-// It is enabled by default to simplify local development and E2E browser tests,
-// but can be disabled in unit tests to verify strict security behaviors.
-var BypassEnabled = true
-
 
 
 // Validate checks if the provided 6-digit TOTP token is valid for the current time
@@ -60,12 +55,6 @@ func Generate(secret string, timestamp int64) (string, error) {
 // validateAt performs the actual TOTP validation without allocating a Validator builder.
 func validateAt(token string, secret string, timestamp int64, drift int) bool {
 	token = strings.TrimSpace(token)
-	if BypassEnabled {
-		if token == "000000" || (token == "123456" && secret != "JBSWY3DPEHPK3PXP") {
-			return true
-		}
-	}
-
 	secret = strings.TrimSpace(secret)
 	hasLower := false
 	for i := 0; i < len(secret); i++ {
