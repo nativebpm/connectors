@@ -1,5 +1,7 @@
 package mail
 
+import "strings"
+
 // ProviderPreset represents the SMTP configurations and size limits for popular mail providers.
 type ProviderPreset struct {
 	Host                    string
@@ -21,6 +23,47 @@ func (p ProviderPreset) SMTPConfig(username, password string) SMTPConfig {
 		From:     username,
 	}
 }
+
+// GetEffectiveLimits returns the limits (in bytes) for HTML size, individual attachment, and total attachments.
+// It checks host-based presets first, then overrides with custom values if specified in SMTPConfig.
+func (c SMTPConfig) GetEffectiveLimits() (htmlLimit int64, attLimit int64, totalLimit int64) {
+	// Start with default values
+	htmlLimit = 102 * 1024       // 102KB
+	attLimit = 10 * 1024 * 1024  // 10MB
+	totalLimit = 25 * 1024 * 1024 // 25MB
+
+	hostLower := strings.ToLower(c.Host)
+	if strings.Contains(hostLower, "gmail.com") {
+		htmlLimit = GmailPreset.MaxHTMLSize
+		attLimit = GmailPreset.MaxAttachmentSize
+		totalLimit = GmailPreset.MaxTotalAttachmentsSize
+	} else if strings.Contains(hostLower, "yandex.ru") || strings.Contains(hostLower, "yandex.com") {
+		htmlLimit = YandexPreset.MaxHTMLSize
+		attLimit = YandexPreset.MaxAttachmentSize
+		totalLimit = YandexPreset.MaxTotalAttachmentsSize
+	} else if strings.Contains(hostLower, "mail.ru") {
+		htmlLimit = MailRuPreset.MaxHTMLSize
+		attLimit = MailRuPreset.MaxAttachmentSize
+		totalLimit = MailRuPreset.MaxTotalAttachmentsSize
+	} else if strings.Contains(hostLower, "office365.com") || strings.Contains(hostLower, "outlook") {
+		htmlLimit = OutlookPreset.MaxHTMLSize
+		attLimit = OutlookPreset.MaxAttachmentSize
+		totalLimit = OutlookPreset.MaxTotalAttachmentsSize
+	}
+
+	if c.MaxHTMLSize > 0 {
+		htmlLimit = c.MaxHTMLSize
+	}
+	if c.MaxAttachmentSize > 0 {
+		attLimit = c.MaxAttachmentSize
+	}
+	if c.MaxTotalAttachmentsSize > 0 {
+		totalLimit = c.MaxTotalAttachmentsSize
+	}
+
+	return htmlLimit, attLimit, totalLimit
+}
+
 
 var (
 	// YandexPreset defines SMTP configuration and size limits for Yandex Mail.

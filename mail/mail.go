@@ -18,13 +18,16 @@ import (
 
 // SMTPConfig represents the SMTP server settings.
 type SMTPConfig struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	From     string `json:"from"`
-	FromName string `json:"from_name"`
-	UseSSL   bool   `json:"use_ssl"`
+	Host                    string `json:"host"`
+	Port                    int    `json:"port"`
+	Username                string `json:"username"`
+	Password                string `json:"password"`
+	From                    string `json:"from"`
+	FromName                string `json:"from_name"`
+	UseSSL                  bool   `json:"use_ssl"`
+	MaxHTMLSize             int64  `json:"max_html_size"`
+	MaxAttachmentSize       int64  `json:"max_attachment_size"`
+	MaxTotalAttachmentsSize int64  `json:"max_total_attachments_size"`
 }
 
 // AttachmentStore is a self-hosted S3/MinIO/Local abstraction for temporary attachment storage.
@@ -103,7 +106,7 @@ func (m *MessageBuilder) WithMaxHTMLSize(size int64) *MessageBuilder {
 // validateLimits checks if a new attachment of the given size would exceed configured individual or total limits.
 func (m *MessageBuilder) validateLimits(newSize int64) error {
 	if m.maxAttachmentSize > 0 && newSize > m.maxAttachmentSize {
-		return fmt.Errorf("attachment size %d bytes exceeds the maximum allowed individual limit of %d bytes", newSize, m.maxAttachmentSize)
+		return fmt.Errorf("attachment size %.2f MB exceeds the maximum allowed individual limit of %.2f MB", float64(newSize)/(1024*1024), float64(m.maxAttachmentSize)/(1024*1024))
 	}
 
 	var currentTotal int64
@@ -112,7 +115,7 @@ func (m *MessageBuilder) validateLimits(newSize int64) error {
 	}
 
 	if m.maxTotalAttachmentsSize > 0 && (currentTotal+newSize) > m.maxTotalAttachmentsSize {
-		return fmt.Errorf("total attachments size %d bytes exceeds the maximum allowed combined limit of %d bytes", currentTotal+newSize, m.maxTotalAttachmentsSize)
+		return fmt.Errorf("total attachments size %.2f MB exceeds the maximum allowed combined limit of %.2f MB", float64(currentTotal+newSize)/(1024*1024), float64(m.maxTotalAttachmentsSize)/(1024*1024))
 	}
 
 	return nil
@@ -185,11 +188,12 @@ func (m *MessageBuilder) HTML(htmlContent string) *MessageBuilder {
 	if m.err != nil {
 		return m
 	}
-	if m.maxHTMLSize > 0 && int64(len(htmlContent)) > m.maxHTMLSize {
-		m.err = fmt.Errorf("HTML body size %d bytes exceeds the maximum allowed limit of %d bytes", len(htmlContent), m.maxHTMLSize)
+	compressed := compressInlineBase64Images(htmlContent)
+	if m.maxHTMLSize > 0 && int64(len(compressed)) > m.maxHTMLSize {
+		m.err = fmt.Errorf("HTML body size %.2f MB exceeds the maximum allowed limit of %.2f MB", float64(len(compressed))/(1024*1024), float64(m.maxHTMLSize)/(1024*1024))
 		return m
 	}
-	m.body = htmlContent
+	m.body = compressed
 	m.isHTML = true
 	return m
 }
@@ -463,17 +467,17 @@ func (m *MessageBuilder) Send(config SMTPConfig) error {
 	for _, att := range m.attachments {
 		size := int64(len(att.Data))
 		if m.maxAttachmentSize > 0 && size > m.maxAttachmentSize {
-			return fmt.Errorf("attachment %q size %d bytes exceeds the maximum allowed individual limit of %d bytes", att.Filename, size, m.maxAttachmentSize)
+			return fmt.Errorf("attachment %q size %.2f MB exceeds the maximum allowed individual limit of %.2f MB", att.Filename, float64(size)/(1024*1024), float64(m.maxAttachmentSize)/(1024*1024))
 		}
 		totalSize += size
 	}
 	if m.maxTotalAttachmentsSize > 0 && totalSize > m.maxTotalAttachmentsSize {
-		return fmt.Errorf("total attachments size %d bytes exceeds the maximum allowed combined limit of %d bytes", totalSize, m.maxTotalAttachmentsSize)
+		return fmt.Errorf("total attachments size %.2f MB exceeds the maximum allowed combined limit of %.2f MB", float64(totalSize)/(1024*1024), float64(m.maxTotalAttachmentsSize)/(1024*1024))
 	}
 
 	// 1c. Validate HTML body size limit if isHTML is true
 	if m.isHTML && m.maxHTMLSize > 0 && int64(len(m.body)) > m.maxHTMLSize {
-		return fmt.Errorf("HTML body size %d bytes exceeds the maximum allowed limit of %d bytes", len(m.body), m.maxHTMLSize)
+		return fmt.Errorf("HTML body size %.2f MB exceeds the maximum allowed limit of %.2f MB", float64(len(m.body))/(1024*1024), float64(m.maxHTMLSize)/(1024*1024))
 	}
 
 	fromEmail := config.From

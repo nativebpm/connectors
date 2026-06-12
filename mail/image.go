@@ -2,14 +2,45 @@ package mail
 
 import (
 	"bytes"
+	"encoding/base64"
 	"image"
 	"image/color"
 	_ "image/gif"
 	"image/jpeg"
 	"image/png"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
+
+var base64ImageRegexp = regexp.MustCompile(`(?i)src=\s*["']data:(image/[^;]+);base64,([^"']+)["']`)
+
+// compressInlineBase64Images processes the HTML body, decodes and compresses all inline base64 images.
+func compressInlineBase64Images(html string) string {
+	return base64ImageRegexp.ReplaceAllStringFunc(html, func(match string) string {
+		submatches := base64ImageRegexp.FindStringSubmatch(match)
+		if len(submatches) < 3 {
+			return match
+		}
+		contentType := submatches[1]
+		base64Data := strings.TrimSpace(submatches[2])
+
+		// Decode base64
+		data, err := base64.StdEncoding.DecodeString(base64Data)
+		if err != nil {
+			return match
+		}
+
+		// Optimize image (resize and compress if > 100KB)
+		optData, _, _ := optimizeImage(data, "inline_image", contentType)
+
+		// Encode back to base64
+		optBase64 := base64.StdEncoding.EncodeToString(optData)
+
+		return `src="data:` + contentType + `;base64,` + optBase64 + `"`
+	})
+}
+
 
 // hasTransparency checks if any pixel in the image is semi-transparent.
 func hasTransparency(img image.Image) bool {

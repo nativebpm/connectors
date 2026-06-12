@@ -3,6 +3,7 @@ package mail
 import (
 	"bufio"
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"image"
 	"image/color"
@@ -746,6 +747,38 @@ func TestHTMLSizeLimits(t *testing.T) {
 		t.Errorf("unexpected error message from Send: %v", err)
 	}
 }
+
+func TestBase64ImageCompressionInHTML(t *testing.T) {
+	opaqueData := generateLargeImage(800, 600, false, false)
+	base64Opaque := base64.StdEncoding.EncodeToString(opaqueData)
+	
+	htmlInput := `<html><body><img src="data:image/jpeg;base64,` + base64Opaque + `" /></body></html>`
+	
+	// Set maxHTMLSize to a larger value so it doesn't fail eager validation
+	builder := NewMessage().WithMaxHTMLSize(10 * 1024 * 1024)
+	builder.HTML(htmlInput)
+	
+	if builder.Error() != nil {
+		t.Fatalf("unexpected error: %v", builder.Error())
+	}
+	
+	// Check that the body is HTML and the base64 string was compressed
+	if !builder.isHTML {
+		t.Error("expected body to be HTML")
+	}
+	
+	// Extract the new base64 data and verify it is shorter
+	matches := base64ImageRegexp.FindStringSubmatch(builder.body)
+	if len(matches) < 3 {
+		t.Fatalf("could not find base64 image in compressed HTML: %s", builder.body)
+	}
+	
+	compressedBase64 := matches[2]
+	if len(compressedBase64) >= len(base64Opaque) {
+		t.Errorf("expected base64 length to decrease: original %d, compressed %d", len(base64Opaque), len(compressedBase64))
+	}
+}
+
 
 
 
