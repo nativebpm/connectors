@@ -435,6 +435,19 @@ func base64Wrap(data []byte) string {
 	return buf.String()
 }
 
+// EstimateSize returns the estimated total size of the raw MIME email (in bytes).
+func (m *MessageBuilder) EstimateSize() int64 {
+	size := int64(len(m.body))
+	for _, att := range m.attachments {
+		size += int64(len(att.Data))
+		// Base64 overhead is ~33%
+		if len(att.Data) > 0 {
+			size += int64(float64(len(att.Data)) * 0.33)
+		}
+	}
+	return size
+}
+
 // Send delivers the message using the provided SMTP server configuration.
 func (m *MessageBuilder) Send(config SMTPConfig) error {
 	if m.err != nil {
