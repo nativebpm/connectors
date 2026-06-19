@@ -36,3 +36,11 @@ Simulates a host crash during checkpointing, reload session state from the Snaps
 # From workspace root
 go run connectors/wasmee/examples/crash-recovery/main.go
 ```
+
+### 3. Todo List Durable Web App
+A full-featured web server demonstrating a durable multi-step user task (TODO list) workflow using Wasmee:
+```bash
+# From workspace root
+go run connectors/wasmee/examples/todo-list/main.go
+```
+The web server will start on port `8080` (or `PORT` env var). You can interact with it via its HTTP endpoints.
