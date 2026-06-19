@@ -398,3 +398,49 @@ func TestDynamicWasmModuleExecution(t *testing.T) {
 	}
 }
 
+func TestFluentRunnerExecution(t *testing.T) {
+	stop := startRustServer(t)
+	defer stop()
+
+	wasmPath := "../../wasmee/target/wasm32-wasip1/release/wasmee_guest.wasm"
+	wasmBytes, err := os.ReadFile(wasmPath)
+	if err != nil {
+		t.Fatalf("failed to read guest WASM: %v", err)
+	}
+
+	ctx := context.Background()
+	instanceID := "fluent-session-1"
+	store := newTestStore()
+
+	meta := &olme.InstanceMeta{
+		InstanceID: instanceID,
+		WasmHash:   "test_hash",
+		Version:    0,
+	}
+	_, _ = store.SaveMetadata(ctx, meta)
+
+	crashed, err := NewFluentRunner().
+		WithContext(ctx).
+		WithServerAddress("http://localhost:8081").
+		WithWasmBytes(wasmBytes).
+		WithStore(store).
+		WithSessionID(instanceID).
+		WithEntrypoint("run_test").
+		Run()
+
+	if err != nil {
+		t.Fatalf("fluent run failed: %v", err)
+	}
+	if crashed {
+		t.Fatalf("expected crashed=false, got true")
+	}
+
+	oplogs, err := store.LoadOplog(ctx, instanceID)
+	if err != nil {
+		t.Fatalf("failed to load oplog: %v", err)
+	}
+	if len(oplogs) == 0 {
+		t.Fatalf("expected oplogs to be recorded, got 0")
+	}
+}
+
