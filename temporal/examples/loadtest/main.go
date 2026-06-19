@@ -2,15 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
-	"math/rand"
+	"encoding/json"
+	"log"
+	"net/http"
 	"os"
-	"sort"
-	"strconv"
-	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/nativebpm/connectors/temporal"
@@ -18,209 +13,109 @@ import (
 	"go.temporal.io/sdk/client"
 )
 
-var (
-	startedInstances   atomic.Int64
-	completedInstances atomic.Int64
-	failedInstances    atomic.Int64
-
-	startTimes  sync.Map
-	durationsMu sync.Mutex
-	durations   []time.Duration
-)
-
 func main() {
-	// Use structured slog for logging
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
-
-	// Read parameters from environment variables
-	concurrency := 20
-	if val := os.Getenv("LOAD_CONCURRENCY"); val != "" {
-		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
-			concurrency = parsed
-		}
-	}
-
-	totalProcesses := 100
-	if val := os.Getenv("LOAD_PROCESSES_COUNT"); val != "" {
-		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
-			totalProcesses = parsed
-		}
-	}
-
-	submissionDelayMs := 0
-	if val := os.Getenv("LOAD_SUBMISSION_DELAY_MS"); val != "" {
-		if parsed, err := strconv.Atoi(val); err == nil && parsed >= 0 {
-			submissionDelayMs = parsed
-		}
-	}
-
-	logger.Info("TEMPORAL LOAD TEST INITIALIZED",
-		"concurrency", concurrency,
-		"total_processes", totalProcesses,
-		"submission_delay_ms", submissionDelayMs,
-	)
+	log.Println("Initializing Temporal Load Test HTTP Server...")
 
 	cfg := temporal.LoadFromEnv()
+	// Set default host/port if not present
+	if cfg.HostPort == "" {
+		cfg.HostPort = "127.0.0.1:7233"
+	}
+	if cfg.TaskQueue == "" {
+		cfg.TaskQueue = "default-task-queue"
+	}
 
 	// Initialize client
 	c, err := temporal.NewClient(cfg)
 	if err != nil {
-		logger.Error("Failed to create Temporal client", "error", err)
-		return
+		log.Fatalf("Failed to create Temporal client: %v", err)
 	}
 	defer c.Close()
 
-	// Initialize worker
+	// Initialize and start worker in background
 	w := temporal.NewWorker(c, cfg.TaskQueue)
-
-	// Register Workflow and Activity from helloworld example
 	w.RegisterWorkflow(helloworld.GreetWorkflow)
 	w.RegisterActivity(helloworld.GreetActivity)
 
-	// Run worker in background
 	err = w.Start()
 	if err != nil {
-		logger.Error("Failed to start worker", "error", err)
-		return
+		log.Fatalf("Failed to start worker: %v", err)
 	}
 	defer w.Stop()
 
-	doneChan := make(chan struct{})
+	log.Printf("Temporal worker started on queue: %s", cfg.TaskQueue)
 
-	// Start progress monitoring
-	startTime := time.Now()
-	go func() {
-		ticker := time.NewTicker(1 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-doneChan:
-				return
-			case <-ticker.C:
-				elapsed := time.Since(startTime).Seconds()
-				completed := completedInstances.Load()
-				started := startedInstances.Load()
-				failed := failedInstances.Load()
-				logger.Info("Progress",
-					"elapsed_seconds", fmt.Sprintf("%.1f", elapsed),
-					"started", started,
-					"completed", completed,
-					"failed", failed,
-					"percentage", fmt.Sprintf("%.1f%%", float64(completed)/float64(totalProcesses)*100),
-				)
-			}
+	// HTTP handlers
+	http.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
 		}
-	}()
 
-	// Start instances concurrently in goroutines
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, concurrency) // Restrict dispatch concurrency
+		workflowID := "loadtest-workflow-" + uuid.New().String()
+		options := client.StartWorkflowOptions{
+			ID:        workflowID,
+			TaskQueue: cfg.TaskQueue,
+		}
 
-	for i := 1; i <= totalProcesses; i++ {
-		wg.Add(1)
-		go func(num int) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
+		// Execute workflow (E2E with waiting)
+		run, err := c.ExecuteWorkflow(context.Background(), options, helloworld.GreetWorkflow, "LoadTest")
+		if err != nil {
+			log.Printf("Error starting workflow: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 
-			workflowID := "loadtest-workflow-" + uuid.New().String()
-			options := client.StartWorkflowOptions{
-				ID:        workflowID,
-				TaskQueue: cfg.TaskQueue,
-			}
+		var result string
+		err = run.Get(context.Background(), &result)
+		if err != nil {
+			log.Printf("Error executing workflow: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 
-			startTimes.Store(workflowID, time.Now())
-
-			// Start workflow
-			run, err := c.ExecuteWorkflow(context.Background(), options, helloworld.GreetWorkflow, fmt.Sprintf("Load-%d", num))
-			if err != nil {
-				failedInstances.Add(1)
-				logger.Error("Error starting workflow", "id", workflowID, "error", err)
-				return
-			}
-			startedInstances.Add(1)
-
-			// Wait for result
-			var result string
-			err = run.Get(context.Background(), &result)
-			if err != nil {
-				failedInstances.Add(1)
-				logger.Error("Error executing workflow", "id", workflowID, "error", err)
-				return
-			}
-
-			// Compute latency
-			if startVal, ok := startTimes.Load(workflowID); ok {
-				if st, ok := startVal.(time.Time); ok {
-					durationsMu.Lock()
-					durations = append(durations, time.Since(st))
-					durationsMu.Unlock()
-					startTimes.Delete(workflowID)
-				}
-			}
-
-			completedInstances.Add(1)
-
-			if submissionDelayMs > 0 {
-				time.Sleep(time.Duration(submissionDelayMs+rand.Intn(10)) * time.Millisecond)
-			}
-		}(i)
-	}
-
-	// Wait for dispatch and completion of all goroutines
-	wg.Wait()
-	close(doneChan)
-
-	totalDuration := time.Since(startTime)
-
-	// Compute latency percentiles
-	durationsMu.Lock()
-	sort.Slice(durations, func(i, j int) bool {
-		return durations[i] < durations[j]
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"status": "completed",
+			"result": result,
+			"id":     workflowID,
+		})
 	})
 
-	p50 := time.Duration(0)
-	p90 := time.Duration(0)
-	p95 := time.Duration(0)
-	p99 := time.Duration(0)
-	avg := time.Duration(0)
-
-	if len(durations) > 0 {
-		var total time.Duration
-		for _, d := range durations {
-			total += d
+	http.HandleFunc("/ingest", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
 		}
-		avg = total / time.Duration(len(durations))
 
-		getPercentile := func(pct float64) time.Duration {
-			idx := int(float64(len(durations)) * pct / 100.0)
-			if idx >= len(durations) {
-				idx = len(durations) - 1
-			}
-			return durations[idx]
+		workflowID := "loadtest-workflow-" + uuid.New().String()
+		options := client.StartWorkflowOptions{
+			ID:        workflowID,
+			TaskQueue: cfg.TaskQueue,
 		}
-		p50 = getPercentile(50)
-		p90 = getPercentile(90)
-		p95 = getPercentile(95)
-		p99 = getPercentile(99)
+
+		// Execute workflow asynchronously
+		_, err := c.ExecuteWorkflow(context.Background(), options, helloworld.GreetWorkflow, "LoadTest")
+		if err != nil {
+			log.Printf("Error starting workflow: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"status": "accepted",
+			"id":     workflowID,
+		})
+	})
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8085"
 	}
-	durationsMu.Unlock()
 
-	// Output final statistics
-	logger.Info("TEMPORAL LOAD TEST RESULTS",
-		"total_duration", totalDuration,
-		"submitted", totalProcesses,
-		"completed", completedInstances.Load(),
-		"failed", failedInstances.Load(),
-		"throughput_rps", fmt.Sprintf("%.2f", float64(completedInstances.Load())/totalDuration.Seconds()),
-		// For HelloWorld (1 Workflow + 1 Activity), total tasks in engine = 2 * completed
-		"task_throughput_tps", fmt.Sprintf("%.2f", float64(completedInstances.Load()*2)/totalDuration.Seconds()),
-		"p50_latency_ms", p50.Milliseconds(),
-		"p90_latency_ms", p90.Milliseconds(),
-		"p95_latency_ms", p95.Milliseconds(),
-		"p99_latency_ms", p99.Milliseconds(),
-		"avg_latency_ms", avg.Milliseconds(),
-	)
+	log.Printf("Temporal Load Test HTTP Server listening on port %s...", port)
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
+		log.Fatalf("HTTP server failed: %v", err)
+	}
 }
