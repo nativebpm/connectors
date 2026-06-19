@@ -1,4 +1,4 @@
-go 1.26
+go 1.26.1
 
 use (
 	./ai
@@ -12,10 +12,10 @@ use (
 	./jsonschema
 	./logger
 	./mail
+	./restate
 	./sequin
 	./telegram
 	./temporal
-	./restate
 	./totp
 	./wasman
 	./wasman/runner
