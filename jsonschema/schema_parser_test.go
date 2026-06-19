@@ -320,3 +320,195 @@ func TestValidateJSONComplex(t *testing.T) {
 	}
 }
 
+func TestJSONSchemaComplianceTestSuite(t *testing.T) {
+	testCases := []struct {
+		name          string
+		schema        string
+		payload       string
+		expectValid   bool
+		expectErrSubs []string
+	}{
+		{
+			name: "number minimum constraint - valid",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"score": { "type": "number", "minimum": 10.5 }
+				}
+			}`,
+			payload:     `{"score": 11.2}`,
+			expectValid: true,
+		},
+		{
+			name: "number minimum constraint - invalid",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"score": { "type": "number", "minimum": 10.5 }
+				}
+			}`,
+			payload:     `{"score": 9.3}`,
+			expectValid: false,
+			expectErrSubs: []string{
+				"minimum", "10.5",
+			},
+		},
+		{
+			name: "number maximum constraint - valid",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"score": { "type": "number", "maximum": 100 }
+				}
+			}`,
+			payload:     `{"score": 100}`,
+			expectValid: true,
+		},
+		{
+			name: "number maximum constraint - invalid",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"score": { "type": "number", "maximum": 100 }
+				}
+			}`,
+			payload:     `{"score": 101}`,
+			expectValid: false,
+			expectErrSubs: []string{
+				"maximum", "100",
+			},
+		},
+		{
+			name: "string minLength constraint - valid",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"name": { "type": "string", "minLength": 5 }
+				}
+			}`,
+			payload:     `{"name": "abcdef"}`,
+			expectValid: true,
+		},
+		{
+			name: "string minLength constraint - invalid",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"name": { "type": "string", "minLength": 5 }
+				}
+			}`,
+			payload:     `{"name": "abcd"}`,
+			expectValid: false,
+			expectErrSubs: []string{
+				"at least", "5", "characters",
+			},
+		},
+		{
+			name: "string maxLength constraint - valid",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"name": { "type": "string", "maxLength": 5 }
+				}
+			}`,
+			payload:     `{"name": "abc"}`,
+			expectValid: true,
+		},
+		{
+			name: "string maxLength constraint - invalid",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"name": { "type": "string", "maxLength": 5 }
+				}
+			}`,
+			payload:     `{"name": "abcdef"}`,
+			expectValid: false,
+			expectErrSubs: []string{
+				"at most", "5", "characters",
+			},
+		},
+		{
+			name: "string pattern constraint - valid",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"code": { "type": "string", "pattern": "^[0-9]{3}$" }
+				}
+			}`,
+			payload:     `{"code": "123"}`,
+			expectValid: true,
+		},
+		{
+			name: "string pattern constraint - invalid",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"code": { "type": "string", "pattern": "^[0-9]{3}$" }
+				}
+			}`,
+			payload:     `{"code": "abc"}`,
+			expectValid: false,
+			expectErrSubs: []string{
+				"pattern",
+			},
+		},
+		{
+			name: "required properties - valid",
+			schema: `{
+				"type": "object",
+				"required": ["username", "email"],
+				"properties": {
+					"username": { "type": "string" },
+					"email": { "type": "string" }
+				}
+			}`,
+			payload:     `{"username": "admin", "email": "admin@example.com"}`,
+			expectValid: true,
+		},
+		{
+			name: "required properties - invalid",
+			schema: `{
+				"type": "object",
+				"required": ["username", "email"],
+				"properties": {
+					"username": { "type": "string" },
+					"email": { "type": "string" }
+				}
+			}`,
+			payload:     `{"username": "admin"}`,
+			expectValid: false,
+			expectErrSubs: []string{
+				"required", "email",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ok, errs, err := ValidateJSON(tc.schema, tc.payload)
+			if err != nil {
+				t.Fatalf("unexpected error running validation: %v", err)
+			}
+			if ok != tc.expectValid {
+				t.Errorf("expected validity %t, got %t. Errors: %v", tc.expectValid, ok, errs)
+			}
+			if !tc.expectValid && len(tc.expectErrSubs) > 0 {
+				for _, sub := range tc.expectErrSubs {
+					found := false
+					for _, e := range errs {
+						if strings.Contains(strings.ToLower(e), strings.ToLower(sub)) {
+							found = true
+							break
+						}
+					}
+					if !found {
+						t.Errorf("expected error containing substring %q, got errors: %v", sub, errs)
+					}
+				}
+			}
+		})
+	}
+}
+
+
