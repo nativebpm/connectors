@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/nativebpm/connectors/wasmee/olme"
@@ -20,6 +21,7 @@ import (
 type Runner struct {
 	httpAddr  string
 	wasmBytes []byte
+	apiToken  string
 }
 
 // NewRunner creates a new Go wasmee Runner.
@@ -27,9 +29,14 @@ func NewRunner(ctx context.Context, wasmBytes []byte, httpAddr string) (*Runner,
 	if !strings.HasPrefix(httpAddr, "http://") && !strings.HasPrefix(httpAddr, "https://") {
 		httpAddr = "http://" + httpAddr
 	}
+	apiToken := os.Getenv("API_TOKEN")
+	if apiToken == "" {
+		apiToken = "test-bearer-token"
+	}
 	return &Runner{
 		httpAddr:  httpAddr,
 		wasmBytes: wasmBytes,
+		apiToken:  apiToken,
 	}, nil
 }
 
@@ -122,6 +129,9 @@ func (r *Runner) Execute(ctx context.Context, session *Session, entrypoint strin
 		return false, nil, fmt.Errorf("failed to create http request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/x-protobuf")
+	if r.apiToken != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+r.apiToken)
+	}
 
 	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
