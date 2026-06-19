@@ -11,7 +11,7 @@ import (
 
 	"github.com/nativebpm/connectors/jsonschema"
 	"github.com/nativebpm/connectors/wasmee"
-	"gitlab.com/nativebpm/olme"
+	"github.com/nativebpm/connectors/wasmee/olme"
 )
 
 // memoryStore implements olme.SnapshotStore in memory.
@@ -709,20 +709,16 @@ const htmlContent = `<!DOCTYPE html>
             const submitBtn = document.getElementById('submit-btn');
             
             if (state.completed) {
-                statusContainer.innerHTML = `
-                    <div class="status-badge completed">✓ Process Completed</div>
-                    <p style="text-align: center; color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.5rem;">
-                        All steps of the BPMN todo process completed successfully!
-                    </p>
-                `;
+                statusContainer.innerHTML = '<div class="status-badge completed">✓ Process Completed</div>' +
+                    '<p style="text-align: center; color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.5rem;">' +
+                    'All steps of the BPMN todo process completed successfully!' +
+                    '</p>';
                 document.getElementById('form-fields').innerHTML = '';
                 submitBtn.style.display = 'none';
             } else {
                 const activeTask = state.active_nodes[0] || 'Unknown';
                 const taskLabel = activeTask === 'add_todo' ? 'Add Todo Item' : 'Complete Todo Item';
-                statusContainer.innerHTML = `
-                    <div class="status-badge">⚡ Active Task: ${taskLabel}</div>
-                `;
+                statusContainer.innerHTML = '<div class="status-badge">⚡ Active Task: ' + taskLabel + '</div>';
                 
                 // Render widgets
                 const formFields = document.getElementById('form-fields');

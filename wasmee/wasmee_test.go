@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.com/nativebpm/olme"
+	"github.com/nativebpm/connectors/wasmee/olme"
 )
 
 func startRustServer(t *testing.T) func() {

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/nativebpm/connectors/wasmee"
-	"gitlab.com/nativebpm/olme"
+	"github.com/nativebpm/connectors/wasmee/olme"
 )
 
 // memoryStore implements olme.SnapshotStore in memory.

@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nativebpm/connectors/wasmee"
-	"gitlab.com/nativebpm/olme"
+	"github.com/nativebpm/connectors/wasmee/olme"
 )
 
 // Simple in-memory store for load testing
