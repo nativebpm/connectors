@@ -145,7 +145,7 @@ func main() {
 		log.Fatalf("failed to read guest WASM binary: %v", err)
 	}
 
-	runner, err := wasmee.NewRunner(context.Background(), wasmBytes, "localhost:8081")
+	runner, err := wasmee.NewRunner(context.Background(), wasmBytes, "127.0.0.1:8081")
 	if err != nil {
 		log.Fatalf("failed to initialize wasmee runner: %v", err)
 	}

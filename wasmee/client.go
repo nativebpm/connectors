@@ -3,50 +3,42 @@ package wasmee
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/nativebpm/connectors/wasmee/olme"
 )
 
-// Bytes is a custom type that serializes/deserializes byte slices as JSON arrays of numbers.
+// Bytes is a custom type that serializes/deserializes byte slices as base64 strings.
 type Bytes []byte
 
 func (b Bytes) MarshalJSON() ([]byte, error) {
 	if b == nil {
-		return []byte("[]"), nil
+		return []byte(`""`), nil
 	}
-	var buf bytes.Buffer
-	buf.WriteByte('[')
-	for i, x := range b {
-		if i > 0 {
-			buf.WriteByte(',')
-		}
-		buf.WriteString(strconv.Itoa(int(x)))
-	}
-	buf.WriteByte(']')
-	return buf.Bytes(), nil
+	encoded := base64.StdEncoding.EncodeToString(b)
+	return json.Marshal(encoded)
 }
 
 func (b *Bytes) UnmarshalJSON(data []byte) error {
-	if string(data) == "null" {
+	if string(data) == "null" || string(data) == `""` {
 		*b = nil
 		return nil
 	}
-	var arr []int
-	if err := json.Unmarshal(data, &arr); err != nil {
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
 		return err
 	}
-	res := make([]byte, len(arr))
-	for i, x := range arr {
-		res[i] = byte(x)
+	decoded, err := base64.StdEncoding.DecodeString(str)
+	if err != nil {
+		return err
 	}
-	*b = res
+	*b = decoded
 	return nil
 }
 
