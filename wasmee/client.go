@@ -108,7 +108,9 @@ func (r *Runner) Execute(ctx context.Context, session *Session, entrypoint strin
 		MemoryDeltas:   deltas,
 		Oplog:          oplog,
 		ExchangeBuffer: exchangeBuffer,
+		WasmBytes:      r.wasmBytes,
 	}
+
 
 	protoBytes, err := proto.Marshal(reqBody)
 	if err != nil {

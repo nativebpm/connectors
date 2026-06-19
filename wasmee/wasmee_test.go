@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -314,3 +315,86 @@ func TestWasmRunnerSimulatedCrashRecovery(t *testing.T) {
 		t.Fatalf("expected final version 3, got %d", metaFinal.Version)
 	}
 }
+
+func TestDynamicWasmModuleExecution(t *testing.T) {
+	ctx := context.Background()
+	instanceID := "test-dynamic-wasm-instance"
+
+	// 1. Read valid guest WASM file
+	wasmBytes, err := os.ReadFile("../../wasmee/target/wasm32-wasip1/release/wasmee_guest.wasm")
+	if err != nil {
+		t.Fatalf("failed to read test WASM binary: %v", err)
+	}
+
+	cleanup := startRustServer(t)
+	defer cleanup()
+
+	store := newTestStore()
+	meta := &olme.InstanceMeta{
+		InstanceID: instanceID,
+		WasmHash:   "test_hash",
+		Version:    0,
+	}
+	store.SaveMetadata(ctx, meta)
+
+	state := olme.NewSessionState(instanceID, store)
+	if err := state.Load(ctx); err != nil {
+		t.Fatalf("failed to load state: %v", err)
+	}
+
+	// Initialize runner with valid WASM bytes
+	runner, err := NewRunner(ctx, wasmBytes, "localhost:8081")
+	if err != nil {
+		t.Fatalf("failed to create runner: %v", err)
+	}
+	defer runner.Close(ctx)
+
+	session := NewSession(instanceID, state)
+
+	// Case A: Verify successful execution with dynamic WASM bytes (first compile)
+	crashed, _, err := runner.Execute(ctx, session, "run_test", nil)
+	if err != nil {
+		t.Fatalf("dynamic execution failed: %v", err)
+	}
+	if crashed {
+		t.Fatalf("unexpected crash detected")
+	}
+
+	// Case B: Verify successful execution with cache hit (second run)
+	state2 := olme.NewSessionState(instanceID, store)
+	if err := state2.Load(ctx); err != nil {
+		t.Fatalf("failed to reload state: %v", err)
+	}
+	session2 := NewSession(instanceID, state2)
+	crashed2, _, err := runner.Execute(ctx, session2, "run_test", nil)
+	if err != nil {
+		t.Fatalf("cached execution failed: %v", err)
+	}
+	if crashed2 {
+		t.Fatalf("unexpected crash on cached execution")
+	}
+
+	// Case C: Verify compile failure with corrupt/invalid WASM bytes
+	corruptBytes := []byte("this is not a valid wasm file header")
+	corruptRunner, err := NewRunner(ctx, corruptBytes, "localhost:8081")
+	if err != nil {
+		t.Fatalf("failed to create corrupt runner: %v", err)
+	}
+	defer corruptRunner.Close(ctx)
+
+	state3 := olme.NewSessionState(instanceID, store)
+	_ = state3.Load(ctx)
+	session3 := NewSession(instanceID, state3)
+
+	crashed3, _, err := corruptRunner.Execute(ctx, session3, "run_test", nil)
+	if err == nil {
+		t.Fatalf("expected error executing corrupt WASM, got nil")
+	}
+	if !crashed3 {
+		t.Fatalf("expected crashed=true for compile error, got false")
+	}
+	if !strings.Contains(err.Error(), "Failed to compile") {
+		t.Fatalf("expected error message to contain 'Failed to compile', got: %v", err)
+	}
+}
+

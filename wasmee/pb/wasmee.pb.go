@@ -98,6 +98,7 @@ type ExecuteRequest struct {
 	MemoryDeltas   map[int32][]byte       `protobuf:"bytes,5,rep,name=memory_deltas,json=memoryDeltas,proto3" json:"memory_deltas,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Oplog          []*OplogEntry          `protobuf:"bytes,6,rep,name=oplog,proto3" json:"oplog,omitempty"`
 	ExchangeBuffer []byte                 `protobuf:"bytes,7,opt,name=exchange_buffer,json=exchangeBuffer,proto3" json:"exchange_buffer,omitempty"`
+	WasmBytes      []byte                 `protobuf:"bytes,8,opt,name=wasm_bytes,json=wasmBytes,proto3" json:"wasm_bytes,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -177,6 +178,13 @@ func (x *ExecuteRequest) GetOplog() []*OplogEntry {
 func (x *ExecuteRequest) GetExchangeBuffer() []byte {
 	if x != nil {
 		return x.ExchangeBuffer
+	}
+	return nil
+}
+
+func (x *ExecuteRequest) GetWasmBytes() []byte {
+	if x != nil {
+		return x.WasmBytes
 	}
 	return nil
 }
@@ -328,7 +336,7 @@ const file_wasmee_proto_rawDesc = "" +
 	"call_index\x18\x01 \x01(\x05R\tcallIndex\x12\x19\n" +
 	"\bapi_name\x18\x02 \x01(\tR\aapiName\x12'\n" +
 	"\x0frequest_payload\x18\x03 \x01(\fR\x0erequestPayload\x12)\n" +
-	"\x10response_payload\x18\x04 \x01(\fR\x0fresponsePayload\"\xf1\x02\n" +
+	"\x10response_payload\x18\x04 \x01(\fR\x0fresponsePayload\"\x90\x03\n" +
 	"\x0eExecuteRequest\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12\x1e\n" +
@@ -339,7 +347,9 @@ const file_wasmee_proto_rawDesc = "" +
 	"\rbase_snapshot\x18\x04 \x01(\fR\fbaseSnapshot\x12M\n" +
 	"\rmemory_deltas\x18\x05 \x03(\v2(.wasmee.ExecuteRequest.MemoryDeltasEntryR\fmemoryDeltas\x12(\n" +
 	"\x05oplog\x18\x06 \x03(\v2\x12.wasmee.OplogEntryR\x05oplog\x12'\n" +
-	"\x0fexchange_buffer\x18\a \x01(\fR\x0eexchangeBuffer\x1a?\n" +
+	"\x0fexchange_buffer\x18\a \x01(\fR\x0eexchangeBuffer\x12\x1d\n" +
+	"\n" +
+	"wasm_bytes\x18\b \x01(\fR\twasmBytes\x1a?\n" +
 	"\x11MemoryDeltasEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\"E\n" +
