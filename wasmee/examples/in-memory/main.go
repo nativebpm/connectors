@@ -142,7 +142,7 @@ func main() {
 	session := wasmee.NewSession(instanceID, state)
 
 	fmt.Printf("[HOST] Triggering execution of guest function \"run_test\"...\n")
-	crashed, err := runner.Execute(ctx, session, "run_test")
+	crashed, _, err := runner.Execute(ctx, session, "run_test", nil)
 	if err != nil {
 		fmt.Printf("Execution failed: %v (crashed: %v)\n", err, crashed)
 		os.Exit(1)

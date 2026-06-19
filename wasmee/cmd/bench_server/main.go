@@ -178,7 +178,7 @@ func main() {
 
 		session := wasmee.NewSession(instanceID, state)
 
-		crashed, err := runner.Execute(ctx, session, "run_test")
+		crashed, _, err := runner.Execute(ctx, session, "run_test", nil)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("execution failed: %v", err), http.StatusInternalServerError)
 			return

@@ -140,7 +140,7 @@ func main() {
 	session1.EnableCrashSimulation(true)
 
 	fmt.Println("[HOST] Executing RUN 1 with crash simulation enabled...")
-	crashed1, err1 := runner.Execute(ctx, session1, "run_test")
+	crashed1, _, err1 := runner.Execute(ctx, session1, "run_test", nil)
 	fmt.Printf("[HOST] RUN 1 completed. Crashed: %v, Error: %q\n", crashed1, err1)
 
 	// Verify state saved before crash
@@ -159,7 +159,7 @@ func main() {
 	session2.EnableCrashSimulation(false)
 
 	fmt.Println("[HOST] Executing RUN 2 to recover from checkpoint...")
-	crashed2, err2 := runner.Execute(ctx, session2, "run_test")
+	crashed2, _, err2 := runner.Execute(ctx, session2, "run_test", nil)
 	if err2 != nil {
 		fmt.Printf("[HOST] Recovery run failed: %v (crashed: %v)\n", err2, crashed2)
 		os.Exit(1)
