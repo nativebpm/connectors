@@ -99,6 +99,7 @@ type ExecuteRequest struct {
 	Oplog          []*OplogEntry          `protobuf:"bytes,6,rep,name=oplog,proto3" json:"oplog,omitempty"`
 	ExchangeBuffer []byte                 `protobuf:"bytes,7,opt,name=exchange_buffer,json=exchangeBuffer,proto3" json:"exchange_buffer,omitempty"`
 	WasmBytes      []byte                 `protobuf:"bytes,8,opt,name=wasm_bytes,json=wasmBytes,proto3" json:"wasm_bytes,omitempty"`
+	WasmHash       string                 `protobuf:"bytes,9,opt,name=wasm_hash,json=wasmHash,proto3" json:"wasm_hash,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -189,6 +190,13 @@ func (x *ExecuteRequest) GetWasmBytes() []byte {
 	return nil
 }
 
+func (x *ExecuteRequest) GetWasmHash() string {
+	if x != nil {
+		return x.WasmHash
+	}
+	return ""
+}
+
 type CheckpointData struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Memory        []byte                 `protobuf:"bytes,1,opt,name=memory,proto3" json:"memory,omitempty"`
@@ -242,15 +250,16 @@ func (x *CheckpointData) GetOplogLen() int32 {
 }
 
 type ExecuteResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Crashed       bool                   `protobuf:"varint,1,opt,name=crashed,proto3" json:"crashed,omitempty"`
-	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	FinalDeltas   map[int32][]byte       `protobuf:"bytes,3,rep,name=final_deltas,json=finalDeltas,proto3" json:"final_deltas,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	FinalOplog    []*OplogEntry          `protobuf:"bytes,4,rep,name=final_oplog,json=finalOplog,proto3" json:"final_oplog,omitempty"`
-	Checkpoints   []*CheckpointData      `protobuf:"bytes,5,rep,name=checkpoints,proto3" json:"checkpoints,omitempty"`
-	ResponseBytes []byte                 `protobuf:"bytes,6,opt,name=response_bytes,json=responseBytes,proto3" json:"response_bytes,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Crashed        bool                   `protobuf:"varint,1,opt,name=crashed,proto3" json:"crashed,omitempty"`
+	Error          string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	FinalDeltas    map[int32][]byte       `protobuf:"bytes,3,rep,name=final_deltas,json=finalDeltas,proto3" json:"final_deltas,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	FinalOplog     []*OplogEntry          `protobuf:"bytes,4,rep,name=final_oplog,json=finalOplog,proto3" json:"final_oplog,omitempty"`
+	Checkpoints    []*CheckpointData      `protobuf:"bytes,5,rep,name=checkpoints,proto3" json:"checkpoints,omitempty"`
+	ResponseBytes  []byte                 `protobuf:"bytes,6,opt,name=response_bytes,json=responseBytes,proto3" json:"response_bytes,omitempty"`
+	ModuleNotFound bool                   `protobuf:"varint,7,opt,name=module_not_found,json=moduleNotFound,proto3" json:"module_not_found,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ExecuteResponse) Reset() {
@@ -325,6 +334,13 @@ func (x *ExecuteResponse) GetResponseBytes() []byte {
 	return nil
 }
 
+func (x *ExecuteResponse) GetModuleNotFound() bool {
+	if x != nil {
+		return x.ModuleNotFound
+	}
+	return false
+}
+
 var File_wasmee_proto protoreflect.FileDescriptor
 
 const file_wasmee_proto_rawDesc = "" +
@@ -336,7 +352,7 @@ const file_wasmee_proto_rawDesc = "" +
 	"call_index\x18\x01 \x01(\x05R\tcallIndex\x12\x19\n" +
 	"\bapi_name\x18\x02 \x01(\tR\aapiName\x12'\n" +
 	"\x0frequest_payload\x18\x03 \x01(\fR\x0erequestPayload\x12)\n" +
-	"\x10response_payload\x18\x04 \x01(\fR\x0fresponsePayload\"\x90\x03\n" +
+	"\x10response_payload\x18\x04 \x01(\fR\x0fresponsePayload\"\xad\x03\n" +
 	"\x0eExecuteRequest\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12\x1e\n" +
@@ -349,13 +365,14 @@ const file_wasmee_proto_rawDesc = "" +
 	"\x05oplog\x18\x06 \x03(\v2\x12.wasmee.OplogEntryR\x05oplog\x12'\n" +
 	"\x0fexchange_buffer\x18\a \x01(\fR\x0eexchangeBuffer\x12\x1d\n" +
 	"\n" +
-	"wasm_bytes\x18\b \x01(\fR\twasmBytes\x1a?\n" +
+	"wasm_bytes\x18\b \x01(\fR\twasmBytes\x12\x1b\n" +
+	"\twasm_hash\x18\t \x01(\tR\bwasmHash\x1a?\n" +
 	"\x11MemoryDeltasEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\"E\n" +
 	"\x0eCheckpointData\x12\x16\n" +
 	"\x06memory\x18\x01 \x01(\fR\x06memory\x12\x1b\n" +
-	"\toplog_len\x18\x02 \x01(\x05R\boplogLen\"\xe4\x02\n" +
+	"\toplog_len\x18\x02 \x01(\x05R\boplogLen\"\x8e\x03\n" +
 	"\x0fExecuteResponse\x12\x18\n" +
 	"\acrashed\x18\x01 \x01(\bR\acrashed\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x12K\n" +
@@ -363,7 +380,8 @@ const file_wasmee_proto_rawDesc = "" +
 	"\vfinal_oplog\x18\x04 \x03(\v2\x12.wasmee.OplogEntryR\n" +
 	"finalOplog\x128\n" +
 	"\vcheckpoints\x18\x05 \x03(\v2\x16.wasmee.CheckpointDataR\vcheckpoints\x12%\n" +
-	"\x0eresponse_bytes\x18\x06 \x01(\fR\rresponseBytes\x1a>\n" +
+	"\x0eresponse_bytes\x18\x06 \x01(\fR\rresponseBytes\x12(\n" +
+	"\x10module_not_found\x18\a \x01(\bR\x0emoduleNotFound\x1a>\n" +
 	"\x10FinalDeltasEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01B+Z)github.com/nativebpm/connectors/wasmee/pbb\x06proto3"

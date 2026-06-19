@@ -5,6 +5,8 @@ package wasmee
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +23,7 @@ import (
 type Runner struct {
 	httpAddr  string
 	wasmBytes []byte
+	wasmHash  string
 	apiToken  string
 }
 
@@ -33,9 +36,17 @@ func NewRunner(ctx context.Context, wasmBytes []byte, httpAddr string) (*Runner,
 	if apiToken == "" {
 		apiToken = "test-bearer-token"
 	}
+
+	var wasmHash string
+	if len(wasmBytes) > 0 {
+		hash := sha256.Sum256(wasmBytes)
+		wasmHash = hex.EncodeToString(hash[:])
+	}
+
 	return &Runner{
 		httpAddr:  httpAddr,
 		wasmBytes: wasmBytes,
+		wasmHash:  wasmHash,
 		apiToken:  apiToken,
 	}, nil
 }
@@ -115,43 +126,65 @@ func (r *Runner) Execute(ctx context.Context, session *Session, entrypoint strin
 		MemoryDeltas:   deltas,
 		Oplog:          oplog,
 		ExchangeBuffer: exchangeBuffer,
-		WasmBytes:      r.wasmBytes,
-	}
-
-
-	protoBytes, err := proto.Marshal(reqBody)
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to marshal protobuf payload: %w", err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, r.httpAddr+"/execute", bytes.NewReader(protoBytes))
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to create http request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/x-protobuf")
-	if r.apiToken != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+r.apiToken)
-	}
-
-	resp, err := http.DefaultClient.Do(httpReq)
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to execute HTTP call: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return false, nil, fmt.Errorf("http execution failed with status %d: %s", resp.StatusCode, string(bodyBytes))
-	}
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to read response body: %w", err)
+		WasmHash:       r.wasmHash,
+		WasmBytes:      nil, // Start with hash-only
 	}
 
 	var respBody pb.ExecuteResponse
-	if err := proto.Unmarshal(bodyBytes, &respBody); err != nil {
-		return false, nil, fmt.Errorf("failed to decode protobuf response: %w", err)
+	sendRequest := func(withBytes bool) error {
+		if withBytes {
+			reqBody.WasmBytes = r.wasmBytes
+		} else {
+			reqBody.WasmBytes = nil
+		}
+
+		protoBytes, err := proto.Marshal(reqBody)
+		if err != nil {
+			return fmt.Errorf("failed to marshal protobuf payload: %w", err)
+		}
+
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, r.httpAddr+"/execute", bytes.NewReader(protoBytes))
+		if err != nil {
+			return fmt.Errorf("failed to create http request: %w", err)
+		}
+		httpReq.Header.Set("Content-Type", "application/x-protobuf")
+		if r.apiToken != "" {
+			httpReq.Header.Set("Authorization", "Bearer "+r.apiToken)
+		}
+
+		resp, err := http.DefaultClient.Do(httpReq)
+		if err != nil {
+			return fmt.Errorf("failed to execute HTTP call: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("http execution failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		}
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response body: %w", err)
+		}
+
+		respBody = pb.ExecuteResponse{}
+		if err := proto.Unmarshal(bodyBytes, &respBody); err != nil {
+			return fmt.Errorf("failed to decode protobuf response: %w", err)
+		}
+		return nil
+	}
+
+	// First attempt: Hash Negotiation (wasm_bytes = nil, wasm_hash = r.wasmHash)
+	if err := sendRequest(false); err != nil {
+		return false, nil, err
+	}
+
+	// Fallback retry if module is not found in JIT cache
+	if respBody.ModuleNotFound && len(r.wasmBytes) > 0 {
+		if err := sendRequest(true); err != nil {
+			return false, nil, err
+		}
 	}
 
 	// Process checkpoints
