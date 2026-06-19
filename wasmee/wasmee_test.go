@@ -162,7 +162,7 @@ func TestWasmRunnerExecution(t *testing.T) {
 	session := NewSession(instanceID, state)
 
 	// RUN 1: Starts fresh, executes up to checkpoint 1, and finishes successfully.
-	crashed, err := runner.Execute(ctx, session, "run_test")
+	crashed, _, err := runner.Execute(ctx, session, "run_test", nil)
 	if err != nil {
 		t.Fatalf("execution failed: %v", err)
 	}
@@ -242,7 +242,7 @@ func TestWasmRunnerSimulatedCrashRecovery(t *testing.T) {
 	session.EnableCrashSimulation(true)
 
 	// RUN 1: Starts fresh, hits checkpoint 1, saves state, and crashes.
-	crashed, err := runner.Execute(ctx, session, "run_test")
+	crashed, _, err := runner.Execute(ctx, session, "run_test", nil)
 	if err == nil || !crashed {
 		t.Fatalf("expected simulated host crash, got nil or no crash")
 	}
@@ -281,7 +281,7 @@ func TestWasmRunnerSimulatedCrashRecovery(t *testing.T) {
 		return []byte("resp_for_api"), nil
 	}
 
-	crashed2, err := runner.Execute(ctx, session2, "run_test")
+	crashed2, _, err := runner.Execute(ctx, session2, "run_test", nil)
 	if err != nil {
 		t.Fatalf("resume execution failed: %v", err)
 	}

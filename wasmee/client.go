@@ -102,12 +102,13 @@ type OplogEntry struct {
 }
 
 type ExecuteRequest struct {
-	InstanceID   string            `json:"instance_id"`
-	Entrypoint   string            `json:"entrypoint"`
-	Params       []uint64          `json:"params"`
-	BaseSnapshot Bytes             `json:"base_snapshot"`
-	MemoryDeltas map[string]Bytes  `json:"memory_deltas"`
-	Oplog        []OplogEntry      `json:"oplog"`
+	InstanceID     string            `json:"instance_id"`
+	Entrypoint     string            `json:"entrypoint"`
+	Params         []uint64          `json:"params"`
+	BaseSnapshot   Bytes             `json:"base_snapshot"`
+	MemoryDeltas   map[string]Bytes  `json:"memory_deltas"`
+	Oplog          []OplogEntry      `json:"oplog"`
+	ExchangeBuffer Bytes             `json:"exchange_buffer"`
 }
 
 type CheckpointData struct {
@@ -116,15 +117,16 @@ type CheckpointData struct {
 }
 
 type ExecuteResponse struct {
-	Crashed     bool              `json:"crashed"`
-	Error       string            `json:"error"`
-	FinalDeltas map[string]Bytes  `json:"final_deltas"`
-	FinalOplog  []OplogEntry      `json:"final_oplog"`
-	Checkpoints []CheckpointData  `json:"checkpoints"`
+	Crashed       bool              `json:"crashed"`
+	Error         string            `json:"error"`
+	FinalDeltas   map[string]Bytes  `json:"final_deltas"`
+	FinalOplog    []OplogEntry      `json:"final_oplog"`
+	Checkpoints   []CheckpointData  `json:"checkpoints"`
+	ResponseBytes Bytes             `json:"response_bytes"`
 }
 
 // Execute triggers the execution of guest WASM on the Rust server.
-func (r *Runner) Execute(ctx context.Context, session *Session, entrypoint string, params ...uint64) (bool, error) {
+func (r *Runner) Execute(ctx context.Context, session *Session, entrypoint string, exchangeBuffer []byte, params ...uint64) (bool, []byte, error) {
 	baseSnapshotBytes, err := session.State.LoadSnapshot(ctx)
 	if err != nil {
 		baseSnapshotBytes = nil
@@ -165,39 +167,40 @@ func (r *Runner) Execute(ctx context.Context, session *Session, entrypoint strin
 	}
 
 	reqBody := ExecuteRequest{
-		InstanceID:   session.InstanceID,
-		Entrypoint:   entrypoint,
-		Params:       params,
-		BaseSnapshot: baseSnapshot,
-		MemoryDeltas: deltas,
-		Oplog:        oplog,
+		InstanceID:     session.InstanceID,
+		Entrypoint:     entrypoint,
+		Params:         params,
+		BaseSnapshot:   baseSnapshot,
+		MemoryDeltas:   deltas,
+		Oplog:          oplog,
+		ExchangeBuffer: Bytes(exchangeBuffer),
 	}
 
 	jsonBytes, err := json.Marshal(reqBody)
 	if err != nil {
-		return false, fmt.Errorf("failed to marshal request payload: %w", err)
+		return false, nil, fmt.Errorf("failed to marshal request payload: %w", err)
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, r.httpAddr+"/execute", bytes.NewReader(jsonBytes))
 	if err != nil {
-		return false, fmt.Errorf("failed to create http request: %w", err)
+		return false, nil, fmt.Errorf("failed to create http request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
-		return false, fmt.Errorf("failed to execute HTTP call: %w", err)
+		return false, nil, fmt.Errorf("failed to execute HTTP call: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return false, fmt.Errorf("http execution failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		return false, nil, fmt.Errorf("http execution failed with status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var respBody ExecuteResponse
 	if err := json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
-		return false, fmt.Errorf("failed to decode response payload: %w", err)
+		return false, nil, fmt.Errorf("failed to decode response payload: %w", err)
 	}
 
 	// Process checkpoints
@@ -213,20 +216,20 @@ func (r *Runner) Execute(ctx context.Context, session *Session, entrypoint strin
 					ResponsePayload: []byte(entry.ResponsePayload),
 				}
 				if err := session.State.AddOplogEntry(ctx, oe); err != nil {
-					return false, fmt.Errorf("failed to save oplog entry: %w", err)
+					return false, nil, fmt.Errorf("failed to save oplog entry: %w", err)
 				}
 			}
 		}
 
 		if err := session.State.Checkpoint(ctx, []byte(cp.Memory)); err != nil {
-			return false, fmt.Errorf("failed to save checkpoint: %w", err)
+			return false, nil, fmt.Errorf("failed to save checkpoint: %w", err)
 		}
 
 		currentSavedIndex = cp.OplogLen
 
 		if session.simulateCrash {
 			session.crashed = true
-			return true, errors.New("simulated_host_crash")
+			return true, nil, errors.New("simulated_host_crash")
 		}
 	}
 
@@ -240,14 +243,15 @@ func (r *Runner) Execute(ctx context.Context, session *Session, entrypoint strin
 				ResponsePayload: []byte(entry.ResponsePayload),
 			}
 			if err := session.State.AddOplogEntry(ctx, oe); err != nil {
-				return false, fmt.Errorf("failed to save oplog entry: %w", err)
+				return false, nil, fmt.Errorf("failed to save oplog entry: %w", err)
 			}
 		}
 	}
 
 	if respBody.Crashed {
-		return true, errors.New(respBody.Error)
+		return true, nil, errors.New(respBody.Error)
 	}
 
-	return false, nil
+	return false, []byte(respBody.ResponseBytes), nil
 }
+
