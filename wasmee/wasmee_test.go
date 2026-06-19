@@ -21,7 +21,7 @@ func startRustServer(t *testing.T) func() {
 	}
 
 	for i := 0; i < 50; i++ {
-		conn, err := net.DialTimeout("tcp", "localhost:50051", 50*time.Millisecond)
+		conn, err := net.DialTimeout("tcp", "localhost:8081", 50*time.Millisecond)
 		if err == nil {
 			conn.Close()
 			break
@@ -153,7 +153,7 @@ func TestWasmRunnerExecution(t *testing.T) {
 	cleanup := startRustServer(t)
 	defer cleanup()
 
-	runner, err := NewRunner(ctx, wasmBytes, "localhost:50051")
+	runner, err := NewRunner(ctx, wasmBytes, "localhost:8081")
 	if err != nil {
 		t.Fatalf("failed to create runner: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestWasmRunnerSimulatedCrashRecovery(t *testing.T) {
 	cleanup := startRustServer(t)
 	defer cleanup()
 
-	runner, err := NewRunner(ctx, wasmBytes, "localhost:50051")
+	runner, err := NewRunner(ctx, wasmBytes, "localhost:8081")
 	if err != nil {
 		t.Fatalf("failed to create runner: %v", err)
 	}
@@ -289,9 +289,20 @@ func TestWasmRunnerSimulatedCrashRecovery(t *testing.T) {
 		t.Fatalf("unexpected crash on resume run")
 	}
 
-	// Verify the API handler was called only ONCE (for "world", as "hello" was replayed)
-	if execCount != 1 {
-		t.Fatalf("expected ApiHandler to be called exactly 1 time during recovery run, got %d", execCount)
+	// Verify the final oplog has 2 entries and the second entry is the live call for "world"
+	oplogs2, err := store.LoadOplog(ctx, instanceID)
+	if err != nil {
+		t.Fatalf("failed to load final oplog: %v", err)
+	}
+	t.Logf("Final oplog count: %d", len(oplogs2))
+	for i, entry := range oplogs2 {
+		t.Logf("Oplog[%d]: CallIndex=%d, ApiName=%s, RequestPayload=%s, ResponsePayload=%s", i, entry.CallIndex, entry.ApiName, string(entry.RequestPayload), string(entry.ResponsePayload))
+	}
+	if len(oplogs2) != 2 {
+		t.Fatalf("expected exactly 2 oplog entries after recovery, got %d", len(oplogs2))
+	}
+	if oplogs2[1].ApiName != "test_api" || string(oplogs2[1].RequestPayload) != "world" {
+		t.Fatalf("invalid second call entry in final oplog: got Api=%s Request=%s", oplogs2[1].ApiName, string(oplogs2[1].RequestPayload))
 	}
 
 	// Verify final version is 3

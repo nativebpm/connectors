@@ -1,38 +1,73 @@
 package wasmee
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"time"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"net/http"
+	"strconv"
+	"strings"
 
 	"gitlab.com/nativebpm/olme"
-	pb "github.com/nativebpm/connectors/wasmee/proto"
 )
+
+// Bytes is a custom type that serializes/deserializes byte slices as JSON arrays of numbers.
+type Bytes []byte
+
+func (b Bytes) MarshalJSON() ([]byte, error) {
+	if b == nil {
+		return []byte("[]"), nil
+	}
+	var buf bytes.Buffer
+	buf.WriteByte('[')
+	for i, x := range b {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		buf.WriteString(strconv.Itoa(int(x)))
+	}
+	buf.WriteByte(']')
+	return buf.Bytes(), nil
+}
+
+func (b *Bytes) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*b = nil
+		return nil
+	}
+	var arr []int
+	if err := json.Unmarshal(data, &arr); err != nil {
+		return err
+	}
+	res := make([]byte, len(arr))
+	for i, x := range arr {
+		res[i] = byte(x)
+	}
+	*b = res
+	return nil
+}
 
 // Runner manages connection to the Rust WASMEE server and execution context.
 type Runner struct {
-	grpcAddr  string
+	httpAddr  string
 	wasmBytes []byte
-	wasmHash  string
 }
 
 // NewRunner creates a new Go wasmee Runner.
-func NewRunner(ctx context.Context, wasmBytes []byte, grpcAddr string) (*Runner, error) {
-	// Calculate a simple hash for verification (dummy or SHA-256)
-	wasmHash := fmt.Sprintf("hash-%d", len(wasmBytes))
+func NewRunner(ctx context.Context, wasmBytes []byte, httpAddr string) (*Runner, error) {
+	if !strings.HasPrefix(httpAddr, "http://") && !strings.HasPrefix(httpAddr, "https://") {
+		httpAddr = "http://" + httpAddr
+	}
 	return &Runner{
-		grpcAddr:  grpcAddr,
+		httpAddr:  httpAddr,
 		wasmBytes: wasmBytes,
-		wasmHash:  wasmHash,
 	}, nil
 }
 
-// Close is a no-op for the client runner.
+// Close is a no-op for the HTTP runner.
 func (r *Runner) Close(ctx context.Context) error {
 	return nil
 }
@@ -59,173 +94,160 @@ func (s *Session) EnableCrashSimulation(enable bool) {
 	s.simulateCrash = enable
 }
 
+type OplogEntry struct {
+	CallIndex       int    `json:"call_index"`
+	ApiName         string `json:"api_name"`
+	RequestPayload  Bytes  `json:"request_payload"`
+	ResponsePayload Bytes  `json:"response_payload"`
+}
+
+type ExecuteRequest struct {
+	InstanceID   string            `json:"instance_id"`
+	Entrypoint   string            `json:"entrypoint"`
+	Params       []uint64          `json:"params"`
+	BaseSnapshot Bytes             `json:"base_snapshot"`
+	MemoryDeltas map[string]Bytes  `json:"memory_deltas"`
+	Oplog        []OplogEntry      `json:"oplog"`
+}
+
+type CheckpointData struct {
+	Memory   Bytes `json:"memory"`
+	OplogLen int   `json:"oplog_len"`
+}
+
+type ExecuteResponse struct {
+	Crashed     bool              `json:"crashed"`
+	Error       string            `json:"error"`
+	FinalDeltas map[string]Bytes  `json:"final_deltas"`
+	FinalOplog  []OplogEntry      `json:"final_oplog"`
+	Checkpoints []CheckpointData  `json:"checkpoints"`
+}
+
 // Execute triggers the execution of guest WASM on the Rust server.
 func (r *Runner) Execute(ctx context.Context, session *Session, entrypoint string, params ...uint64) (bool, error) {
-	// 1. Establish gRPC connection to Rust WASMEE server
-	conn, err := grpc.Dial(r.grpcAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	baseSnapshotBytes, err := session.State.LoadSnapshot(ctx)
 	if err != nil {
-		return false, fmt.Errorf("failed to dial WASMEE server: %w", err)
+		baseSnapshotBytes = nil
 	}
-	defer conn.Close()
-
-	client := pb.NewWasmeeExecutorClient(conn)
-
-	// 2. Open bidirectional stream
-	stream, err := client.Execute(ctx)
-	if err != nil {
-		return false, fmt.Errorf("failed to open execution stream: %w", err)
-	}
-
-	// 3. Prepare initial state data to send
-	baseSnapshot, err := session.State.LoadSnapshot(ctx)
-	if err != nil {
-		baseSnapshot = nil
-	}
+	baseSnapshot := Bytes(baseSnapshotBytes)
 
 	rawDeltas, err := session.State.LoadDeltas(ctx)
 	if err != nil {
 		rawDeltas = nil
 	}
-	deltas := make(map[int32][]byte)
+	deltas := make(map[string]Bytes)
 	for k, v := range rawDeltas {
-		deltas[int32(k)] = v
+		deltas[fmt.Sprintf("%d", k)] = Bytes(v)
 	}
 
 	rawOplog, err := session.State.LoadOplog(ctx)
 	if err != nil {
 		rawOplog = nil
 	}
-	var oplog []*pb.OplogEntry
+	var oplog []OplogEntry
 	for _, entry := range rawOplog {
-		oplog = append(oplog, &pb.OplogEntry{
-			CallIndex:       int32(entry.CallIndex),
+		oplog = append(oplog, OplogEntry{
+			CallIndex:       entry.CallIndex,
 			ApiName:         entry.ApiName,
-			RequestPayload:  entry.RequestPayload,
-			ResponsePayload: entry.ResponsePayload,
+			RequestPayload:  Bytes(entry.RequestPayload),
+			ResponsePayload: Bytes(entry.ResponsePayload),
 		})
 	}
 
-	// Send StartRequest
-	startMsg := &pb.ExecuteMessage{
-		Message: &pb.ExecuteMessage_Start{
-			Start: &pb.StartRequest{
-				InstanceId:    session.InstanceID,
-				WasmBytes:     r.wasmBytes,
-				Entrypoint:    entrypoint,
-				Params:        params,
-				BaseSnapshot:  baseSnapshot,
-				MemoryDeltas:  deltas,
-				Oplog:         oplog,
-				CallIndex:     int32(session.State.GetCallIndex()),
-			},
-		},
+	if baseSnapshot == nil {
+		baseSnapshot = Bytes{}
+	}
+	if params == nil {
+		params = []uint64{}
+	}
+	if oplog == nil {
+		oplog = []OplogEntry{}
 	}
 
-	if err := stream.Send(startMsg); err != nil {
-		return false, fmt.Errorf("failed to send start request: %w", err)
+	reqBody := ExecuteRequest{
+		InstanceID:   session.InstanceID,
+		Entrypoint:   entrypoint,
+		Params:       params,
+		BaseSnapshot: baseSnapshot,
+		MemoryDeltas: deltas,
+		Oplog:        oplog,
 	}
 
-	// 4. Stream message loop
-	for {
-		msg, err := stream.Recv()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return false, fmt.Errorf("stream receive error: %w", err)
-		}
+	jsonBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return false, fmt.Errorf("failed to marshal request payload: %w", err)
+	}
 
-		switch m := msg.Message.(type) {
-		case *pb.ExecuteMessage_HostCallRequest:
-			req := m.HostCallRequest
-			var respPayload []byte
-			var errStr string
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, r.httpAddr+"/execute", bytes.NewReader(jsonBytes))
+	if err != nil {
+		return false, fmt.Errorf("failed to create http request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
 
-			session.State.SetCallIndex(int(req.CallIndex) - 1)
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return false, fmt.Errorf("failed to execute HTTP call: %w", err)
+	}
+	defer resp.Body.Close()
 
-			// Handle time request or API request
-			if req.ApiName == "host_get_time" {
-				val, err := session.State.GetOrExecuteCall(ctx, "host_get_time", nil, func() ([]byte, error) {
-					nowNano := time.Now().UnixNano()
-					return []byte(fmt.Sprintf("%d", nowNano)), nil
-				})
-				if err != nil {
-					errStr = err.Error()
-				} else {
-					respPayload = val
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("http execution failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var respBody ExecuteResponse
+	if err := json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+		return false, fmt.Errorf("failed to decode response payload: %w", err)
+	}
+
+	// Process checkpoints
+	currentSavedIndex := len(rawOplog)
+	for _, cp := range respBody.Checkpoints {
+		// Save oplog entries that happened BEFORE this checkpoint!
+		for _, entry := range respBody.FinalOplog {
+			if entry.CallIndex <= cp.OplogLen && entry.CallIndex > currentSavedIndex {
+				oe := olme.OplogEntry{
+					CallIndex:       entry.CallIndex,
+					ApiName:         entry.ApiName,
+					RequestPayload:  []byte(entry.RequestPayload),
+					ResponsePayload: []byte(entry.ResponsePayload),
 				}
-			} else {
-				val, err := session.State.GetOrExecuteCall(ctx, req.ApiName, req.RequestPayload, func() ([]byte, error) {
-					if session.ApiHandler != nil {
-						return session.ApiHandler(req.ApiName, req.RequestPayload)
-					}
-					if req.ApiName == "test_api" {
-						return []byte(fmt.Sprintf("resp_for_%s_call_%d", string(req.RequestPayload), session.State.GetCallIndex()+1)), nil
-					}
-					return nil, fmt.Errorf("no api handler for %s", req.ApiName)
-				})
-				if err != nil {
-					errStr = err.Error()
-				} else {
-					respPayload = val
+				if err := session.State.AddOplogEntry(ctx, oe); err != nil {
+					return false, fmt.Errorf("failed to save oplog entry: %w", err)
 				}
 			}
-
-			// Send response back to Rust
-			respMsg := &pb.ExecuteMessage{
-				Message: &pb.ExecuteMessage_HostCallResponse{
-					HostCallResponse: &pb.HostCallResponse{
-						ResponsePayload: respPayload,
-						Error:           errStr,
-					},
-				},
-			}
-			if err := stream.Send(respMsg); err != nil {
-				return false, fmt.Errorf("failed to send host call response: %w", err)
-			}
-
-		case *pb.ExecuteMessage_Checkpoint:
-			req := m.Checkpoint
-			var errStr string
-
-			err = session.State.Checkpoint(ctx, req.CurrentMemory)
-			if err != nil {
-				errStr = err.Error()
-			}
-
-			// Simulate crash if requested
-			if session.simulateCrash {
-				session.crashed = true
-				// Trigger client side error to stop the execution loop
-				return true, errors.New("simulated_host_crash")
-			}
-
-			// Send checkpoint confirmation
-			respMsg := &pb.ExecuteMessage{
-				Message: &pb.ExecuteMessage_CheckpointResponse{
-					CheckpointResponse: &pb.CheckpointResponse{
-						Error: errStr,
-					},
-				},
-			}
-			if err := stream.Send(respMsg); err != nil {
-				return false, fmt.Errorf("failed to send checkpoint response: %w", err)
-			}
-
-		case *pb.ExecuteMessage_Complete:
-			req := m.Complete
-			if req.Crashed {
-				return true, errors.New(req.Error)
-			}
-			return false, nil
 		}
+
+		if err := session.State.Checkpoint(ctx, []byte(cp.Memory)); err != nil {
+			return false, fmt.Errorf("failed to save checkpoint: %w", err)
+		}
+
+		currentSavedIndex = cp.OplogLen
+
+		if session.simulateCrash {
+			session.crashed = true
+			return true, errors.New("simulated_host_crash")
+		}
+	}
+
+	// Save final oplog (for entries after the last checkpoint, if any)
+	for _, entry := range respBody.FinalOplog {
+		if entry.CallIndex > currentSavedIndex {
+			oe := olme.OplogEntry{
+				CallIndex:       entry.CallIndex,
+				ApiName:         entry.ApiName,
+				RequestPayload:  []byte(entry.RequestPayload),
+				ResponsePayload: []byte(entry.ResponsePayload),
+			}
+			if err := session.State.AddOplogEntry(ctx, oe); err != nil {
+				return false, fmt.Errorf("failed to save oplog entry: %w", err)
+			}
+		}
+	}
+
+	if respBody.Crashed {
+		return true, errors.New(respBody.Error)
 	}
 
 	return false, nil
-}
-
-// StartRustServerHelper starts the Rust server in the background for testing.
-func StartRustServerHelper(execPath string, port string) (func(), error) {
-	// Helper method to spawn process
-	return nil, nil
 }
