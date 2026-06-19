@@ -131,8 +131,8 @@ func TestWasmRunnerExecution(t *testing.T) {
 	ctx := context.Background()
 	instanceID := "test-wasm-execution-instance"
 
-	// 1. Read compiled test WASM file from connectors workspace
-	wasmBytes, err := os.ReadFile("../wasman/testdata/dirty_page_oplog.wasm")
+	// 1. Read compiled test WASM file from wasmee workspace
+	wasmBytes, err := os.ReadFile("../../wasmee/target/wasm32-wasip1/release/wasmee_guest.wasm")
 	if err != nil {
 		t.Fatalf("failed to read test WASM binary: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestWasmRunnerSimulatedCrashRecovery(t *testing.T) {
 	ctx := context.Background()
 	instanceID := "test-crash-recovery-instance"
 
-	wasmBytes, err := os.ReadFile("../wasman/testdata/dirty_page_oplog.wasm")
+	wasmBytes, err := os.ReadFile("../../wasmee/target/wasm32-wasip1/release/wasmee_guest.wasm")
 	if err != nil {
 		t.Fatalf("failed to read test WASM binary: %v", err)
 	}
