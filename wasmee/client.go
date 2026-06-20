@@ -1,4 +1,4 @@
-//go:generate protoc --proto_path=../../wasmee --go_out=pb --go_opt=paths=source_relative ../../wasmee/wasmee.proto
+//go:generate protoc --proto_path=. --go_out=pb --go_opt=paths=source_relative wasmee.proto
 
 package wasmee
 

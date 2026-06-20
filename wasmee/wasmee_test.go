@@ -14,27 +14,43 @@ import (
 )
 
 func startRustServer(t *testing.T) func() {
-	cmd := exec.Command("../../wasmee/target/debug/wasmee")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("failed to start rust server: %v", err)
+	// First check if a server is already listening on 8081 (e.g. running via docker or manually)
+	conn, err := net.DialTimeout("tcp", "localhost:8081", 100*time.Millisecond)
+	if err == nil {
+		conn.Close()
+		return func() {} // Already running, no-op cleanup
 	}
 
-	for i := 0; i < 50; i++ {
-		conn, err := net.DialTimeout("tcp", "localhost:8081", 50*time.Millisecond)
-		if err == nil {
-			conn.Close()
-			break
+	// Try to launch the sibling debug binary if it exists
+	_, statErr := os.Stat("../../wasmee/target/debug/wasmee")
+	if statErr == nil {
+		cmd := exec.Command("../../wasmee/target/debug/wasmee")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Start(); err != nil {
+			t.Fatalf("failed to start rust server: %v", err)
 		}
-		time.Sleep(50 * time.Millisecond)
+
+		for i := 0; i < 50; i++ {
+			conn, err := net.DialTimeout("tcp", "localhost:8081", 50*time.Millisecond)
+			if err == nil {
+				conn.Close()
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+
+		return func() {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+		}
 	}
 
-	return func() {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
-	}
+	// Otherwise, skip the test
+	t.Skip("wasmee server is not running on localhost:8081 and sibling wasmee binary is not found; skipping integration test")
+	return func() {}
 }
+
 
 type testInMemoryStore struct {
 	snapshots map[string][]byte
@@ -132,8 +148,8 @@ func TestWasmRunnerExecution(t *testing.T) {
 	ctx := context.Background()
 	instanceID := "test-wasm-execution-instance"
 
-	// 1. Read compiled test WASM file from wasmee workspace
-	wasmBytes, err := os.ReadFile("../../wasmee/target/wasm32-wasip1/release/wasmee_guest.wasm")
+	// 1. Read compiled test WASM file from local testdata
+	wasmBytes, err := os.ReadFile("testdata/wasmee_guest.wasm")
 	if err != nil {
 		t.Fatalf("failed to read test WASM binary: %v", err)
 	}
@@ -206,7 +222,7 @@ func TestWasmRunnerSimulatedCrashRecovery(t *testing.T) {
 	ctx := context.Background()
 	instanceID := "test-crash-recovery-instance"
 
-	wasmBytes, err := os.ReadFile("../../wasmee/target/wasm32-wasip1/release/wasmee_guest.wasm")
+	wasmBytes, err := os.ReadFile("testdata/wasmee_guest.wasm")
 	if err != nil {
 		t.Fatalf("failed to read test WASM binary: %v", err)
 	}
@@ -302,7 +318,7 @@ func TestDynamicWasmModuleExecution(t *testing.T) {
 	instanceID := "test-dynamic-wasm-instance"
 
 	// 1. Read valid guest WASM file
-	wasmBytes, err := os.ReadFile("../../wasmee/target/wasm32-wasip1/release/wasmee_guest.wasm")
+	wasmBytes, err := os.ReadFile("testdata/wasmee_guest.wasm")
 	if err != nil {
 		t.Fatalf("failed to read test WASM binary: %v", err)
 	}
@@ -375,7 +391,7 @@ func TestFluentRunnerExecution(t *testing.T) {
 	stop := startRustServer(t)
 	defer stop()
 
-	wasmPath := "../../wasmee/target/wasm32-wasip1/release/wasmee_guest.wasm"
+	wasmPath := "testdata/wasmee_guest.wasm"
 	wasmBytes, err := os.ReadFile(wasmPath)
 	if err != nil {
 		t.Fatalf("failed to read guest WASM: %v", err)

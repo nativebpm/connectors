@@ -26,5 +26,5 @@ go generate
 
 Или вызовите `protoc` вручную:
 ```bash
-protoc --proto_path=../../wasmee --go_out=pb --go_opt=paths=source_relative ../../wasmee/wasmee.proto
+protoc --proto_path=. --go_out=pb --go_opt=paths=source_relative wasmee.proto
 ```

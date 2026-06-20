@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package wasmee;
+
+option go_package = "github.com/nativebpm/connectors/wasmee/pb";
+
+message OplogEntry {
+  int32 call_index = 1;
+  string api_name = 2;
+  bytes request_payload = 3;
+  bytes response_payload = 4;
+}
+
+message ExecuteRequest {
+  string instance_id = 1;
+  string entrypoint = 2;
+  repeated uint64 params = 3;
+  bytes base_snapshot = 4;
+  map<int32, bytes> memory_deltas = 5;
+  repeated OplogEntry oplog = 6;
+  bytes exchange_buffer = 7;
+  bytes wasm_bytes = 8;
+  string wasm_hash = 9;
+}
+
+
+message CheckpointData {
+  bytes memory = 1;
+  int32 oplog_len = 2;
+}
+
+message ExecuteResponse {
+  bool crashed = 1;
+  string error = 2;
+  map<int32, bytes> final_deltas = 3;
+  repeated OplogEntry final_oplog = 4;
+  repeated CheckpointData checkpoints = 5;
+  bytes response_bytes = 6;
+  bool module_not_found = 7;
+}
