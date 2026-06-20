@@ -13,11 +13,20 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/nativebpm/connectors/wasmee/olme"
 	"github.com/nativebpm/connectors/wasmee/pb"
 	"google.golang.org/protobuf/proto"
 )
+
+var httpClient = &http.Client{
+	Transport: &http.Transport{
+		MaxIdleConns:        1000,
+		MaxIdleConnsPerHost: 500,
+		IdleConnTimeout:     90 * time.Second,
+	},
+}
 
 // Runner manages connection to the Rust WASMEE server and execution context.
 type Runner struct {
@@ -152,7 +161,7 @@ func (r *Runner) Execute(ctx context.Context, session *Session, entrypoint strin
 			httpReq.Header.Set("Authorization", "Bearer "+r.apiToken)
 		}
 
-		resp, err := http.DefaultClient.Do(httpReq)
+		resp, err := httpClient.Do(httpReq)
 		if err != nil {
 			return fmt.Errorf("failed to execute HTTP call: %w", err)
 		}

@@ -146,24 +146,18 @@ func TestWasmRunnerExecution(t *testing.T) {
 	}
 	store.SaveMetadata(ctx, meta)
 
-	state := olme.NewSessionState(instanceID, store)
-	if err := state.Load(ctx); err != nil {
-		t.Fatalf("failed to load state: %v", err)
-	}
-
 	cleanup := startRustServer(t)
 	defer cleanup()
 
-	runner, err := NewRunner(ctx, wasmBytes, "localhost:8081")
-	if err != nil {
-		t.Fatalf("failed to create runner: %v", err)
-	}
-	defer runner.Close(ctx)
-
-	session := NewSession(instanceID, state)
-
 	// RUN 1: Starts fresh, executes up to checkpoint 1, and finishes successfully.
-	crashed, _, err := runner.Execute(ctx, session, "run_test", nil)
+	crashed, err := NewFluentRunner().
+		WithContext(ctx).
+		WithServerAddress("http://localhost:8081").
+		WithWasmBytes(wasmBytes).
+		WithStore(store).
+		WithSessionID(instanceID).
+		WithEntrypoint("run_test").
+		Run()
 	if err != nil {
 		t.Fatalf("execution failed: %v", err)
 	}
@@ -225,25 +219,19 @@ func TestWasmRunnerSimulatedCrashRecovery(t *testing.T) {
 	}
 	store.SaveMetadata(ctx, meta)
 
-	state := olme.NewSessionState(instanceID, store)
-	if err := state.Load(ctx); err != nil {
-		t.Fatalf("failed to load state: %v", err)
-	}
-
 	cleanup := startRustServer(t)
 	defer cleanup()
 
-	runner, err := NewRunner(ctx, wasmBytes, "localhost:8081")
-	if err != nil {
-		t.Fatalf("failed to create runner: %v", err)
-	}
-	defer runner.Close(ctx)
-
-	session := NewSession(instanceID, state)
-	session.EnableCrashSimulation(true)
-
 	// RUN 1: Starts fresh, hits checkpoint 1, saves state, and crashes.
-	crashed, _, err := runner.Execute(ctx, session, "run_test", nil)
+	crashed, err := NewFluentRunner().
+		WithContext(ctx).
+		WithServerAddress("http://localhost:8081").
+		WithWasmBytes(wasmBytes).
+		WithStore(store).
+		WithSessionID(instanceID).
+		WithEntrypoint("run_test").
+		WithCrashSimulation(true).
+		Run()
 	if err == nil || !crashed {
 		t.Fatalf("expected simulated host crash, got nil or no crash")
 	}
@@ -267,22 +255,15 @@ func TestWasmRunnerSimulatedCrashRecovery(t *testing.T) {
 	}
 
 	// RUN 2: Reload state and resume from crash point (disabling crash simulation)
-	state2 := olme.NewSessionState(instanceID, store)
-	if err := state2.Load(ctx); err != nil {
-		t.Fatalf("failed to load state for resume: %v", err)
-	}
-
-	session2 := NewSession(instanceID, state2)
-	session2.EnableCrashSimulation(false)
-
-	// Keep track of handler execution (should replay "hello" from oplog, and run "world" fresh)
-	execCount := 0
-	session2.ApiHandler = func(apiName string, request []byte) ([]byte, error) {
-		execCount++
-		return []byte("resp_for_api"), nil
-	}
-
-	crashed2, _, err := runner.Execute(ctx, session2, "run_test", nil)
+	crashed2, err := NewFluentRunner().
+		WithContext(ctx).
+		WithServerAddress("http://localhost:8081").
+		WithWasmBytes(wasmBytes).
+		WithStore(store).
+		WithSessionID(instanceID).
+		WithEntrypoint("run_test").
+		WithCrashSimulation(false).
+		Run()
 	if err != nil {
 		t.Fatalf("resume execution failed: %v", err)
 	}
@@ -337,22 +318,15 @@ func TestDynamicWasmModuleExecution(t *testing.T) {
 	}
 	store.SaveMetadata(ctx, meta)
 
-	state := olme.NewSessionState(instanceID, store)
-	if err := state.Load(ctx); err != nil {
-		t.Fatalf("failed to load state: %v", err)
-	}
-
-	// Initialize runner with valid WASM bytes
-	runner, err := NewRunner(ctx, wasmBytes, "localhost:8081")
-	if err != nil {
-		t.Fatalf("failed to create runner: %v", err)
-	}
-	defer runner.Close(ctx)
-
-	session := NewSession(instanceID, state)
-
 	// Case A: Verify successful execution with dynamic WASM bytes (first compile)
-	crashed, _, err := runner.Execute(ctx, session, "run_test", nil)
+	crashed, err := NewFluentRunner().
+		WithContext(ctx).
+		WithServerAddress("http://localhost:8081").
+		WithWasmBytes(wasmBytes).
+		WithStore(store).
+		WithSessionID(instanceID).
+		WithEntrypoint("run_test").
+		Run()
 	if err != nil {
 		t.Fatalf("dynamic execution failed: %v", err)
 	}
@@ -361,12 +335,14 @@ func TestDynamicWasmModuleExecution(t *testing.T) {
 	}
 
 	// Case B: Verify successful execution with cache hit (second run)
-	state2 := olme.NewSessionState(instanceID, store)
-	if err := state2.Load(ctx); err != nil {
-		t.Fatalf("failed to reload state: %v", err)
-	}
-	session2 := NewSession(instanceID, state2)
-	crashed2, _, err := runner.Execute(ctx, session2, "run_test", nil)
+	crashed2, err := NewFluentRunner().
+		WithContext(ctx).
+		WithServerAddress("http://localhost:8081").
+		WithWasmBytes(wasmBytes).
+		WithStore(store).
+		WithSessionID(instanceID).
+		WithEntrypoint("run_test").
+		Run()
 	if err != nil {
 		t.Fatalf("cached execution failed: %v", err)
 	}
@@ -376,17 +352,14 @@ func TestDynamicWasmModuleExecution(t *testing.T) {
 
 	// Case C: Verify compile failure with corrupt/invalid WASM bytes
 	corruptBytes := []byte("this is not a valid wasm file header")
-	corruptRunner, err := NewRunner(ctx, corruptBytes, "localhost:8081")
-	if err != nil {
-		t.Fatalf("failed to create corrupt runner: %v", err)
-	}
-	defer corruptRunner.Close(ctx)
-
-	state3 := olme.NewSessionState(instanceID, store)
-	_ = state3.Load(ctx)
-	session3 := NewSession(instanceID, state3)
-
-	crashed3, _, err := corruptRunner.Execute(ctx, session3, "run_test", nil)
+	crashed3, err := NewFluentRunner().
+		WithContext(ctx).
+		WithServerAddress("http://localhost:8081").
+		WithWasmBytes(corruptBytes).
+		WithStore(store).
+		WithSessionID(instanceID).
+		WithEntrypoint("run_test").
+		Run()
 	if err == nil {
 		t.Fatalf("expected error executing corrupt WASM, got nil")
 	}

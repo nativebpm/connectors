@@ -145,12 +145,6 @@ func main() {
 		log.Fatalf("failed to read guest WASM binary: %v", err)
 	}
 
-	runner, err := wasmee.NewRunner(context.Background(), wasmBytes, "127.0.0.1:8081")
-	if err != nil {
-		log.Fatalf("failed to initialize wasmee runner: %v", err)
-	}
-	defer runner.Close(context.Background())
-
 	store := newMemStore()
 	var reqCount uint64
 
@@ -170,15 +164,15 @@ func main() {
 		}
 		_, _ = store.SaveMetadata(ctx, meta)
 
-		state := olme.NewSessionState(instanceID, store)
-		if err := state.Load(ctx); err != nil {
-			http.Error(w, fmt.Sprintf("failed to load state: %v", r), http.StatusInternalServerError)
-			return
-		}
+		crashed, err := wasmee.NewFluentRunner().
+			WithContext(ctx).
+			WithServerAddress("http://127.0.0.1:8081").
+			WithWasmBytes(wasmBytes).
+			WithStore(store).
+			WithSessionID(instanceID).
+			WithEntrypoint("run_test").
+			Run()
 
-		session := wasmee.NewSession(instanceID, state)
-
-		crashed, _, err := runner.Execute(ctx, session, "run_test", nil)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("execution failed: %v", err), http.StatusInternalServerError)
 			return

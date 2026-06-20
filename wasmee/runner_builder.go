@@ -20,6 +20,7 @@ type FluentRunner struct {
 	params         []uint64
 	err            error
 	crashed        bool
+	simulateCrash  bool
 	responseBytes  []byte
 }
 
@@ -111,6 +112,16 @@ func (r *FluentRunner) WithArgs(params ...uint64) *FluentRunner {
 	return r
 }
 
+// WithCrashSimulation configures whether to simulate host crash on checkpoints.
+func (r *FluentRunner) WithCrashSimulation(enable bool) *FluentRunner {
+	if r.err != nil {
+		return r
+	}
+	r.simulateCrash = enable
+	return r
+}
+
+
 // Error returns any accumulated error.
 func (r *FluentRunner) Error() error {
 	return r.err
@@ -147,6 +158,7 @@ func (r *FluentRunner) Run() (bool, error) {
 	}
 
 	session := NewSession(r.instanceID, state)
+	session.EnableCrashSimulation(r.simulateCrash)
 
 	crashed, respBytes, err := runner.Execute(r.ctx, session, r.entrypoint, r.exchangeBuffer, r.params...)
 	r.crashed = crashed

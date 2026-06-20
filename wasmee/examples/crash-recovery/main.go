@@ -99,12 +99,15 @@ func (s *memoryStore) LoadMetadata(ctx context.Context, id string) (*olme.Instan
 
 func main() {
 	// 1. Locate the precompiled guest WASM file
-	wasmPath := filepath.Join("..", "..", "..", "wasmee", "target", "wasm32-wasip1", "release", "wasmee_guest.wasm")
+	wasmPath := filepath.Join("..", "..", "..", "..", "wasmee", "target", "wasm32-wasip1", "release", "wasmee_guest.wasm")
 	if _, err := os.Stat(wasmPath); os.IsNotExist(err) {
-		wasmPath = filepath.Join("wasmee", "target", "wasm32-wasip1", "release", "wasmee_guest.wasm")
+		wasmPath = filepath.Join("..", "..", "wasmee", "target", "wasm32-wasip1", "release", "wasmee_guest.wasm")
 		if _, err := os.Stat(wasmPath); os.IsNotExist(err) {
-			fmt.Println("Error: wasmee_guest.wasm not found. Please compile the Rust guest first.")
-			os.Exit(1)
+			wasmPath = filepath.Join("wasmee", "target", "wasm32-wasip1", "release", "wasmee_guest.wasm")
+			if _, err := os.Stat(wasmPath); os.IsNotExist(err) {
+				fmt.Println("Error: wasmee_guest.wasm not found. Please compile the Rust guest first.")
+				os.Exit(1)
+			}
 		}
 	}
 
@@ -125,22 +128,20 @@ func main() {
 	}
 	_, _ = store.SaveMetadata(ctx, meta)
 
-	// 2. Initialize wasmee HTTP runner (expects the Rust runner server to be running on :8081)
-	runner, err := wasmee.NewRunner(ctx, wasmBytes, "http://localhost:8081")
-	if err != nil {
-		fmt.Printf("Failed to initialize runner: %v\n", err)
-		os.Exit(1)
-	}
+	// Set local test authorization token
+	os.Setenv("API_TOKEN", "test-bearer-token")
 
-	// 3. RUN 1: Starts fresh execution, but simulated host crash is triggered at checkpoint 1
-	state1 := olme.NewSessionState(instanceID, store)
-	_ = state1.Load(ctx)
-
-	session1 := wasmee.NewSession(instanceID, state1)
-	session1.EnableCrashSimulation(true)
-
+	// 2. RUN 1: Starts fresh execution, but simulated host crash is triggered at checkpoint 1
 	fmt.Println("[HOST] Executing RUN 1 with crash simulation enabled...")
-	crashed1, _, err1 := runner.Execute(ctx, session1, "run_test", nil)
+	crashed1, err1 := wasmee.NewFluentRunner().
+		WithContext(ctx).
+		WithServerAddress("http://localhost:8081").
+		WithWasmBytes(wasmBytes).
+		WithStore(store).
+		WithSessionID(instanceID).
+		WithEntrypoint("run_test").
+		WithCrashSimulation(true).
+		Run()
 	fmt.Printf("[HOST] RUN 1 completed. Crashed: %v, Error: %q\n", crashed1, err1)
 
 	// Verify state saved before crash
@@ -148,18 +149,17 @@ func main() {
 	oplogs, _ := store.LoadOplog(ctx, instanceID)
 	fmt.Printf("[HOST] Saved state: Snapshot Version = %d, Oplog size = %d\n", metaReload.Version, len(oplogs))
 
-	// 4. RUN 2: Reload state from checkpoint and resume with crash simulation disabled
-	state2 := olme.NewSessionState(instanceID, store)
-	if err := state2.Load(ctx); err != nil {
-		fmt.Printf("Failed to load state for recovery: %v\n", err)
-		os.Exit(1)
-	}
-
-	session2 := wasmee.NewSession(instanceID, state2)
-	session2.EnableCrashSimulation(false)
-
+	// 3. RUN 2: Reload state from checkpoint and resume with crash simulation disabled
 	fmt.Println("[HOST] Executing RUN 2 to recover from checkpoint...")
-	crashed2, _, err2 := runner.Execute(ctx, session2, "run_test", nil)
+	crashed2, err2 := wasmee.NewFluentRunner().
+		WithContext(ctx).
+		WithServerAddress("http://localhost:8081").
+		WithWasmBytes(wasmBytes).
+		WithStore(store).
+		WithSessionID(instanceID).
+		WithEntrypoint("run_test").
+		WithCrashSimulation(false).
+		Run()
 	if err2 != nil {
 		fmt.Printf("[HOST] Recovery run failed: %v (crashed: %v)\n", err2, crashed2)
 		os.Exit(1)

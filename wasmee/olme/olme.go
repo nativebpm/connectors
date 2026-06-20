@@ -99,6 +99,12 @@ func (s *SessionState) Load(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load metadata: %w", err)
 	}
+	if meta == nil {
+		meta = &InstanceMeta{
+			InstanceID: s.instanceID,
+			Version:    0,
+		}
+	}
 	s.meta = meta
 
 	oplog, err := s.store.LoadOplog(ctx, s.instanceID)

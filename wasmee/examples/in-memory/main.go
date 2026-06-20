@@ -99,12 +99,15 @@ func (s *memoryStore) LoadMetadata(ctx context.Context, id string) (*olme.Instan
 
 func main() {
 	// 1. Locate the precompiled guest WASM file
-	wasmPath := filepath.Join("..", "..", "..", "wasmee", "target", "wasm32-wasip1", "release", "wasmee_guest.wasm")
+	wasmPath := filepath.Join("..", "..", "..", "..", "wasmee", "target", "wasm32-wasip1", "release", "wasmee_guest.wasm")
 	if _, err := os.Stat(wasmPath); os.IsNotExist(err) {
-		wasmPath = filepath.Join("wasmee", "target", "wasm32-wasip1", "release", "wasmee_guest.wasm")
+		wasmPath = filepath.Join("..", "..", "wasmee", "target", "wasm32-wasip1", "release", "wasmee_guest.wasm")
 		if _, err := os.Stat(wasmPath); os.IsNotExist(err) {
-			fmt.Println("Error: wasmee_guest.wasm not found. Please compile the Rust guest first.")
-			os.Exit(1)
+			wasmPath = filepath.Join("wasmee", "target", "wasm32-wasip1", "release", "wasmee_guest.wasm")
+			if _, err := os.Stat(wasmPath); os.IsNotExist(err) {
+				fmt.Println("Error: wasmee_guest.wasm not found. Please compile the Rust guest first.")
+				os.Exit(1)
+			}
 		}
 	}
 
@@ -126,23 +129,21 @@ func main() {
 	}
 	_, _ = store.SaveMetadata(ctx, meta)
 
-	state := olme.NewSessionState(instanceID, store)
-	if err := state.Load(ctx); err != nil {
-		fmt.Printf("Failed to load session state: %v\n", err)
-		os.Exit(1)
-	}
+	// Set local test authorization token
+	os.Setenv("API_TOKEN", "test-bearer-token")
 
-	// 3. Create wasmee HTTP runner (expects the Rust runner server to be running on :8081)
-	runner, err := wasmee.NewRunner(ctx, wasmBytes, "http://localhost:8081")
-	if err != nil {
-		fmt.Printf("Failed to initialize runner: %v\n", err)
-		os.Exit(1)
-	}
+	fmt.Printf("[HOST] Triggering execution of guest function \"run_test\" using Fluent API...\n")
+	
+	// 3. Execute using the FluentRunner
+	crashed, err := wasmee.NewFluentRunner().
+		WithContext(ctx).
+		WithServerAddress("http://localhost:8081").
+		WithWasmBytes(wasmBytes).
+		WithStore(store).
+		WithSessionID(instanceID).
+		WithEntrypoint("run_test").
+		Run()
 
-	session := wasmee.NewSession(instanceID, state)
-
-	fmt.Printf("[HOST] Triggering execution of guest function \"run_test\"...\n")
-	crashed, _, err := runner.Execute(ctx, session, "run_test", nil)
 	if err != nil {
 		fmt.Printf("Execution failed: %v (crashed: %v)\n", err, crashed)
 		os.Exit(1)
