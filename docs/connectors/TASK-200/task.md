@@ -3,5 +3,5 @@
 - `[x]` Update `gotenberg/libreoffice.go` with wrappers for new parameters
 - `[x]` Update `gotenberg/pdfengines.go` with wrappers, `Embed` route, and `FacturX` route and fields
 - `[x]` Add `"8.34.0"` to `gotenberg/test_all_versions.sh`
-- `[/]` Run `./test_all_versions.sh` to verify changes
+- `[x]` Run `./test_all_versions.sh` to verify changes
 - `[x]` Create walkthrough report
