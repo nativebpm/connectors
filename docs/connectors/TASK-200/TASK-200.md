@@ -1,6 +1,6 @@
 ---
 task: TASK-200
-status: In Progress
+status: Completed
 summary: Update Gotenberg Go client for version 8.34.0, adding PDF ownerPassword and permission controls, and Factur-X/ZUGFeRD support.
 ---
 
