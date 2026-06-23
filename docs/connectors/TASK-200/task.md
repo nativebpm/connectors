@@ -1,4 +1,4 @@
-- `[ ]` Update `gotenberg/gotenberg.go` with PDF security fields and `Embeds` method
+- `[/]` Update `gotenberg/gotenberg.go` with PDF security fields and `Embeds` method
 - `[ ]` Update `gotenberg/chromium.go` with wrappers for new parameters
 - `[ ]` Update `gotenberg/libreoffice.go` with wrappers for new parameters
 - `[ ]` Update `gotenberg/pdfengines.go` with wrappers, `Embed` route, and `FacturX` route and fields
