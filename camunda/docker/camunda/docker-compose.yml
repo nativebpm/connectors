@@ -64,19 +64,22 @@ services:
           memory: 2GB
 
   camunda_migrate:
-    image: arigaio/atlas:latest-alpine
+    image: amacneil/dbmate:2.15.0
     entrypoint: [ "/bin/sh", "-c" ]
     command: >
       "
-      until atlas schema inspect --url 'postgres://camunda:camunda@camunda_postgres:5432/process-engine?sslmode=disable' | grep -q 'act_ru_ext_task'; do
+      apk add --no-cache postgresql-client &&
+      until PGPASSWORD=camunda psql -h camunda_postgres -U camunda -d process-engine -c \"SELECT 1 FROM information_schema.tables WHERE table_name = 'act_ru_ext_task';\" | grep -q 1; do
         echo 'Waiting for Camunda to initialize schema (act_ru_ext_task)...'
         sleep 3
       done &&
-      echo 'Camunda tables detected. Applying Atlas migrations...' &&
-      atlas migrate apply --url 'postgres://camunda:camunda@camunda_postgres:5432/process-engine?sslmode=disable' --dir 'file:///migrations' --allow-dirty
+      echo 'Camunda tables detected. Applying dbmate migrations...' &&
+      dbmate --no-dump-schema up
       "
     volumes:
-      - ./migrations:/migrations
+      - ./migrations:/db/migrations
+    environment:
+      - DATABASE_URL=postgres://camunda:camunda@camunda_postgres:5432/process-engine?sslmode=disable
     depends_on:
       camunda_postgres:
         condition: service_healthy

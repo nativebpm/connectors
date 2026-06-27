@@ -5,19 +5,16 @@ sequin:
 camunda:
 	cd docker/camunda && docker compose up -d
 
-atlas-hash:
-	docker run --rm -v $(PWD):/camunda -w /camunda/docker/camunda arigaio/atlas:latest migrate hash
-
-atlas-status:
+dbmate-status:
 	docker run --rm --network camunda_default \
-		-v $(PWD)/docker/camunda/migrations:/migrations \
-		arigaio/atlas:latest-alpine migrate status \
+		-v $(PWD)/docker/camunda/migrations:/db/migrations \
+		amacneil/dbmate:2.15.0 \
 		--url "postgres://camunda:camunda@camunda_postgres:5432/process-engine?sslmode=disable" \
-		--dir "file:///migrations"
+		status
 
-atlas-apply:
+dbmate-apply:
 	docker run --rm --network camunda_default \
-		-v $(PWD)/docker/camunda/migrations:/migrations \
-		arigaio/atlas:latest-alpine migrate apply \
+		-v $(PWD)/docker/camunda/migrations:/db/migrations \
+		amacneil/dbmate:2.15.0 \
 		--url "postgres://camunda:camunda@camunda_postgres:5432/process-engine?sslmode=disable" \
-		--dir "file:///migrations" --allow-dirty
+		--no-dump-schema up

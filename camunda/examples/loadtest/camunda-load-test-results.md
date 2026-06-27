@@ -50,7 +50,7 @@ graph TD
 1. **Logical CDC Stream via Sequin**:
    - Instead of checking the database periodically via heavy `/fetchAndLock` REST polling, Sequin streams changes directly from the Postgres Write-Ahead Log (WAL).
    - Only events relating to the `act_ru_ext_task` table are captured and delivered, resulting in near-zero idle database/network overhead.
-   - Database schemas and logical slot configs are fully versioned and managed using **Atlas Go**, applied automatically when the engine tables are ready.
+   - Database schemas and logical slot configs are fully versioned and managed using **Dbmate**, applied automatically when the engine tables are ready.
 
 2. **Database-Free Decoupling**:
    - The Go worker client does not require a database connection string (`sw.db` is completely removed).

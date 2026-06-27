@@ -44,7 +44,7 @@ Once started:
 
 The module supports two task execution architectures:
 1. **Classic gRPC Polling (No CDC)**: Standard Temporal task queue polling mechanism where workers poll task queues directly via gRPC.
-2. **WAL CDC Delegation (via Sequin)**: High-performance delegation scheme to offload Temporal. An activity writes a task to `custom_task_queue` in PostgreSQL, Sequin reads PostgreSQL WAL logs and streams them to the CDC Pull queue, where lightweight HTTP workers pull jobs and signal completions back to Temporal. DB schemas and publications are fully managed by **Atlas** migration tool.
+2. **WAL CDC Delegation (via Sequin)**: High-performance delegation scheme to offload Temporal. An activity writes a task to `custom_task_queue` in PostgreSQL, Sequin reads PostgreSQL WAL logs and streams them to the CDC Pull queue, where lightweight HTTP workers pull jobs and signal completions back to Temporal. DB schemas and publications are fully managed by **Dbmate** migration tool.
 
 ### Running the Load Tests
 

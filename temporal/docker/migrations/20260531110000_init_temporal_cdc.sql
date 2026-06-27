@@ -1,4 +1,4 @@
--- atlas:txmode none
+-- migrate:up
 
 -- Create custom task queue table
 CREATE TABLE IF NOT EXISTS custom_task_queue (

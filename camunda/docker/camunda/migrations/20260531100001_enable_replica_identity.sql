@@ -1,3 +1,4 @@
+-- migrate:up
 -- Set replica identity to FULL for act_ru_ext_task to ensure WAL contains old row state
 ALTER TABLE "public"."act_ru_ext_task" REPLICA IDENTITY FULL;
 

@@ -118,7 +118,7 @@ services:
         condition: service_completed_successfully
 
   temporal-migrate:
-    image: arigaio/atlas:latest-alpine
+    image: amacneil/dbmate:2.15.0
     container_name: temporal-migrate
     entrypoint: [ "/bin/sh", "-c" ]
     command: >
@@ -129,11 +129,13 @@ services:
         sleep 1
       done &&
       PGPASSWORD=temporal_password psql -h temporal-postgresql -U temporal -d temporal -c \"SELECT 1 FROM pg_database WHERE datname = 'sequin'\" | grep -q 1 || PGPASSWORD=temporal_password psql -h temporal-postgresql -U temporal -d temporal -c \"CREATE DATABASE sequin\" &&
-      echo 'Applying Atlas migrations for Temporal CDC...' &&
-      atlas migrate apply --url 'postgres://temporal:temporal_password@temporal-postgresql:5432/temporal?sslmode=disable' --dir 'file:///migrations' --allow-dirty
+      echo 'Applying dbmate migrations for Temporal CDC...' &&
+      dbmate --no-dump-schema up
       "
     volumes:
-      - ./migrations:/migrations
+      - ./migrations:/db/migrations
+    environment:
+      - DATABASE_URL=postgres://temporal:temporal_password@temporal-postgresql:5432/temporal?sslmode=disable
     depends_on:
       temporal-postgresql:
         condition: service_healthy
