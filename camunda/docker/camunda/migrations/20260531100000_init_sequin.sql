@@ -1,4 +1,4 @@
--- atlas:txmode none
+-- migrate:up
 
 -- Create dedicated user for Sequin
 CREATE USER sequin_user WITH PASSWORD 'ktNyE6d9kDvXpFzzWCYDKeLzBYTZf7z88/UkZvHzuF8=';

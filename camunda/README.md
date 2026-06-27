@@ -63,10 +63,10 @@ graph TD
 
 ## 2. Tuning & Database Migrations
 
-### Database Setup with Atlas Go
-To enable CDC replication slots and publication schemas safely without editing default docker configs, we use [Atlas Go](https://atlasgo.io/). The configuration is version-controlled in [atlas.hcl](docker/camunda/atlas.hcl).
+### Database Setup with Dbmate
+To enable CDC replication slots and publication schemas safely without editing default docker configs, we use [Dbmate](https://github.com/amacneil/dbmate).
 
-Migrations are automatically applied during deployment using the `arigaio/atlas:latest-alpine` runner container, which waits for Camunda schema tables to initialize before configuring replication:
+Migrations are automatically applied during deployment using the `amacneil/dbmate:2.15.0` runner container, which waits for Camunda schema tables to initialize (using standard `psql` schema table checks) before configuring replication:
 - **`20260531100000_init_sequin.sql`**: Creates the Sequin user, replication slot, and publication.
 - **`20260531100001_enable_replica_identity.sql`**: Configures `REPLICA IDENTITY FULL` on `act_ru_ext_task` to ensure the CDC payloads capture complete row updates.
 
