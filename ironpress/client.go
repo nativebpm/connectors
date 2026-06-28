@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nativebpm/connectors/wasmee"
+	"github.com/nativebpm/connectors/wasmee/olme"
 	"github.com/nativebpm/httpstream"
 )
 
@@ -21,13 +23,17 @@ const (
 	HTTP_CLI_Mode Mode = iota
 	// Pure_WASM_Mode executes conversions in-process using WebAssembly via wazero.
 	Pure_WASM_Mode
+	// WASMEE_Mode executes conversions on the distributed durable wasmee runtime.
+	WASMEE_Mode
 )
 
-// Client handles document conversions using either HTTP or WebAssembly.
+// Client handles document conversions using HTTP, WebAssembly, or WASMEE.
 type Client struct {
-	httpStream *httpstream.Client
-	serverURL  string
-	wasmBytes  []byte
+	httpStream  *httpstream.Client
+	serverURL   string
+	wasmBytes   []byte
+	wasmeeAddr  string
+	wasmeeStore olme.SnapshotStore
 }
 
 // Option configures the Client.
@@ -51,6 +57,15 @@ func WithWasm(wasmBytes []byte) Option {
 	}
 }
 
+// WithWasmee configures the client to execute conversions via the wasmee durable engine.
+func WithWasmee(serverAddr string, store olme.SnapshotStore, wasmBytes []byte) Option {
+	return func(c *Client) {
+		c.wasmeeAddr = serverAddr
+		c.wasmeeStore = store
+		c.wasmBytes = wasmBytes
+	}
+}
+
 // NewClient creates a new ironpress client using the provided configuration options.
 func NewClient(opts ...Option) *Client {
 	c := &Client{}
@@ -70,9 +85,10 @@ func (c *Client) Convert(mode Mode) *Request {
 
 // Request is a unified fluent builder for ironpress conversions with a sticky error pattern.
 type Request struct {
-	client *Client
-	mode   Mode
-	err    error
+	client    *Client
+	mode      Mode
+	err       error
+	sessionID string // used for WASMEE instance tracking
 
 	fileContent io.Reader
 	fileName    string
@@ -94,6 +110,15 @@ func (r *Request) setErr(err error) {
 	if r.err == nil {
 		r.err = err
 	}
+}
+
+// SessionID configures the durable execution session identifier (required for WASMEE_Mode).
+func (r *Request) SessionID(id string) *Request {
+	if r.err != nil {
+		return r
+	}
+	r.sessionID = id
+	return r
 }
 
 // HTML sets the HTML string content to convert.
@@ -204,6 +229,8 @@ func (r *Request) Do(ctx context.Context) ([]byte, error) {
 		return r.doHTTP(ctx)
 	case Pure_WASM_Mode:
 		return r.doWasm(ctx)
+	case WASMEE_Mode:
+		return r.doWasmee(ctx)
 	default:
 		return nil, fmt.Errorf("unsupported execution mode")
 	}
@@ -255,4 +282,38 @@ func (r *Request) doHTTP(ctx context.Context) ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+func (r *Request) doWasmee(ctx context.Context) ([]byte, error) {
+	if r.client.wasmeeAddr == "" {
+		return nil, fmt.Errorf("wasmee address is not configured (use WithWasmee option)")
+	}
+	if r.client.wasmeeStore == nil {
+		return nil, fmt.Errorf("wasmee store is not configured (use WithWasmee option)")
+	}
+	if r.sessionID == "" {
+		return nil, fmt.Errorf("session ID is required for WASMEE mode")
+	}
+
+	// Read input content to pass through exchange buffer
+	contentBytes, err := io.ReadAll(r.fileContent)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read input content: %w", err)
+	}
+
+	runner := wasmee.NewFluentRunner().
+		WithContext(ctx).
+		WithServerAddress(r.client.wasmeeAddr).
+		WithWasmBytes(r.client.wasmBytes).
+		WithStore(r.client.wasmeeStore).
+		WithSessionID(r.sessionID).
+		WithEntrypoint("execute").
+		WithExchangeBuffer(contentBytes)
+
+	crashed, err := runner.Run()
+	if err != nil {
+		return nil, fmt.Errorf("wasmee execution failed (crashed=%t): %w", crashed, err)
+	}
+
+	return runner.Response(), nil
 }
