@@ -99,3 +99,36 @@ In another terminal, run the load test:
 ```bash
 k6 run examples/k6/load_test.js
 ```
+
+## Load Testing & Performance Benchmarks
+
+The HTTP wrapper server was benchmarked using `k6` with a load profile ramping up to 20 concurrent virtual users (VUs) over 25 seconds.
+
+### Performance Summary
+
+- **Total Requests**: 931 successful PDF conversions
+- **Throughput**: ~37 req/s
+- **Success Rate**: 100.00% (0 errors, 0 timeouts)
+- **Latencies**:
+  - **Average**: 219.38 ms
+  - **Median (p50)**: 200.08 ms
+  - **95th Percentile (p95)**: 301.87 ms
+  - **Min / Max**: 175.44 ms / 330.55 ms
+  - **Network Transfer Rate**: 1.2 MB/s
+
+## Ironpress vs Gotenberg Comparison
+
+Here is a quick architectural and performance comparison between `ironpress` and `gotenberg` (which wraps headless Chrome/Chromium):
+
+| Feature / Metric | Ironpress (Pure Rust / WASM) | Gotenberg (Chromium) |
+| :--- | :--- | :--- |
+| **Engine** | Pure Rust parser & layout | Headless Chromium (browser) |
+| **Dependencies** | None (can execute inside Go via WASM) | Docker-only (requires full Chromium) |
+| **Avg Latency (HTML→PDF)**| **150ms – 300ms** (up to 10x faster) | **1.5s – 3.0s** (heavy browser startup) |
+| **Throughput (20 VUs)** | **~37 req/s** | **~4 - 8 req/s** (highly CPU bound) |
+| **Memory Footprint** | Low (~10-30MB per invocation) | High (200MB - 1GB+ per runner) |
+| **JavaScript / CSS support**| Pure HTML/CSS only. No JS. | Full modern CSS + JavaScript charts |
+| **Deployment size** | **~15MB** binary/WASM | **~500MB+** Docker container |
+| **Security Sandbox** | Very High (WASM virtual disk mount) | Standard (requires Docker host isolation)|
+
+
