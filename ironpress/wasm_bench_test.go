@@ -20,10 +20,7 @@ func BenchmarkConversions(b *testing.B) {
 	}()
 	time.Sleep(100 * time.Millisecond)
 
-	client, err := NewClient(nil, fmt.Sprintf("http://%s", server.Addr()))
-	if err != nil {
-		b.Fatalf("failed to create HTTP client: %v", err)
-	}
+	client := NewClient(WithHTTP(nil, fmt.Sprintf("http://%s", server.Addr())))
 
 	// 2. Prepare WASM Converter
 	wasmPath := "/tmp/ironpress_wasm/bin/ironpress.wasm"
@@ -36,17 +33,13 @@ func BenchmarkConversions(b *testing.B) {
 		b.Fatalf("failed to read WASM file: %v", err)
 	}
 
-	converter, err := NewWasmConverter(ctx, wasmBytes)
-	if err != nil {
-		b.Fatalf("failed to create WASM converter: %v", err)
-	}
-	defer converter.Close(ctx)
+	wasmClient := NewClient(WithWasm(wasmBytes))
 
 	// Run HTTP Benchmark
 	b.Run("HTTP_CLI_Mode", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			pdf, err := client.Convert().
+			pdf, err := client.Convert(HTTP_CLI_Mode).
 				HTML(htmlContent).
 				PageSize("a4").
 				Do(ctx)
@@ -63,7 +56,7 @@ func BenchmarkConversions(b *testing.B) {
 	b.Run("Pure_WASM_Mode", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			pdf, err := converter.Convert().
+			pdf, err := wasmClient.Convert(Pure_WASM_Mode).
 				HTML(htmlContent).
 				PageSize("a4").
 				Do(ctx)
