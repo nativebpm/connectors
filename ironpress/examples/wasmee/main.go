@@ -10,23 +10,23 @@ import (
 	"time"
 
 	"github.com/nativebpm/connectors/ironpress"
-	"github.com/nativebpm/connectors/wasmee/olme"
+	"github.com/nativebpm/connectors/wasmee"
 )
 
 // Simple in-memory SnapshotStore implementation for local demo testing
 type inMemoryStore struct {
 	snapshots map[string][]byte
 	deltas    map[string]map[int][]byte
-	oplogs    map[string][]olme.OplogEntry
-	metadata  map[string]*olme.InstanceMeta
+	oplogs    map[string][]wasmee.OplogEntry
+	metadata  map[string]*wasmee.InstanceMeta
 }
 
 func newInMemoryStore() *inMemoryStore {
 	return &inMemoryStore{
 		snapshots: make(map[string][]byte),
 		deltas:    make(map[string]map[int][]byte),
-		oplogs:    make(map[string][]olme.OplogEntry),
-		metadata:  make(map[string]*olme.InstanceMeta),
+		oplogs:    make(map[string][]wasmee.OplogEntry),
+		metadata:  make(map[string]*wasmee.InstanceMeta),
 	}
 }
 
@@ -67,17 +67,17 @@ func (s *inMemoryStore) TruncateDeltas(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *inMemoryStore) SaveOplog(ctx context.Context, id string, entry olme.OplogEntry) error {
+func (s *inMemoryStore) SaveOplog(ctx context.Context, id string, entry wasmee.OplogEntry) error {
 	s.oplogs[id] = append(s.oplogs[id], entry)
 	return nil
 }
 
-func (s *inMemoryStore) LoadOplog(ctx context.Context, id string) ([]olme.OplogEntry, error) {
+func (s *inMemoryStore) LoadOplog(ctx context.Context, id string) ([]wasmee.OplogEntry, error) {
 	return s.oplogs[id], nil
 }
 
 func (s *inMemoryStore) TruncateOplog(ctx context.Context, id string, beforeCallIndex int) error {
-	var filtered []olme.OplogEntry
+	var filtered []wasmee.OplogEntry
 	for _, entry := range s.oplogs[id] {
 		if entry.CallIndex < beforeCallIndex {
 			filtered = append(filtered, entry)
@@ -87,12 +87,12 @@ func (s *inMemoryStore) TruncateOplog(ctx context.Context, id string, beforeCall
 	return nil
 }
 
-func (s *inMemoryStore) SaveMetadata(ctx context.Context, meta *olme.InstanceMeta) (bool, error) {
+func (s *inMemoryStore) SaveMetadata(ctx context.Context, meta *wasmee.InstanceMeta) (bool, error) {
 	s.metadata[meta.InstanceID] = meta
 	return true, nil
 }
 
-func (s *inMemoryStore) LoadMetadata(ctx context.Context, id string) (*olme.InstanceMeta, error) {
+func (s *inMemoryStore) LoadMetadata(ctx context.Context, id string) (*wasmee.InstanceMeta, error) {
 	meta, ok := s.metadata[id]
 	if !ok {
 		return nil, errors.New("not found")
@@ -122,7 +122,7 @@ func main() {
 
 	// 3. Initialize mock snapshot store and client
 	store := newInMemoryStore()
-	meta := &olme.InstanceMeta{
+	meta := &wasmee.InstanceMeta{
 		InstanceID: "session-ironpress-123",
 		WasmHash:   "ironpress_wasm_hash",
 		Version:    0,
