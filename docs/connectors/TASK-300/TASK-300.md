@@ -1,6 +1,6 @@
 ---
 task: TASK-300
-status: In Progress
+status: Completed
 summary: Create Go connector and examples for gastongouron/ironpress PDF converter with k6 load tests.
 ---
 
