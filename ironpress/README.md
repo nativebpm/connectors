@@ -116,6 +116,17 @@ The HTTP wrapper server was benchmarked using `k6` with a load profile ramping u
   - **Min / Max**: 175.44 ms / 330.55 ms
   - **Network Transfer Rate**: 1.2 MB/s
 
+## Go In-Process Benchmark: HTTP/CLI vs Pure WASM Mode
+
+To evaluate the performance benefits of bypassing HTTP network stack and OS subprocess spawns, we ran native Go benchmarks:
+
+| Execution Mode | Speed (ms/op) | Memory Allocated (B/op) | Allocations (allocs/op) |
+| :--- | :--- | :--- | :--- |
+| **HTTP/CLI Mode** (external proc + network) | **191.78 ms/op** | **169,075 B/op** | **315** |
+| **Pure WASM Mode** (in-memory wazero) | **45.97 ms/op** | 97,846,565 B/op | 167,236 |
+
+- **4.17x Speedup**: Running `ironpress` compiled to WebAssembly via the `wazero` engine in-process executes in **45.97 ms**, compared to **191.78 ms** when spawning an OS process and writing to temporary files over HTTP.
+
 ## Ironpress vs Gotenberg Comparison
 
 Here is the actual performance and architectural comparison between `ironpress` (running via our Go HTTP wrapper) and `gotenberg` (running via official Docker with Chromium) under a concurrent `k6` load test of 20 VUs over 25 seconds:
@@ -133,7 +144,7 @@ Here is the actual performance and architectural comparison between `ironpress` 
 | **Memory Footprint** | Low (~10-30MB per invocation) | High (200MB - 1GB+ per runner) | - |
 | **JavaScript / CSS support**| Pure HTML/CSS only. No JS. | Full modern CSS + JavaScript charts | - |
 | **Deployment size** | **~15MB** binary/WASM | **~500MB+** Docker container | - |
-| **Security Sandbox** | Very High (WASM virtual disk mount) | Standard (requires Docker host isolation)| - |
+| **Security Sandbox** | Very High (WASM virtual disk mount) | Standard (requires Docker host isolation)| - | - |
 
 
 
