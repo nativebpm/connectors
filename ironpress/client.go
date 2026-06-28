@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/nativebpm/connectors/wasmee"
-	"github.com/nativebpm/connectors/wasmee/olme"
 	"github.com/nativebpm/httpstream"
 )
 
@@ -33,7 +32,7 @@ type Client struct {
 	serverURL   string
 	wasmBytes   []byte
 	wasmeeAddr  string
-	wasmeeStore olme.SnapshotStore
+	wasmeeStore wasmee.SnapshotStore
 }
 
 // Option configures the Client.
@@ -58,7 +57,7 @@ func WithWasm(wasmBytes []byte) Option {
 }
 
 // WithWasmee configures the client to execute conversions via the wasmee durable engine.
-func WithWasmee(serverAddr string, store olme.SnapshotStore, wasmBytes []byte) Option {
+func WithWasmee(serverAddr string, store wasmee.SnapshotStore, wasmBytes []byte) Option {
 	return func(c *Client) {
 		c.wasmeeAddr = serverAddr
 		c.wasmeeStore = store

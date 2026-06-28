@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nativebpm/connectors/wasmee"
-	"github.com/nativebpm/connectors/wasmee/olme"
 )
 
 // Simple in-memory store for load testing
@@ -20,16 +19,16 @@ type memStore struct {
 	mu        sync.RWMutex
 	snapshots map[string][]byte
 	deltas    map[string]map[int][]byte
-	oplogs    map[string][]olme.OplogEntry
-	metadata  map[string]*olme.InstanceMeta
+	oplogs    map[string][]wasmee.OplogEntry
+	metadata  map[string]*wasmee.InstanceMeta
 }
 
 func newMemStore() *memStore {
 	return &memStore{
 		snapshots: make(map[string][]byte),
 		deltas:    make(map[string]map[int][]byte),
-		oplogs:    make(map[string][]olme.OplogEntry),
-		metadata:  make(map[string]*olme.InstanceMeta),
+		oplogs:    make(map[string][]wasmee.OplogEntry),
+		metadata:  make(map[string]*wasmee.InstanceMeta),
 	}
 }
 
@@ -82,14 +81,14 @@ func (s *memStore) TruncateDeltas(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *memStore) SaveOplog(ctx context.Context, id string, entry olme.OplogEntry) error {
+func (s *memStore) SaveOplog(ctx context.Context, id string, entry wasmee.OplogEntry) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.oplogs[id] = append(s.oplogs[id], entry)
 	return nil
 }
 
-func (s *memStore) LoadOplog(ctx context.Context, id string) ([]olme.OplogEntry, error) {
+func (s *memStore) LoadOplog(ctx context.Context, id string) ([]wasmee.OplogEntry, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.oplogs[id], nil
@@ -98,7 +97,7 @@ func (s *memStore) LoadOplog(ctx context.Context, id string) ([]olme.OplogEntry,
 func (s *memStore) TruncateOplog(ctx context.Context, id string, beforeCallIndex int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var filtered []olme.OplogEntry
+	var filtered []wasmee.OplogEntry
 	for _, entry := range s.oplogs[id] {
 		if entry.CallIndex < beforeCallIndex {
 			filtered = append(filtered, entry)
@@ -108,7 +107,7 @@ func (s *memStore) TruncateOplog(ctx context.Context, id string, beforeCallIndex
 	return nil
 }
 
-func (s *memStore) SaveMetadata(ctx context.Context, meta *olme.InstanceMeta) (bool, error) {
+func (s *memStore) SaveMetadata(ctx context.Context, meta *wasmee.InstanceMeta) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	prev, exists := s.metadata[meta.InstanceID]
@@ -120,7 +119,7 @@ func (s *memStore) SaveMetadata(ctx context.Context, meta *olme.InstanceMeta) (b
 	return true, nil
 }
 
-func (s *memStore) LoadMetadata(ctx context.Context, id string) (*olme.InstanceMeta, error) {
+func (s *memStore) LoadMetadata(ctx context.Context, id string) (*wasmee.InstanceMeta, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	meta, ok := s.metadata[id]
@@ -157,7 +156,7 @@ func main() {
 		ctx := r.Context()
 		instanceID := "bench-" + uuid.New().String()
 
-		meta := &olme.InstanceMeta{
+		meta := &wasmee.InstanceMeta{
 			InstanceID: instanceID,
 			WasmHash:   "bench_hash",
 			Version:    0,

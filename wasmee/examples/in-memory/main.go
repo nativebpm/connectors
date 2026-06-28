@@ -7,23 +7,22 @@ import (
 	"path/filepath"
 
 	"github.com/nativebpm/connectors/wasmee"
-	"github.com/nativebpm/connectors/wasmee/olme"
 )
 
 // memoryStore implements olme.SnapshotStore in memory.
 type memoryStore struct {
 	snapshots map[string][]byte
 	deltas    map[string]map[int][]byte
-	oplogs    map[string][]olme.OplogEntry
-	metadata  map[string]*olme.InstanceMeta
+	oplogs    map[string][]wasmee.OplogEntry
+	metadata  map[string]*wasmee.InstanceMeta
 }
 
 func newMemoryStore() *memoryStore {
 	return &memoryStore{
 		snapshots: make(map[string][]byte),
 		deltas:    make(map[string]map[int][]byte),
-		oplogs:    make(map[string][]olme.OplogEntry),
-		metadata:  make(map[string]*olme.InstanceMeta),
+		oplogs:    make(map[string][]wasmee.OplogEntry),
+		metadata:  make(map[string]*wasmee.InstanceMeta),
 	}
 }
 
@@ -64,17 +63,17 @@ func (s *memoryStore) TruncateDeltas(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *memoryStore) SaveOplog(ctx context.Context, id string, entry olme.OplogEntry) error {
+func (s *memoryStore) SaveOplog(ctx context.Context, id string, entry wasmee.OplogEntry) error {
 	s.oplogs[id] = append(s.oplogs[id], entry)
 	return nil
 }
 
-func (s *memoryStore) LoadOplog(ctx context.Context, id string) ([]olme.OplogEntry, error) {
+func (s *memoryStore) LoadOplog(ctx context.Context, id string) ([]wasmee.OplogEntry, error) {
 	return s.oplogs[id], nil
 }
 
 func (s *memoryStore) TruncateOplog(ctx context.Context, id string, beforeCallIndex int) error {
-	var filtered []olme.OplogEntry
+	var filtered []wasmee.OplogEntry
 	for _, entry := range s.oplogs[id] {
 		if entry.CallIndex < beforeCallIndex {
 			filtered = append(filtered, entry)
@@ -84,12 +83,12 @@ func (s *memoryStore) TruncateOplog(ctx context.Context, id string, beforeCallIn
 	return nil
 }
 
-func (s *memoryStore) SaveMetadata(ctx context.Context, meta *olme.InstanceMeta) (bool, error) {
+func (s *memoryStore) SaveMetadata(ctx context.Context, meta *wasmee.InstanceMeta) (bool, error) {
 	s.metadata[meta.InstanceID] = meta
 	return true, nil
 }
 
-func (s *memoryStore) LoadMetadata(ctx context.Context, id string) (*olme.InstanceMeta, error) {
+func (s *memoryStore) LoadMetadata(ctx context.Context, id string) (*wasmee.InstanceMeta, error) {
 	meta, ok := s.metadata[id]
 	if !ok {
 		return nil, fmt.Errorf("metadata not found")
@@ -122,7 +121,7 @@ func main() {
 	instanceID := "in-memory-session-demo"
 	store := newMemoryStore()
 
-	meta := &olme.InstanceMeta{
+	meta := &wasmee.InstanceMeta{
 		InstanceID: instanceID,
 		WasmHash:   "demo_hash",
 		Version:    0,

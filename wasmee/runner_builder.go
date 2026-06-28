@@ -3,8 +3,6 @@ package wasmee
 import (
 	"context"
 	"fmt"
-
-	"github.com/nativebpm/connectors/wasmee/olme"
 )
 
 // FluentRunner provides a fully fluent API for setting up and executing a WASM module instance on WASMEE.
@@ -13,7 +11,7 @@ type FluentRunner struct {
 	ctx            context.Context
 	httpAddr       string
 	wasmBytes      []byte
-	store          olme.SnapshotStore
+	store          SnapshotStore
 	instanceID     string
 	entrypoint     string
 	exchangeBuffer []byte
@@ -64,7 +62,7 @@ func (r *FluentRunner) WithWasmBytes(wasmBytes []byte) *FluentRunner {
 }
 
 // WithStore sets the SnapshotStore to use.
-func (r *FluentRunner) WithStore(store olme.SnapshotStore) *FluentRunner {
+func (r *FluentRunner) WithStore(store SnapshotStore) *FluentRunner {
 	if r.err != nil {
 		return r
 	}
@@ -147,7 +145,7 @@ func (r *FluentRunner) Run() (bool, error) {
 		return false, fmt.Errorf("snapshot store is required")
 	}
 
-	state := olme.NewSessionState(r.instanceID, r.store)
+	state := NewSessionState(r.instanceID, r.store)
 	if err := state.Load(r.ctx); err != nil {
 		return false, fmt.Errorf("failed to load session state: %w", err)
 	}

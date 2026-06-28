@@ -1,4 +1,4 @@
-package olme
+package wasmee
 
 import (
 	"context"

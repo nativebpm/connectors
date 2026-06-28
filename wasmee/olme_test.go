@@ -1,4 +1,4 @@
-package olme
+package wasmee
 
 import (
 	"context"
@@ -7,15 +7,15 @@ import (
 	"testing"
 )
 
-type inMemorySnapshotStore struct {
+type tyrannicalSnapshotStore struct {
 	snapshots map[string][]byte
 	deltas    map[string]map[int][]byte
 	oplogs    map[string][]OplogEntry
 	metadata  map[string]*InstanceMeta
 }
 
-func newInMemoryStore() *inMemorySnapshotStore {
-	return &inMemorySnapshotStore{
+func newTyrannicalStore() *tyrannicalSnapshotStore {
+	return &tyrannicalSnapshotStore{
 		snapshots: make(map[string][]byte),
 		deltas:    make(map[string]map[int][]byte),
 		oplogs:    make(map[string][]OplogEntry),
@@ -23,12 +23,12 @@ func newInMemoryStore() *inMemorySnapshotStore {
 	}
 }
 
-func (s *inMemorySnapshotStore) SaveSnapshot(ctx context.Context, id string, snapshot []byte) error {
+func (s *tyrannicalSnapshotStore) SaveSnapshot(ctx context.Context, id string, snapshot []byte) error {
 	s.snapshots[id] = snapshot
 	return nil
 }
 
-func (s *inMemorySnapshotStore) LoadSnapshot(ctx context.Context, id string) ([]byte, error) {
+func (s *tyrannicalSnapshotStore) LoadSnapshot(ctx context.Context, id string) ([]byte, error) {
 	data, ok := s.snapshots[id]
 	if !ok {
 		return nil, errors.New("not found")
@@ -36,12 +36,12 @@ func (s *inMemorySnapshotStore) LoadSnapshot(ctx context.Context, id string) ([]
 	return data, nil
 }
 
-func (s *inMemorySnapshotStore) DeleteSnapshot(ctx context.Context, id string) error {
+func (s *tyrannicalSnapshotStore) DeleteSnapshot(ctx context.Context, id string) error {
 	delete(s.snapshots, id)
 	return nil
 }
 
-func (s *inMemorySnapshotStore) SaveDeltas(ctx context.Context, id string, deltas map[int][]byte) error {
+func (s *tyrannicalSnapshotStore) SaveDeltas(ctx context.Context, id string, deltas map[int][]byte) error {
 	if s.deltas[id] == nil {
 		s.deltas[id] = make(map[int][]byte)
 	}
@@ -51,25 +51,25 @@ func (s *inMemorySnapshotStore) SaveDeltas(ctx context.Context, id string, delta
 	return nil
 }
 
-func (s *inMemorySnapshotStore) LoadDeltas(ctx context.Context, id string) (map[int][]byte, error) {
+func (s *tyrannicalSnapshotStore) LoadDeltas(ctx context.Context, id string) (map[int][]byte, error) {
 	return s.deltas[id], nil
 }
 
-func (s *inMemorySnapshotStore) TruncateDeltas(ctx context.Context, id string) error {
+func (s *tyrannicalSnapshotStore) TruncateDeltas(ctx context.Context, id string) error {
 	delete(s.deltas, id)
 	return nil
 }
 
-func (s *inMemorySnapshotStore) SaveOplog(ctx context.Context, id string, entry OplogEntry) error {
+func (s *tyrannicalSnapshotStore) SaveOplog(ctx context.Context, id string, entry OplogEntry) error {
 	s.oplogs[id] = append(s.oplogs[id], entry)
 	return nil
 }
 
-func (s *inMemorySnapshotStore) LoadOplog(ctx context.Context, id string) ([]OplogEntry, error) {
+func (s *tyrannicalSnapshotStore) LoadOplog(ctx context.Context, id string) ([]OplogEntry, error) {
 	return s.oplogs[id], nil
 }
 
-func (s *inMemorySnapshotStore) TruncateOplog(ctx context.Context, id string, beforeCallIndex int) error {
+func (s *tyrannicalSnapshotStore) TruncateOplog(ctx context.Context, id string, beforeCallIndex int) error {
 	var filtered []OplogEntry
 	for _, entry := range s.oplogs[id] {
 		if entry.CallIndex < beforeCallIndex {
@@ -80,7 +80,7 @@ func (s *inMemorySnapshotStore) TruncateOplog(ctx context.Context, id string, be
 	return nil
 }
 
-func (s *inMemorySnapshotStore) SaveMetadata(ctx context.Context, meta *InstanceMeta) (bool, error) {
+func (s *tyrannicalSnapshotStore) SaveMetadata(ctx context.Context, meta *InstanceMeta) (bool, error) {
 	prev, exists := s.metadata[meta.InstanceID]
 	if exists && prev.Version != meta.Version-1 {
 		return false, nil
@@ -89,7 +89,7 @@ func (s *inMemorySnapshotStore) SaveMetadata(ctx context.Context, meta *Instance
 	return true, nil
 }
 
-func (s *inMemorySnapshotStore) LoadMetadata(ctx context.Context, id string) (*InstanceMeta, error) {
+func (s *tyrannicalSnapshotStore) LoadMetadata(ctx context.Context, id string) (*InstanceMeta, error) {
 	meta, ok := s.metadata[id]
 	if !ok {
 		return nil, errors.New("not found")
@@ -98,16 +98,13 @@ func (s *inMemorySnapshotStore) LoadMetadata(ctx context.Context, id string) (*I
 }
 
 func TestMemoryDiffingAndRestoration(t *testing.T) {
-	// 1. Generate random base snapshot (2 pages = 128KB)
 	base := make([]byte, PageSize*2)
 	rand.Read(base)
 
-	// 2. Clone it and modify page index 1 (dirty)
 	modified := make([]byte, len(base))
 	copy(modified, base)
-	modified[PageSize+10] = modified[PageSize+10] ^ 0xFF // flip bits
+	modified[PageSize+10] = modified[PageSize+10] ^ 0xFF
 
-	// 3. Compute deltas
 	_, hashes := CalculateDeltas(base, nil)
 	deltas, _ := CalculateDeltas(modified, hashes)
 
@@ -118,7 +115,6 @@ func TestMemoryDiffingAndRestoration(t *testing.T) {
 		t.Fatalf("expected page index 1 to be dirty")
 	}
 
-	// 4. Restore memory from base and deltas
 	restored, err := RestoreMemory(base, deltas)
 	if err != nil {
 		t.Fatalf("failed to restore memory: %v", err)
@@ -132,7 +128,7 @@ func TestMemoryDiffingAndRestoration(t *testing.T) {
 }
 
 func TestOplogReplay(t *testing.T) {
-	store := newInMemoryStore()
+	store := newTyrannicalStore() // Использует структуру из wasmee_test.go
 	ctx := context.Background()
 	instanceID := "test-instance"
 
@@ -148,7 +144,6 @@ func TestOplogReplay(t *testing.T) {
 		t.Fatalf("failed to load session: %v", err)
 	}
 
-	// Call 1: fresh execution
 	execCount := 0
 	resp, err := session.GetOrExecuteCall(ctx, "test_api", []byte("req1"), func() ([]byte, error) {
 		execCount++
@@ -161,13 +156,11 @@ func TestOplogReplay(t *testing.T) {
 		t.Fatalf("invalid fresh call result")
 	}
 
-	// Load session again to simulate reload/restart
 	session2 := NewSessionState(instanceID, store)
 	if err := session2.Load(ctx); err != nil {
 		t.Fatalf("failed to reload session: %v", err)
 	}
 
-	// Call 1: replay (callback should NOT run, count stays same)
 	respReplayed, err := session2.GetOrExecuteCall(ctx, "test_api", []byte("req1"), func() ([]byte, error) {
 		execCount++
 		return []byte("resp_not_called"), nil
@@ -179,13 +172,11 @@ func TestOplogReplay(t *testing.T) {
 		t.Fatalf("replay failed or re-invoked callback")
 	}
 
-	// Load session again to simulate reload/restart for drift test
 	session3 := NewSessionState(instanceID, store)
 	if err := session3.Load(ctx); err != nil {
 		t.Fatalf("failed to reload session: %v", err)
 	}
 
-	// Call 1: test API drift detection
 	_, errDrift := session3.GetOrExecuteCall(ctx, "mismatched_api", []byte("req1"), func() ([]byte, error) {
 		return []byte("resp"), nil
 	})

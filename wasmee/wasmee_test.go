@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/nativebpm/connectors/wasmee/olme"
 )
 
 func startRustServer(t *testing.T) func() {
@@ -55,16 +53,16 @@ func startRustServer(t *testing.T) func() {
 type testInMemoryStore struct {
 	snapshots map[string][]byte
 	deltas    map[string]map[int][]byte
-	oplogs    map[string][]olme.OplogEntry
-	metadata  map[string]*olme.InstanceMeta
+	oplogs    map[string][]OplogEntry
+	metadata  map[string]*InstanceMeta
 }
 
 func newTestStore() *testInMemoryStore {
 	return &testInMemoryStore{
 		snapshots: make(map[string][]byte),
 		deltas:    make(map[string]map[int][]byte),
-		oplogs:    make(map[string][]olme.OplogEntry),
-		metadata:  make(map[string]*olme.InstanceMeta),
+		oplogs:    make(map[string][]OplogEntry),
+		metadata:  make(map[string]*InstanceMeta),
 	}
 }
 
@@ -105,17 +103,17 @@ func (s *testInMemoryStore) TruncateDeltas(ctx context.Context, id string) error
 	return nil
 }
 
-func (s *testInMemoryStore) SaveOplog(ctx context.Context, id string, entry olme.OplogEntry) error {
+func (s *testInMemoryStore) SaveOplog(ctx context.Context, id string, entry OplogEntry) error {
 	s.oplogs[id] = append(s.oplogs[id], entry)
 	return nil
 }
 
-func (s *testInMemoryStore) LoadOplog(ctx context.Context, id string) ([]olme.OplogEntry, error) {
+func (s *testInMemoryStore) LoadOplog(ctx context.Context, id string) ([]OplogEntry, error) {
 	return s.oplogs[id], nil
 }
 
 func (s *testInMemoryStore) TruncateOplog(ctx context.Context, id string, beforeCallIndex int) error {
-	var filtered []olme.OplogEntry
+	var filtered []OplogEntry
 	for _, entry := range s.oplogs[id] {
 		if entry.CallIndex < beforeCallIndex {
 			filtered = append(filtered, entry)
@@ -125,7 +123,7 @@ func (s *testInMemoryStore) TruncateOplog(ctx context.Context, id string, before
 	return nil
 }
 
-func (s *testInMemoryStore) SaveMetadata(ctx context.Context, meta *olme.InstanceMeta) (bool, error) {
+func (s *testInMemoryStore) SaveMetadata(ctx context.Context, meta *InstanceMeta) (bool, error) {
 	prev, exists := s.metadata[meta.InstanceID]
 	if exists && prev.Version != meta.Version-1 {
 		return false, nil
@@ -135,7 +133,7 @@ func (s *testInMemoryStore) SaveMetadata(ctx context.Context, meta *olme.Instanc
 	return true, nil
 }
 
-func (s *testInMemoryStore) LoadMetadata(ctx context.Context, id string) (*olme.InstanceMeta, error) {
+func (s *testInMemoryStore) LoadMetadata(ctx context.Context, id string) (*InstanceMeta, error) {
 	meta, ok := s.metadata[id]
 	if !ok {
 		return nil, errors.New("not found")
@@ -155,7 +153,7 @@ func TestWasmRunnerExecution(t *testing.T) {
 	}
 
 	store := newTestStore()
-	meta := &olme.InstanceMeta{
+	meta := &InstanceMeta{
 		InstanceID: instanceID,
 		WasmHash:   "test_hash",
 		Version:    0,
@@ -228,7 +226,7 @@ func TestWasmRunnerSimulatedCrashRecovery(t *testing.T) {
 	}
 
 	store := newTestStore()
-	meta := &olme.InstanceMeta{
+	meta := &InstanceMeta{
 		InstanceID: instanceID,
 		WasmHash:   "test_hash",
 		Version:    0,
@@ -327,7 +325,7 @@ func TestDynamicWasmModuleExecution(t *testing.T) {
 	defer cleanup()
 
 	store := newTestStore()
-	meta := &olme.InstanceMeta{
+	meta := &InstanceMeta{
 		InstanceID: instanceID,
 		WasmHash:   "test_hash",
 		Version:    0,
@@ -401,7 +399,7 @@ func TestFluentRunnerExecution(t *testing.T) {
 	instanceID := "fluent-session-1"
 	store := newTestStore()
 
-	meta := &olme.InstanceMeta{
+	meta := &InstanceMeta{
 		InstanceID: instanceID,
 		WasmHash:   "test_hash",
 		Version:    0,

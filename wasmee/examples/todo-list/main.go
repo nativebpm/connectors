@@ -11,7 +11,6 @@ import (
 
 	"github.com/nativebpm/connectors/jsonschema"
 	"github.com/nativebpm/connectors/wasmee"
-	"github.com/nativebpm/connectors/wasmee/olme"
 )
 
 // memoryStore implements olme.SnapshotStore in memory.
@@ -19,16 +18,16 @@ type memoryStore struct {
 	mu        sync.Mutex
 	snapshots map[string][]byte
 	deltas    map[string]map[int][]byte
-	oplogs    map[string][]olme.OplogEntry
-	metadata  map[string]*olme.InstanceMeta
+	oplogs    map[string][]wasmee.OplogEntry
+	metadata  map[string]*wasmee.InstanceMeta
 }
 
 func newMemoryStore() *memoryStore {
 	return &memoryStore{
 		snapshots: make(map[string][]byte),
 		deltas:    make(map[string]map[int][]byte),
-		oplogs:    make(map[string][]olme.OplogEntry),
-		metadata:  make(map[string]*olme.InstanceMeta),
+		oplogs:    make(map[string][]wasmee.OplogEntry),
+		metadata:  make(map[string]*wasmee.InstanceMeta),
 	}
 }
 
@@ -81,14 +80,14 @@ func (s *memoryStore) TruncateDeltas(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *memoryStore) SaveOplog(ctx context.Context, id string, entry olme.OplogEntry) error {
+func (s *memoryStore) SaveOplog(ctx context.Context, id string, entry wasmee.OplogEntry) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.oplogs[id] = append(s.oplogs[id], entry)
 	return nil
 }
 
-func (s *memoryStore) LoadOplog(ctx context.Context, id string) ([]olme.OplogEntry, error) {
+func (s *memoryStore) LoadOplog(ctx context.Context, id string) ([]wasmee.OplogEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.oplogs[id], nil
@@ -97,7 +96,7 @@ func (s *memoryStore) LoadOplog(ctx context.Context, id string) ([]olme.OplogEnt
 func (s *memoryStore) TruncateOplog(ctx context.Context, id string, beforeCallIndex int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var filtered []olme.OplogEntry
+	var filtered []wasmee.OplogEntry
 	for _, entry := range s.oplogs[id] {
 		if entry.CallIndex < beforeCallIndex {
 			filtered = append(filtered, entry)
@@ -107,14 +106,14 @@ func (s *memoryStore) TruncateOplog(ctx context.Context, id string, beforeCallIn
 	return nil
 }
 
-func (s *memoryStore) SaveMetadata(ctx context.Context, meta *olme.InstanceMeta) (bool, error) {
+func (s *memoryStore) SaveMetadata(ctx context.Context, meta *wasmee.InstanceMeta) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.metadata[meta.InstanceID] = meta
 	return true, nil
 }
 
-func (s *memoryStore) LoadMetadata(ctx context.Context, id string) (*olme.InstanceMeta, error) {
+func (s *memoryStore) LoadMetadata(ctx context.Context, id string) (*wasmee.InstanceMeta, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	meta, ok := s.metadata[id]
@@ -284,14 +283,14 @@ func startNewProcessInstance(ctx context.Context) error {
 	delete(store.metadata, instanceID)
 	store.mu.Unlock()
 
-	meta := &olme.InstanceMeta{
+	meta := &wasmee.InstanceMeta{
 		InstanceID: instanceID,
 		WasmHash:   "todo_process_hash",
 		Version:    0,
 	}
 	_, _ = store.SaveMetadata(ctx, meta)
 
-	state := olme.NewSessionState(instanceID, store)
+	state := wasmee.NewSessionState(instanceID, store)
 	if err := state.Load(ctx); err != nil {
 		return err
 	}
@@ -388,7 +387,7 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		currentInstance.Variables[k] = v
 	}
 
-	state := olme.NewSessionState(instanceID, store)
+	state := wasmee.NewSessionState(instanceID, store)
 	if err := state.Load(ctx); err != nil {
 		http.Error(w, "Failed to load state: "+err.Error(), http.StatusInternalServerError)
 		return

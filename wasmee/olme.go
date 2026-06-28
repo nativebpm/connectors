@@ -1,4 +1,4 @@
-package olme
+package wasmee
 
 import (
 	"context"
@@ -49,7 +49,6 @@ func CalculateDeltas(currentMemory []byte, previousPageHashes map[int]uint64) (m
 
 // RestoreMemory compiles full linear memory from base snapshot and deltas.
 func RestoreMemory(baseSnapshot []byte, deltas map[int][]byte) ([]byte, error) {
-	// Find max page index to know how large the memory must be
 	maxPage := -1
 	for p := range deltas {
 		if p > maxPage {
@@ -84,7 +83,7 @@ type SessionState struct {
 	pageHashes map[int]uint64
 }
 
-// NewSessionState initializes an OLME SessionState.
+// NewSessionState initializes a SessionState.
 func NewSessionState(instanceID string, store SnapshotStore) *SessionState {
 	return &SessionState{
 		store:      store,

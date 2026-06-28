@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nativebpm/connectors/wasmee/olme"
 	"github.com/nativebpm/connectors/wasmee/pb"
 	"google.golang.org/protobuf/proto"
 )
@@ -68,14 +67,14 @@ func (r *Runner) Close(ctx context.Context) error {
 // Session represents the active execution session.
 type Session struct {
 	InstanceID    string
-	State         *olme.SessionState
+	State         *SessionState
 	ApiHandler    func(apiName string, request []byte) ([]byte, error)
 	crashed       bool
 	simulateCrash bool
 }
 
 // NewSession creates an execution session bound to OLME state.
-func NewSession(instanceID string, state *olme.SessionState) *Session {
+func NewSession(instanceID string, state *SessionState) *Session {
 	return &Session{
 		InstanceID: instanceID,
 		State:      state,
@@ -202,7 +201,7 @@ func (r *Runner) Execute(ctx context.Context, session *Session, entrypoint strin
 		// Save oplog entries that happened BEFORE this checkpoint!
 		for _, entry := range respBody.FinalOplog {
 			if int(entry.CallIndex) <= int(cp.OplogLen) && int(entry.CallIndex) > currentSavedIndex {
-				oe := olme.OplogEntry{
+				oe := OplogEntry{
 					CallIndex:       int(entry.CallIndex),
 					ApiName:         entry.ApiName,
 					RequestPayload:  entry.RequestPayload,
@@ -229,7 +228,7 @@ func (r *Runner) Execute(ctx context.Context, session *Session, entrypoint strin
 	// Save final oplog (for entries after the last checkpoint, if any)
 	for _, entry := range respBody.FinalOplog {
 		if int(entry.CallIndex) > currentSavedIndex {
-			oe := olme.OplogEntry{
+			oe := OplogEntry{
 				CallIndex:       int(entry.CallIndex),
 				ApiName:         entry.ApiName,
 				RequestPayload:  entry.RequestPayload,
