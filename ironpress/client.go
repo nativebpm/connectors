@@ -13,39 +13,65 @@ import (
 	"github.com/nativebpm/httpstream"
 )
 
-// Client represents an ironpress client.
+// Mode represents the execution engine type.
+type Mode int
+
+const (
+	// HTTP_CLI_Mode executes conversions via HTTP requests to an ironpress server wrapper.
+	HTTP_CLI_Mode Mode = iota
+	// Pure_WASM_Mode executes conversions in-process using WebAssembly via wazero.
+	Pure_WASM_Mode
+)
+
+// Client handles document conversions using either HTTP or WebAssembly.
 type Client struct {
 	httpStream *httpstream.Client
+	serverURL  string
+	wasmBytes  []byte
 }
 
-// NewClient creates a new ironpress client with the given HTTP client and base URL.
-func NewClient(httpClient *http.Client, baseURL string) (*Client, error) {
-	client, err := httpstream.NewClient(httpClient, baseURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create httpstream client: %w", err)
+// Option configures the Client.
+type Option func(*Client)
+
+// WithHTTP configures the client to connect to an ironpress HTTP server.
+func WithHTTP(httpClient *http.Client, serverURL string) Option {
+	return func(c *Client) {
+		c.serverURL = serverURL
+		stream, err := httpstream.NewClient(httpClient, serverURL)
+		if err == nil {
+			c.httpStream = stream
+		}
 	}
-
-	return &Client{
-		httpStream: client,
-	}, nil
 }
 
-// Use applies HTTP round-tripper middlewares to the client.
-func (c *Client) Use(middleware func(http.RoundTripper) http.RoundTripper) *Client {
-	c.httpStream = c.httpStream.Use(middleware)
+// WithWasm configures the client with compiled ironpress WASM module bytes for in-memory execution.
+func WithWasm(wasmBytes []byte) Option {
+	return func(c *Client) {
+		c.wasmBytes = wasmBytes
+	}
+}
+
+// NewClient creates a new ironpress client using the provided configuration options.
+func NewClient(opts ...Option) *Client {
+	c := &Client{}
+	for _, opt := range opts {
+		opt(c)
+	}
 	return c
 }
 
-// Convert initiates a new PDF conversion request builder.
-func (c *Client) Convert() *Request {
+// Convert initiates a new PDF conversion request builder with the specified execution mode.
+func (c *Client) Convert(mode Mode) *Request {
 	return &Request{
 		client: c,
+		mode:   mode,
 	}
 }
 
-// Request is a fluent builder for ironpress conversions with a sticky error pattern.
+// Request is a unified fluent builder for ironpress conversions with a sticky error pattern.
 type Request struct {
 	client *Client
+	mode   Mode
 	err    error
 
 	fileContent io.Reader
@@ -164,13 +190,28 @@ func (r *Request) Timeout(d time.Duration) *Request {
 	return r
 }
 
-// Do executes the conversion request and returns the PDF document bytes.
+// Do executes the conversion request using the selected mode and returns the PDF document bytes.
 func (r *Request) Do(ctx context.Context) ([]byte, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
 	if r.fileContent == nil {
 		return nil, fmt.Errorf("no HTML or Markdown content provided")
+	}
+
+	switch r.mode {
+	case HTTP_CLI_Mode:
+		return r.doHTTP(ctx)
+	case Pure_WASM_Mode:
+		return r.doWasm(ctx)
+	default:
+		return nil, fmt.Errorf("unsupported execution mode")
+	}
+}
+
+func (r *Request) doHTTP(ctx context.Context) ([]byte, error) {
+	if r.client.httpStream == nil {
+		return nil, fmt.Errorf("http client is not configured (use WithHTTP option)")
 	}
 
 	req := r.client.httpStream.Multipart(ctx, "/convert")

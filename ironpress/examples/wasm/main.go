@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/nativebpm/connectors/ironpress"
@@ -32,13 +31,9 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	// 3. Create WASM converter
+	// 3. Create unified Client with WASM option
 	log.Println("Initializing wazero in-memory sandboxed runtime...")
-	converter, err := ironpress.NewWasmConverter(ctx, wasmBytes)
-	if err != nil {
-		log.Fatalf("Failed to initialize WASM converter: %v", err)
-	}
-	defer converter.Close(ctx)
+	client := ironpress.NewClient(ironpress.WithWasm(wasmBytes))
 
 	htmlContent := `
 <!DOCTYPE html>
@@ -87,8 +82,8 @@ func main() {
 	log.Println("Running in-memory compilation and PDF generation...")
 	start := time.Now()
 
-	// 4. Run conversion using Fluent API
-	pdfBytes, err := converter.Convert().
+	// 4. Run conversion using Fluent API with Pure_WASM_Mode
+	pdfBytes, err := client.Convert(ironpress.Pure_WASM_Mode).
 		HTML(htmlContent).
 		PageSize("a4").
 		Landscape(false).

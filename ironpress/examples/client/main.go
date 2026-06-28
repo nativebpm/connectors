@@ -16,11 +16,8 @@ func main() {
 	outFile := flag.String("out", "output.pdf", "Path to save the generated PDF")
 	flag.Parse()
 
-	// Initialize ironpress client
-	client, err := ironpress.NewClient(nil, *serverURL)
-	if err != nil {
-		log.Fatalf("Failed to initialize ironpress client: %v", err)
-	}
+	// Initialize ironpress client with HTTP option
+	client := ironpress.NewClient(ironpress.WithHTTP(nil, *serverURL))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -80,8 +77,8 @@ func main() {
 	log.Printf("Sending HTML to PDF conversion request to %s...", *serverURL)
 	start := time.Now()
 
-	// Use Fluent API to build and send the request
-	pdfBytes, err := client.Convert().
+	// Use Fluent API with HTTP_CLI_Mode to build and send the request
+	pdfBytes, err := client.Convert(ironpress.HTTP_CLI_Mode).
 		HTML(htmlContent).
 		PageSize("a4").
 		Landscape(false).
