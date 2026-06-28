@@ -91,10 +91,14 @@ go test -v -race ./...
 Ensure you have `k6` installed. 
 
 ### 1. HTTP Server API Load Test
-Start the server in one terminal:
+Build and start the server as a Docker container:
 
 ```bash
-go run examples/server/main.go --addr :8080
+# Build the Docker image
+docker build -t nativebpm/ironpress-connector .
+
+# Run the container
+docker run -d -p 8080:8080 --name ironpress-connector nativebpm/ironpress-connector
 ```
 
 In another terminal, run the HTTP wrapper load test ([load_test.js](./examples/k6/load_test.js)):

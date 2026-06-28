@@ -91,10 +91,14 @@ go test -v -race ./...
 Убедитесь, что у вас установлен `k6`.
 
 ### 1. Тест HTTP API сервера
-Запустите сервер в одном окне терминала:
+Соберите и запустите сервер в виде Docker-контейнера:
 
 ```bash
-go run examples/server/main.go --addr :8080
+# Сборка Docker-образа
+docker build -t nativebpm/ironpress-connector .
+
+# Запуск контейнера
+docker run -d -p 8080:8080 --name ironpress-connector nativebpm/ironpress-connector
 ```
 
 В другом окне запустите нагрузочный тест HTTP-обертки ([load_test.js](./examples/k6/load_test.js)):
