@@ -58,7 +58,7 @@ func main() {
 			continue
 		}
 
-		log.Printf("Processing Task ID: %s for Instance: %s", task.Id, task.ProcessInstanceId)
+		log.Printf("Processing Task ID: %s for Instance: %s", task.Id, task.InstanceId)
 
 		// Claim the task to this worker to prevent concurrent execution
 		_, err = nbClient.Tasks().Claim(task.Id).
