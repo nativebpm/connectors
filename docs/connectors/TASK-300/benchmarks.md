@@ -1,6 +1,6 @@
 # Load Testing & Performance Benchmarks — TASK-300
 
-This document contains performance verification and benchmark results comparing the NativeBPM `ironpress` PDF generation connector wrapper against the `gotenberg` PDF engine under concurrent load.
+This document contains performance verification and benchmark results comparing the NativeBPM `ironpress` PDF generation connector wrapper against the `gotenberg` PDF engine under concurrent load, as well as an in-process benchmark comparing HTTP/CLI and pure WebAssembly (WASM) modes of `ironpress`.
 
 ## Test Environment
 
@@ -15,7 +15,7 @@ This document contains performance verification and benchmark results comparing 
 
 ---
 
-## k6 Load Test Results Comparison
+## k6 Load Test Results Comparison (Ironpress HTTP vs Gotenberg)
 
 Below is the side-by-side comparison of the actual results gathered during the concurrent load test:
 
@@ -33,6 +33,25 @@ Below is the side-by-side comparison of the actual results gathered during the c
 
 ---
 
+## In-Process Go Benchmark: HTTP/CLI vs Pure WASM Mode
+
+To evaluate the performance benefits of bypassing HTTP network stack and OS subprocess spawns, we ran native Go benchmarks using `go test -bench=. -benchmem -benchtime=5s`.
+
+Both benchmarks convert the exact same HTML template containing basic text and standard HTML elements:
+
+| Execution Mode | Iterations (in 5s) | Speed (ns/op) | Speed (ms/op) | Memory Allocated (B/op) | Allocations (allocs/op) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **HTTP/CLI Mode** (external proc + network) | 31 | 191,785,508 ns/op | **191.78 ms/op** | **169,075 B/op** | **315** |
+| **Pure WASM Mode** (in-memory wazero) | **127** | **45,977,764 ns/op** | **45.97 ms/op** | 97,846,565 B/op | 167,236 |
+
+### Benchmark Insights:
+1. **4.17x Speedup**: Running `ironpress` compiled to WebAssembly via the `wazero` engine in-process executes in **45.97 ms**, compared to **191.78 ms** when spawning an OS process and writing to temporary files over HTTP.
+2. **Resource Trade-off**:
+   - **HTTP/CLI Mode** delegates all execution to the OS process scheduler, showing extremely low memory allocations within Go's garbage-collected heap (~169 KB). However, the operating system overhead of starting a new program is high.
+   - **Pure WASM Mode** executes entirely within Go's runtime memory space. Wazero's compilation and JIT translation allocate ~97 MB of memory inside Go's heap per execution loop. *Note: In production deployments, compiling the module once at startup will significantly decrease memory overhead on subsequent conversion runs.*
+
+---
+
 ## Technical & Architectural Comparison
 
 | Feature / Metric | Ironpress (Pure Rust / WASM) | Gotenberg (Chromium / Headless Chrome) |
@@ -44,19 +63,3 @@ Below is the side-by-side comparison of the actual results gathered during the c
 | **CSS & HTML Support** | Good (Flexbox, Grid, standard styles, SVGs, LaTeX). | Absolute (supports JS execution, external web fonts, WebGL). |
 | **JavaScript Execution** | **No** (static templates only). | **Yes** (supports client-side JS charts, React, etc.). |
 | **Security Sandbox** | High (WASM isolation blocks host filesystem/network access). | Low (requires strict Docker isolation to prevent Chrome CVE exploits). |
-
----
-
-## Detailed Analysis
-
-1. **Throughput and Latency**:
-   - **Ironpress** achieved a throughput of **37.00 req/s** compared to **33.29 req/s** for Gotenberg.
-   - The p95 response time for **Ironpress** was **301.87 ms**, whereas Gotenberg took **436.89 ms** (a 30.9% improvement in tail latency).
-   - Although Gotenberg had a faster *minimum* latency (43.11 ms) due to keep-alive browser instances and internal caching of chromium, it suffered from much higher tail latencies and maximum latency spikes (**753 ms** max latency for Gotenberg vs **330 ms** for Ironpress) under high concurrency.
-   
-2. **Resource Optimization**:
-   - Gotenberg launches heavy headless Chromium renderer processes under the hood. During 20 concurrent VUs, Gotenberg memory consumption spikes severely and CPU consumption remains at maximum.
-   - Ironpress runs lightweight compilation and formatting steps. Memory consumption is stateless and capped cleanly by the concurrency limiter semaphore, keeping the host system stable.
-
-3. **Deployability**:
-   - Ironpress can run in-memory via WASM (wazero) directly inside the Go app without installing any Docker images or OS binaries. Gotenberg requires a massive Docker image (~500MB+) running alongside the Go service.
