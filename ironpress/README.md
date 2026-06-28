@@ -97,21 +97,21 @@ Start the server in one terminal:
 go run examples/server/main.go --addr :8080
 ```
 
-In another terminal, run the HTTP wrapper load test ([load_test.js](file:///Users/user/github.com/nativebpm/connectors/ironpress/examples/k6/load_test.js)):
+In another terminal, run the HTTP wrapper load test ([load_test.js](./examples/k6/load_test.js)):
 
 ```bash
 k6 run examples/k6/load_test.js
 ```
 
 ### 2. Camunda Workflow Worker Load Test
-To load test the Camunda integration worker ([load_test_camunda.js](file:///Users/user/github.com/nativebpm/connectors/ironpress/examples/k6/load_test_camunda.js)):
+To load test the Camunda integration worker ([load_test_camunda.js](./examples/k6/load_test_camunda.js)):
 
 ```bash
 k6 run examples/k6/load_test_camunda.js
 ```
 
 ### 3. NativeBPM Workflow Worker Load Test
-To load test the NativeBPM SDK worker ([load_test_nativebpm.js](file:///Users/user/github.com/nativebpm/connectors/ironpress/examples/k6/load_test_nativebpm.js)):
+To load test the NativeBPM SDK worker ([load_test_nativebpm.js](./examples/k6/load_test_nativebpm.js)):
 
 ```bash
 k6 run examples/k6/load_test_nativebpm.js
