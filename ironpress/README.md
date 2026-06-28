@@ -118,17 +118,22 @@ The HTTP wrapper server was benchmarked using `k6` with a load profile ramping u
 
 ## Ironpress vs Gotenberg Comparison
 
-Here is a quick architectural and performance comparison between `ironpress` and `gotenberg` (which wraps headless Chrome/Chromium):
+Here is the actual performance and architectural comparison between `ironpress` (running via our Go HTTP wrapper) and `gotenberg` (running via official Docker with Chromium) under a concurrent `k6` load test of 20 VUs over 25 seconds:
 
-| Feature / Metric | Ironpress (Pure Rust / WASM) | Gotenberg (Chromium) |
-| :--- | :--- | :--- |
-| **Engine** | Pure Rust parser & layout | Headless Chromium (browser) |
-| **Dependencies** | None (can execute inside Go via WASM) | Docker-only (requires full Chromium) |
-| **Avg Latency (HTML→PDF)**| **150ms – 300ms** (up to 10x faster) | **1.5s – 3.0s** (heavy browser startup) |
-| **Throughput (20 VUs)** | **~37 req/s** | **~4 - 8 req/s** (highly CPU bound) |
-| **Memory Footprint** | Low (~10-30MB per invocation) | High (200MB - 1GB+ per runner) |
-| **JavaScript / CSS support**| Pure HTML/CSS only. No JS. | Full modern CSS + JavaScript charts |
-| **Deployment size** | **~15MB** binary/WASM | **~500MB+** Docker container |
-| **Security Sandbox** | Very High (WASM virtual disk mount) | Standard (requires Docker host isolation)|
+| Performance Metric / Feature | Ironpress Connector (Local CLI Wrapper) | Gotenberg (Docker Chromium) | Performance Delta |
+| :--- | :--- | :--- | :--- |
+| **Total Requests** | **931** | 835 | **+11.5%** (Ironpress) |
+| **Throughput (req/s)** | **37.00 req/s** | 33.29 req/s | **+11.1%** (Ironpress) |
+| **Average Latency** | **219.38 ms** | 254.62 ms | **-13.8%** (Ironpress is faster) |
+| **Median (p50) Latency**| **200.08 ms** | 240.54 ms | **-16.8%** (Ironpress is faster) |
+| **95th Percentile (p95)**| **301.87 ms** | 436.89 ms | **-30.9%** (Ironpress is faster) |
+| **Max Latency** | **330.55 ms** | 753.35 ms | **-56.1%** (Ironpress is more stable)|
+| **Engine** | Pure Rust parser & layout | Headless Chromium (browser) | - |
+| **Dependencies** | None (can execute inside Go via WASM) | Docker-only (requires full Chromium) | - |
+| **Memory Footprint** | Low (~10-30MB per invocation) | High (200MB - 1GB+ per runner) | - |
+| **JavaScript / CSS support**| Pure HTML/CSS only. No JS. | Full modern CSS + JavaScript charts | - |
+| **Deployment size** | **~15MB** binary/WASM | **~500MB+** Docker container | - |
+| **Security Sandbox** | Very High (WASM virtual disk mount) | Standard (requires Docker host isolation)| - |
+
 
 
