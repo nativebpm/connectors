@@ -88,16 +88,33 @@ go test -v -race ./...
 
 ## Нагрузочное тестирование с k6
 
-Убедитесь, что у вас установлен `k6`. Запустите сервер в одном окне терминала:
+Убедитесь, что у вас установлен `k6`.
+
+### 1. Тест HTTP API сервера
+Запустите сервер в одном окне терминала:
 
 ```bash
 go run examples/server/main.go --addr :8080
 ```
 
-В другом окне запустите нагрузочный тест:
+В другом окне запустите нагрузочный тест HTTP-обертки ([load_test.js](file:///Users/user/github.com/nativebpm/connectors/ironpress/examples/k6/load_test.js)):
 
 ```bash
 k6 run examples/k6/load_test.js
+```
+
+### 2. Тест воркера Camunda
+Для запуска нагрузочного теста воркера Camunda ([load_test_camunda.js](file:///Users/user/github.com/nativebpm/connectors/ironpress/examples/k6/load_test_camunda.js)):
+
+```bash
+k6 run examples/k6/load_test_camunda.js
+```
+
+### 3. Тест воркера NativeBPM
+Для запуска нагрузочного теста воркера NativeBPM SDK ([load_test_nativebpm.js](file:///Users/user/github.com/nativebpm/connectors/ironpress/examples/k6/load_test_nativebpm.js)):
+
+```bash
+k6 run examples/k6/load_test_nativebpm.js
 ```
 
 ## Нагрузочное тестирование и бенчмарки производительности

@@ -88,16 +88,33 @@ go test -v -race ./...
 
 ## Running Load Tests with k6
 
-Ensure you have `k6` installed. Start the server in one terminal:
+Ensure you have `k6` installed. 
+
+### 1. HTTP Server API Load Test
+Start the server in one terminal:
 
 ```bash
 go run examples/server/main.go --addr :8080
 ```
 
-In another terminal, run the load test:
+In another terminal, run the HTTP wrapper load test ([load_test.js](file:///Users/user/github.com/nativebpm/connectors/ironpress/examples/k6/load_test.js)):
 
 ```bash
 k6 run examples/k6/load_test.js
+```
+
+### 2. Camunda Workflow Worker Load Test
+To load test the Camunda integration worker ([load_test_camunda.js](file:///Users/user/github.com/nativebpm/connectors/ironpress/examples/k6/load_test_camunda.js)):
+
+```bash
+k6 run examples/k6/load_test_camunda.js
+```
+
+### 3. NativeBPM Workflow Worker Load Test
+To load test the NativeBPM SDK worker ([load_test_nativebpm.js](file:///Users/user/github.com/nativebpm/connectors/ironpress/examples/k6/load_test_nativebpm.js)):
+
+```bash
+k6 run examples/k6/load_test_nativebpm.js
 ```
 
 ## Load Testing & Performance Benchmarks
