@@ -165,3 +165,19 @@ func (r *FluentRunner) Run() (bool, error) {
 
 	return crashed, err
 }
+
+// DurableRun executes the module and automatically cleans up checkpoint state on success.
+// Returns crashed status, execution output response bytes, and any error.
+func (r *FluentRunner) DurableRun() (crashed bool, response []byte, err error) {
+	crashed, err = r.Run()
+	if err != nil {
+		return crashed, nil, err
+	}
+	if !crashed {
+		// Module completed successfully - clean up snapshot state.
+		if cleanErr := r.store.DeleteSnapshot(r.ctx, r.instanceID); cleanErr != nil {
+			return false, nil, fmt.Errorf("wasmee: failed to clean up snapshot for %q: %w", r.instanceID, cleanErr)
+		}
+	}
+	return crashed, r.Response(), nil
+}
