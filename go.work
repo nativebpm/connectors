@@ -21,6 +21,5 @@ use (
 	./wasman
 	./wasman/runner
 	./wasman/testdata
-	./wasmee
 	../sdk/go
 )
