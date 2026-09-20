@@ -13,13 +13,10 @@ use (
 	./jsonschema
 	./logger
 	./mail
-	./restate
 	./sequin
 	./telegram
-	./temporal
 	./totp
 	./wasman
 	./wasman/runner
 	./wasman/testdata
-	../sdk/go
 )
