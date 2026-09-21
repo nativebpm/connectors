@@ -16,7 +16,4 @@ use (
 	./sequin
 	./telegram
 	./totp
-	./wasman
-	./wasman/runner
-	./wasman/testdata
 )
