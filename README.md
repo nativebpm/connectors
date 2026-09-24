@@ -13,7 +13,8 @@ Monorepository containing Go client libraries and integration connectors used ac
 *   **[telegram](telegram/)** — High-performance, stream-first Go client library for the Telegram Bot API with zero-buffer media uploads.
 
 ### Platform
-*   **[camunda](camunda/)** — Client library for Camunda BPMN workflow engine with highly optimized task locking and Postgres CDC integration.
+*   **[manticore](manticore/)** — Ultra-fast, zero-allocation Manticore Search client for bounded hot-cache analytics and P2P peer broadcasts.
+*   **[camunda](camunda/)** — Client library for Camunda BPMN workflow engine with highly optimized task locking and event streaming.
 *   **[jsonschema](jsonschema/)** — High-performance, wazero-powered JSON Schema validator and dynamic form widgets parser with Brotli compression and in-memory WebAssembly execution.
 *   **[wasman](wasman/)** — Reusable Durable Execution Engine for running fault-tolerant Go/TinyGo business logic in an isolated WASM sandbox with O(1) memory consumption and transparent checkpointing.
 *   **[wasman/runner](wasman/runner/)** — Light-weight guest-side Runner API and Fluent Workflow builder for WASM workers, completely decoupled from host dependencies.
