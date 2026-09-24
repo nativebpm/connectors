@@ -52,8 +52,8 @@ func BenchmarkConversions(b *testing.B) {
 		}
 	})
 
-	// Run WASM Benchmark
-	b.Run("Pure_WASM_Mode", func(b *testing.B) {
+	// Run WASM Benchmark (Cold Start: recompile per request)
+	b.Run("Pure_WASM_ColdStart", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			pdf, err := wasmClient.Convert(Pure_WASM_Mode).
@@ -62,6 +62,30 @@ func BenchmarkConversions(b *testing.B) {
 				Do(ctx)
 			if err != nil {
 				b.Fatalf("WASM conversion failed: %v", err)
+			}
+			if len(pdf) == 0 {
+				b.Fatal("empty pdf output")
+			}
+		}
+	})
+
+	// 3. Prepare Pre-Warmed WASM Client (Warmup once)
+	warmClient := NewClient(WithWasm(wasmBytes))
+	if err := warmClient.Warmup(ctx); err != nil {
+		b.Fatalf("WASM warmup failed: %v", err)
+	}
+	defer warmClient.Close(ctx)
+
+	// Run WASM Warmup Benchmark (Zero JIT compilation in hot path)
+	b.Run("Pure_WASM_Warmup", func(b *testing.B) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			pdf, err := warmClient.Convert(Pure_WASM_Mode).
+				HTML(htmlContent).
+				PageSize("a4").
+				Do(ctx)
+			if err != nil {
+				b.Fatalf("WASM warmup conversion failed: %v", err)
 			}
 			if len(pdf) == 0 {
 				b.Fatal("empty pdf output")

@@ -27,6 +27,15 @@ type Server struct {
 	sem          chan struct{}
 	httpServer   *http.Server
 	wg           sync.WaitGroup
+	wasmClient   *Client
+}
+
+// WithWasmEngine attaches a pre-warmed WASM client to the server, enabling high-speed in-process PDF rendering.
+func (s *Server) WithWasmEngine(wasmClient *Client) *Server {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.wasmClient = wasmClient
+	return s
 }
 
 // NewServer creates a new Server instance.
@@ -160,6 +169,44 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 
 	s.wg.Add(1)
 	defer s.wg.Done()
+
+	s.mu.RLock()
+	wasmClient := s.wasmClient
+	s.mu.RUnlock()
+
+	if wasmClient != nil {
+		req := wasmClient.Convert(Pure_WASM_Mode).FileReader(header.Filename, file)
+		if ps := r.FormValue("page-size"); ps != "" {
+			req.PageSize(ps)
+		}
+		if ls := r.FormValue("landscape"); ls != "" {
+			if val, err := strconv.ParseBool(ls); err == nil {
+				req.Landscape(val)
+			}
+		}
+		if mg := r.FormValue("margin"); mg != "" {
+			if val, err := strconv.ParseFloat(mg, 64); err == nil {
+				req.Margin(val)
+			}
+		}
+		if hd := r.FormValue("header"); hd != "" {
+			req.Header(hd)
+		}
+		if ft := r.FormValue("footer"); ft != "" {
+			req.Footer(ft)
+		}
+		pdfBytes, err := req.Do(r.Context())
+		if err != nil {
+			http.Error(w, fmt.Sprintf("WASM conversion failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"output.pdf\"")
+		w.Header().Set("Content-Length", strconv.Itoa(len(pdfBytes)))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(pdfBytes)
+		return
+	}
 
 	// Create temp directory for conversion run
 	tempDir, err := os.MkdirTemp("", "ironpress-*")

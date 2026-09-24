@@ -8,11 +8,14 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nativebpm/connectors/wasmee"
 	"github.com/nativebpm/connectors/wasmee/olme"
 	"github.com/nativebpm/httpstream"
+	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
 // Mode represents the execution engine type.
@@ -34,6 +37,13 @@ type Client struct {
 	wasmBytes   []byte
 	wasmeeAddr  string
 	wasmeeStore olme.SnapshotStore
+
+	// Wazero Precompiled / Warmup engine
+	wazeroRuntime  wazero.Runtime
+	compiledModule wazero.CompiledModule
+	compCache      wazero.CompilationCache
+	isWarmedUp     bool
+	mu             sync.RWMutex
 }
 
 // Option configures the Client.
@@ -57,6 +67,15 @@ func WithWasm(wasmBytes []byte) Option {
 	}
 }
 
+// WithWasmWarmup configures the client with compiled ironpress WASM bytes and immediately
+// pre-compiles (warms up) the JIT module in memory.
+func WithWasmWarmup(ctx context.Context, wasmBytes []byte) Option {
+	return func(c *Client) {
+		c.wasmBytes = wasmBytes
+		_ = c.Warmup(ctx)
+	}
+}
+
 // WithWasmee configures the client to execute conversions via the wasmee durable engine.
 func WithWasmee(serverAddr string, store olme.SnapshotStore, wasmBytes []byte) Option {
 	return func(c *Client) {
@@ -73,6 +92,57 @@ func NewClient(opts ...Option) *Client {
 		opt(c)
 	}
 	return c
+}
+
+// Warmup compiles the WASM module into native machine code once and caches the runtime,
+// eliminating JIT compilation latency and memory allocation overhead on subsequent requests.
+func (c *Client) Warmup(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.isWarmedUp {
+		return nil
+	}
+	if len(c.wasmBytes) == 0 {
+		return fmt.Errorf("wasm module bytes are not configured")
+	}
+
+	c.compCache = wazero.NewCompilationCache()
+	rtConfig := wazero.NewRuntimeConfigCompiler().WithCompilationCache(c.compCache)
+	rt := wazero.NewRuntimeWithConfig(ctx, rtConfig)
+	wasi_snapshot_preview1.MustInstantiate(ctx, rt)
+
+	compiled, err := rt.CompileModule(ctx, c.wasmBytes)
+	if err != nil {
+		_ = rt.Close(ctx)
+		return fmt.Errorf("failed to pre-compile wasm module: %w", err)
+	}
+
+	c.wazeroRuntime = rt
+	c.compiledModule = compiled
+	c.isWarmedUp = true
+	return nil
+}
+
+// Close releases any warmed-up runtime resources.
+func (c *Client) Close(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.compiledModule != nil {
+		_ = c.compiledModule.Close(ctx)
+		c.compiledModule = nil
+	}
+	if c.wazeroRuntime != nil {
+		_ = c.wazeroRuntime.Close(ctx)
+		c.wazeroRuntime = nil
+	}
+	if c.compCache != nil {
+		_ = c.compCache.Close(ctx)
+		c.compCache = nil
+	}
+	c.isWarmedUp = false
+	return nil
 }
 
 // Convert initiates a new PDF conversion request builder with the specified execution mode.
@@ -158,6 +228,16 @@ func (r *Request) MarkdownReader(reader io.Reader) *Request {
 	}
 	r.fileContent = reader
 	r.fileName = "document.md"
+	return r
+}
+
+// FileReader sets custom file reader and filename to convert.
+func (r *Request) FileReader(filename string, reader io.Reader) *Request {
+	if r.err != nil {
+		return r
+	}
+	r.fileContent = reader
+	r.fileName = filename
 	return r
 }
 

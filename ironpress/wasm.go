@@ -16,12 +16,27 @@ func (r *Request) doWasm(ctx context.Context) ([]byte, error) {
 		return nil, fmt.Errorf("wasm module bytes are not configured (use WithWasm option)")
 	}
 
-	// 1. Create wazero runtime
-	rt := wazero.NewRuntime(ctx)
-	defer rt.Close(ctx)
+	// Check if client has a pre-warmed JIT compiled module
+	r.client.mu.RLock()
+	isWarmed := r.client.isWarmedUp
+	rt := r.client.wazeroRuntime
+	compiled := r.client.compiledModule
+	r.client.mu.RUnlock()
 
-	// Instantiate WASI
-	wasi_snapshot_preview1.MustInstantiate(ctx, rt)
+	var localRt wazero.Runtime
+	if !isWarmed {
+		// Cold start fallback: initialize on-demand runtime & compile
+		localRt = wazero.NewRuntime(ctx)
+		defer localRt.Close(ctx)
+		wasi_snapshot_preview1.MustInstantiate(ctx, localRt)
+
+		var err error
+		compiled, err = localRt.CompileModule(ctx, r.client.wasmBytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compile WASM module: %w", err)
+		}
+		rt = localRt
+	}
 
 	// 2. Create a temp directory on the host to exchange files with WASM
 	tempDir, err := os.MkdirTemp("", "ironpress-wasm-*")
@@ -70,10 +85,12 @@ func (r *Request) doWasm(ctx context.Context) ([]byte, error) {
 	args = append(args, "/work/"+inputFilename, "/work/output.pdf")
 
 	// Prepare wazero module configuration
+	// Note: WithName("") allows concurrent instantiations without module name collision in Wazero runtime.
 	config := wazero.NewModuleConfig().
+		WithName("").
 		WithArgs(args...).
-		WithStdout(os.Stdout).
-		WithStderr(os.Stderr).
+		WithStdout(io.Discard).
+		WithStderr(io.Discard).
 		WithFSConfig(wazero.NewFSConfig().WithDirMount(tempDir, "/work"))
 
 	if r.timeout > 0 {
@@ -82,12 +99,7 @@ func (r *Request) doWasm(ctx context.Context) ([]byte, error) {
 		defer cancel()
 	}
 
-	// Compile & run the module
-	compiled, err := rt.CompileModule(ctx, r.client.wasmBytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compile WASM module: %w", err)
-	}
-
+	// Instant JIT instantiation from precompiled module!
 	mod, err := rt.InstantiateModule(ctx, compiled, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to instantiate and run WASM module: %w", err)

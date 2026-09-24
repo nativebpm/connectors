@@ -137,16 +137,26 @@ The HTTP wrapper server was benchmarked using `k6` with a load profile ramping u
   - **Min / Max**: 175.44 ms / 330.55 ms
   - **Network Transfer Rate**: 1.2 MB/s
 
-## Go In-Process Benchmark: HTTP/CLI vs Pure WASM Mode
+## Go In-Process Benchmark: HTTP/CLI vs Pure WASM and WASM Warmup
 
-To evaluate the performance benefits of bypassing HTTP network stack and OS subprocess spawns, we ran native Go benchmarks:
+To evaluate the performance benefits of bypassing OS subprocess spawns and pre-compiling JIT bytecode, we ran native Go benchmarks (`BenchmarkConversions` on Apple M5):
 
-| Execution Mode | Speed (ms/op) | Memory Allocated (B/op) | Allocations (allocs/op) |
-| :--- | :--- | :--- | :--- |
-| **HTTP/CLI Mode** (external proc + network) | **191.78 ms/op** | **169,075 B/op** | **315** |
-| **Pure WASM Mode** (in-memory wazero) | **45.97 ms/op** | 97,846,565 B/op | 167,236 |
+| Execution Mode | Time per Op | Memory Allocated (B/op) | Allocations (allocs/op) | Rationale |
+| :--- | :--- | :--- | :--- | :--- |
+| **HTTP/CLI Mode** (external proc + network) | **196.27 ms/op** | 189,646 B/op | 322 | OS `fork/exec`, binary cold start from disk |
+| **Pure WASM Cold Start** | **1,402.13 ms/op** | 239,481,312 B/op | 291,727 | Recompiling 14 MB WASM module on each call |
+| **Pure WASM with Warmup** | **4.94 ms/op** | 74,429,112 B/op | 2,682 | **Cached `wazero.CompiledModule`, pure in-memory** |
 
-- **4.17x Speedup**: Running `ironpress` compiled to WebAssembly via the `wazero` engine in-process executes in **45.97 ms**, compared to **191.78 ms** when spawning an OS process and writing to temporary files over HTTP.
+- **39.7x Speedup vs CLI**: Running pre-warmed `ironpress` via `wazero` in-process executes in **4.94 ms**, compared to **196.27 ms** for CLI process spawning.
+- **284x Speedup vs Cold Start**: One-time startup JIT warmup completely eliminates the 1.4-second compilation overhead.
+
+### In-Process Pre-Warmed Server Load Testing (k6, 20 VUs, 20s):
+- **Script**: [`examples/k6/load_test_wasm_warmup.js`](./examples/k6/load_test_wasm_warmup.js)
+- **Total PDFs Generated**: **8,319** complete documents in 20 seconds.
+- **Throughput**: **415.09 RPS** (**11.2x faster than CLI wrapper**, **106.7x faster than Gotenberg Chromium**).
+- **Latency**: average **47.68 ms**, p50 **43.26 ms**, p95 **92.36 ms** (min: **8.05 ms**).
+- **Data Throughput**: **197 MB (9.8 MB/s)** incoming stream of completed PDFs.
+- **SLA Success Rate**: **100.00%** (0 errors out of 8,319 requests, 24,957 checks succeeded).
 
 ## Ironpress vs Gotenberg Comparison
 

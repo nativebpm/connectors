@@ -1,0 +1,147 @@
+{
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "status is 200": {
+                    "name": "status is 200",
+                    "path": "::status is 200",
+                    "id": "6210a8cd14cd70477eba5c5e4cb3fb5f",
+                    "passes": 8319,
+                    "fails": 0
+                },
+                "content is PDF": {
+                    "name": "content is PDF",
+                    "path": "::content is PDF",
+                    "id": "815fa4ca6c9595f8c75646bc59babebc",
+                    "passes": 8319,
+                    "fails": 0
+                },
+                "body is not empty": {
+                    "passes": 8319,
+                    "fails": 0,
+                    "name": "body is not empty",
+                    "path": "::body is not empty",
+                    "id": "07acb1819a671220411c076fcb8fe456"
+                }
+            }
+    },
+    "metrics": {
+        "http_req_waiting": {
+            "avg": 47.55491068638056,
+            "min": 8.002,
+            "med": 43.117,
+            "max": 231.346,
+            "p(90)": 78.715,
+            "p(95)": 92.21419999999996
+        },
+        "http_req_receiving": {
+            "p(90)": 0.153,
+            "p(95)": 0.212,
+            "avg": 0.11181235725447725,
+            "min": 0.008,
+            "med": 0.07,
+            "max": 12.929
+        },
+        "data_sent": {
+            "count": 12619923,
+            "rate": 629689.5127765131
+        },
+        "vus_max": {
+            "value": 20,
+            "min": 20,
+            "max": 20
+        },
+        "http_req_duration{expected_response:true}": {
+            "avg": 47.68645666546462,
+            "min": 8.055,
+            "med": 43.263,
+            "max": 231.653,
+            "p(90)": 78.9308,
+            "p(95)": 92.3651
+        },
+        "http_req_duration": {
+            "avg": 47.68645666546462,
+            "min": 8.055,
+            "med": 43.263,
+            "max": 231.653,
+            "p(90)": 78.9308,
+            "p(95)": 92.3651,
+            "thresholds": {
+                "p(95)<300": false
+            }
+        },
+        "http_reqs": {
+            "count": 8319,
+            "rate": 415.0886702547878
+        },
+        "http_req_blocked": {
+            "p(95)": 0.008,
+            "avg": 0.006009977160716604,
+            "min": 0,
+            "med": 0.004,
+            "max": 1.293,
+            "p(90)": 0.007
+        },
+        "iteration_duration": {
+            "avg": 48.13468176187033,
+            "min": 8.337292,
+            "med": 43.701,
+            "max": 233.628667,
+            "p(90)": 79.311525,
+            "p(95)": 92.82585859999998
+        },
+        "http_req_failed": {
+            "fails": 8319,
+            "passes": 0,
+            "thresholds": {
+                "rate<0.01": false
+            },
+            "value": 0
+        },
+        "http_req_connecting": {
+            "min": 0,
+            "med": 0,
+            "max": 0.562,
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 0.0007669191008534681
+        },
+        "data_received": {
+            "count": 197102067,
+            "rate": 9834695.864346687
+        },
+        "iterations": {
+            "count": 8319,
+            "rate": 415.0886702547878
+        },
+        "http_req_tls_handshaking": {
+            "p(95)": 0,
+            "avg": 0,
+            "min": 0,
+            "med": 0,
+            "max": 0,
+            "p(90)": 0
+        },
+        "vus": {
+            "value": 20,
+            "min": 20,
+            "max": 20
+        },
+        "http_req_sending": {
+            "avg": 0.0197336218295467,
+            "min": 0.001,
+            "med": 0.014,
+            "max": 3.759,
+            "p(90)": 0.027,
+            "p(95)": 0.033
+        },
+        "checks": {
+            "passes": 24957,
+            "fails": 0,
+            "value": 1
+        }
+    }
+}
