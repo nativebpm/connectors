@@ -8,6 +8,7 @@ Monorepository containing Go client libraries and integration connectors used ac
 *   **[httpstream](httpstream/)** — Flat, stream-first HTTP client designed for efficient large-file uploads using multipart streaming.
 
 ### Service
+*   **[ironpress](ironpress/)** — Pure Rust document and PDF generator connector (Zero-Chromium, 37 RPS, in-process WASM via Wazero or HTTP).
 *   **[gotenberg](gotenberg/)** — Go client for Gotenberg document conversion service (HTML, Office docs, PDFs merging).
 *   **[sequin](sequin/)** — Client and sync helpers for Sequin CDC and event stream platform.
 *   **[telegram](telegram/)** — High-performance, stream-first Go client library for the Telegram Bot API with zero-buffer media uploads.
